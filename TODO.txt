@@ -1,0 +1,23 @@
+- Improve "compoundoperators.jl" 
+
+- Re-check thermodynamic calculations with Nz>2
+
+- Convergence of spectral, thermodynamic functions and T_k with 
+  cutoff, etafac, widthfac...
+
+- Eliminate non-used/superfluous packages 
+
+- Clean code in "discretization.jl". Revise co2005.
+    :: co2005 gives different temperatures for different z
+
+- Eliminate abstract typing
+
+- Fix limits of T in z-averaging 
+
+- Examples:
+    :: FO1986
+
+- Thermodata files should be called "thermo_*" instead of
+  "th_*"
+
+
