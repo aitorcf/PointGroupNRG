@@ -1,3 +1,5 @@
+- Improve memory management for CG sums
+
 - Improve "compoundoperators.jl" 
 
 - Re-check thermodynamic calculations with Nz>2
