@@ -489,3 +489,135 @@ function multiplets_2part(
         println()
     end
 end
+
+function atomic_spectrum( 
+            label::String ,
+            z::Float64 ,
+            max_spin2::Int64 ,
+            cg_o_dir::String ,
+            asym_dir::String ,
+            atom_config::Dict{String,Int64} ,
+            identityrep::String ,
+            epsilon_symparams::Dict{ Tuple{String,Int64} , ComplexF64 } ,
+            u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ;
+            max_spin2::Int64=10 ,
+            distributed::Bool=false ,
+            method::String="distfor" ,
+            calculation::String="IMP" )
+
+    # orbital irreps present in the atom
+    atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
+
+    println( "====================" )
+    println( "SETUP AND PARAMETERS" )
+    println( "====================" )
+    @show distributed 
+    @show z
+    distributed && @show distworkers
+    distributed && @show method
+    println( "OCCUPATION ENERGIES" )
+    print_dict( epsilon_symparams ) 
+    println( "COULOMB PARAMETERS" )
+    print_dict( u_symparams ) 
+    println()
+    
+            
+    # hiztegia
+    hiztegia = Dict{String,Any}( o=>o for (o,_) in atom_config )
+    merge!( hiztegia , Dict( "u"=>0.5, "d"=>-0.5 ) )
+
+    #   ==========================   #
+    #%% SYMMETRY-RELATED VARIABLES %%#
+    #   ==========================   #
+
+    # orbital symmetry
+    (oirreps,
+     oirreps2indices,
+     oirreps2dimensions,
+     oindex2dimensions,
+     cg_o_fullmatint) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
+
+    # spin symmetry
+    cg_s_fullmatint = get_cg_s_fullmatint( max_spin2 );
+
+
+    #   ===========   #
+    #%% ATOMIC PART %%#
+    #   ===========   #
+    println()
+    println( ":::::::::::::::::::" )
+    println( "--- ATOMIC PART ---" )
+    println( ":::::::::::::::::::" )
+    println()
+    
+    #   ------------------- #
+    #%% rescaled parameters #
+    #   ------------------- #
+    epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in epsilon_symparams )
+    u_symparams       = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in u_symparams )
+    println( "RESCALED PARAMETERS FOR H0" )
+    @show epsilon_symparams 
+    @show u_symparams 
+    println()
+
+    #   ------------------------------- #
+    #%% symstates, basis and multiplets #
+    #   ------------------------------- #
+    if calculation=="IMP"
+        symstates_atom_noint,basis_atom,multiplets_atom_noint,multiplets_a_atom_noint = 
+            get_symstates_basis_multiplets( 
+                    atom_config,
+                    oirreps2dimensions,
+                    identityrep,
+                    asym_dir,
+                    cg_o_dir ;
+                    verbose=true )
+        omults = ordered_multiplets(multiplets_atom_noint)
+        mult2index = Dict( m=>i for (i,m) in 
+                           enumerate(omults))
+        global multiplets_atom = multiplets2int( multiplets_atom_noint , 
+                                                 oirreps2indices )
+        global multiplets_a_atom = multiplets2int( multiplets_a_atom_noint , 
+                                                   oirreps2indices )
+    end
+
+    #   ------------------------ #
+    #%% reduced pcg coefficients #
+    #   ------------------------ #
+    pcgred_atom = 
+        calculation=="CLEAN" ? 
+        Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}}() :
+        get_pcgred( basis_atom ,
+                    symstates_atom_noint ,
+                    multiplets_atom ,
+                    hiztegia ,
+                    oirreps2indices ,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ;
+                    verbose=false )
+        
+    #   ------------- #
+    #%% impurity atom #
+    #   ------------- #
+    if calculation=="IMP"
+
+        # operators
+        epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+        coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+
+        # hamiltonian 
+        global H = epsilon + coulomb 
+
+    end
+
+    #   -----   #
+    #%% irreu %%#
+    #   -----   #
+    if calculation=="IMP"
+        global irrEU = get_irrEU_initial(symstates_atom_noint,H;verbose=true)
+    elseif calculation=="CLEAN" 
+        global irrEU = get_irrEU_initial(identityrep,oirreps2indices)
+    end
+    print_spectrum( irrEU )
+
+end

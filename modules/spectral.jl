@@ -1,5 +1,3 @@
-using TensorOperations
-
 include( "shell.jl" ) 
 include( "thermo.jl" )
 include( "reddiag.jl" )

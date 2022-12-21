@@ -53,9 +53,11 @@ mine = 0.0
 # one-body coupling parameters
 eps = -0.1
 u   = -2*eps
-gam = 0.01
+gam1 = 0.01*0.5
+gam2 = gam1*0.0
 
-gam=sqrt(2*gam/pi)
+gam1=sqrt(2*gam1/pi)
+gam2=sqrt(2*gam2/pi)
 
 iterations = 30
 
@@ -81,8 +83,8 @@ u_symparams = Dict(
     ("A1g",0) => ComplexF64[u][:,:]
 )
 hop_symparams = Dict( 
-    ("A1g") => gam*ComplexF64[1.0 0.25;
-                              0.0 0.0 ]
+    ("A1g") => ComplexF64[ gam1 gam2 ;
+                           0.0  0.0  ]
 )
 
 #   ==============   #

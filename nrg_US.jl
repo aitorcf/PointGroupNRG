@@ -18,7 +18,6 @@ include( "modules/spectral.jl" )
 include( "modules/reddiag.jl" )
 include( "modules/diagonalization.jl" )
 include( "modules/automatization.jl" )
-include( "modules/templates.jl" )
     
 
 #   ==========   #
@@ -43,7 +42,7 @@ calculation = "IMP"
 z = 0.0
 
 # numerical parameters
-L = 20.0
+L = 10.0
 betabar = 1.0
 
 # cutoff
@@ -55,16 +54,15 @@ mine = 0.0
 # one-body coupling parameters
 eps1 = -0.1
 eps2 = -0.1
-gam = 0.07
+gam = 0.02
 # two-body (coulomb) parameters
 U_11 = 0.5
 U_22 = 0.5
 U_12 = 0.0
-J    = 0.4
+J    = 0.0
 T    = J
 
-
-iterations = 30
+iterations = 60
 
 max_spin2 = 8
 
@@ -187,7 +185,6 @@ nrg_full_thermo(
             max_spin2,
             cg_o_dir,
             asym_dir,
-            atom_orbital_irreps,
             atom_config,
             shell_config,
             identityrep,

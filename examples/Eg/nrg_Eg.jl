@@ -26,6 +26,9 @@ include( "../../modules/automatization.jl" )
 
 label = "Eg"
 
+# stage: multiplets, spectrum, nrg
+stage = "nrg"
+
 # parallel computation
 distributed  = false
 # number of workers (CPUs)
@@ -42,28 +45,31 @@ calculation = "IMP"
 z = 0.0
 
 # numerical parameters
-L = 10.0
+L = 3.0
 betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 300
+cutoff_magnitude = 100
 minmult = 0 
 mine = 0.0
 
 
 # one-body coupling parameters
-eps = -0.1
-gam =  0.003
+eps   = -0.1
+u_11  = 1*abs(eps)
+u_h   = 0.3*u_11
+u_12  = u_11-2*u_h
+gam   = u_11/pi*1e-2
 # coulomb coupling parameters
-u_11  = 0.2
-u_12  = u_11
-u_h   = u_11
-u_eg  = u_11
-u_a1g = u_12 + u_h/2.0
-u_a2g = u_12 - u_h/2.0
+#u_eg  = u_11
+#u_a1g = u_12 + u_h/2.0
+#u_a2g = u_12 - u_h/2.0
+u_eg  = u_11 - u_h/4.0
+u_a1g = u_11 + u_h/4.0
+u_a2g = u_11 - 3.0*u_h/4.0
 
-iterations = 30
+iterations = 60
 
 max_spin2 = 8
 
@@ -154,30 +160,48 @@ end
 println()
 
 
-#multiplets_2part( 
-#            cg_o_dir ,
-#            asym_dir ,
-#            atom_orbital_irreps ,
-#            atom_config ,
-#            identityrep )
+if stage=="multiplets"
 
-nrg_full_thermo( 
-            label,
-            calculation,
-            L,
-            z,
-            distributed,
-            iterations,
-            cutoff_type,
-            cutoff_magnitude,
-            max_spin2,
-            cg_o_dir,
-            asym_dir,
-            atom_config,
-            shell_config,
-            identityrep,
-            epsilon_symparams ,
-            u_symparams,
-            hop_symparams;
-            spectral=spectral,
-            etafac=etafac)
+    multiplets_2part( 
+                cg_o_dir ,
+                asym_dir ,
+                atom_orbital_irreps ,
+                atom_config ,
+                identityrep )
+
+elseif stage=="spectrum"
+
+    atomic_spectrum( 
+                label,
+                z,
+                cg_o_dir,
+                asym_dir,
+                atom_config,
+                identityrep,
+                epsilon_symparams,
+                u_symparams)
+
+elseif stage=="nrg"
+
+    nrg_full_thermo( 
+                label,
+                calculation,
+                L,
+                z,
+                distributed,
+                iterations,
+                cutoff_type,
+                cutoff_magnitude,
+                max_spin2,
+                cg_o_dir,
+                asym_dir,
+                atom_config,
+                shell_config,
+                identityrep,
+                epsilon_symparams ,
+                u_symparams,
+                hop_symparams;
+                spectral=spectral,
+                etafac=etafac)
+
+end

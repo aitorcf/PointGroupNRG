@@ -1001,7 +1001,6 @@ function NRG( iterations::Int64,
         # hopping parameter
         hop_symparams = Dict( k=>ComplexF64.(ξ[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
                               for (k,v) in hop_symparams )
-        @show hop_symparams
         println( "shell hopping = $(round(ξ[n-1],sigdigits=3))" )
 
         # construct and diagonalize ( m_u | H_1 | m_v )
@@ -1076,7 +1075,6 @@ function NRG( iterations::Int64,
         if spectral 
 
                 print( "Updating M and AA... " )
-                @show multiplets_atomhop
                 @time M, AA = update_redmat_AA_CGsummethod(
                             M ,
                             irrEU ,
