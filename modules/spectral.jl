@@ -985,7 +985,7 @@ function compute_spectral_function(
 
         o = -oo
 
-        for N in 2:iterations 
+        for N in 3:2:iterations 
 
             omegaN  = Float64( alpha * L^(-(N-2)/2.0) )#* sqrt(L) )
             emin    = omegaN/sqrt(L)

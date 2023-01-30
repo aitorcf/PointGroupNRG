@@ -1,6 +1,7 @@
 using Glob
 
 include( "shell.jl" )
+include( "lanczos.jl" )
 
 function get_cg_o_info( 
             cg_o_dir::String , 
@@ -180,7 +181,9 @@ function rescale(
             num::N ,
             L::Float64 ,
             z::Float64 ,
-            discretization::String ) where {N<:Number}
+            discretization::String ;
+            iterations::Int64=1 ,
+            eta::Function=x->1.0 ) where {N<:Number}
     # apply initial rescaling to parameter A:
     #
     #   A → A/( √Λ ϵ^z_0(Λ) ),
@@ -189,10 +192,15 @@ function rescale(
     # shell (not the innermost one, but the next one).
     
     # α = ϵ_0^z (scaling factor)
-    a::Float64 = compute_ebar0_z(
-                     z,
-                     L;
-                     discretization=discretization)
+    if discretization!=="lanczos" 
+        a::Float64 = compute_ebar0_z(
+                         z,
+                         L;
+                         discretization=discretization)
+    elseif discretization=="lanczos" 
+        a = get_hoppings( iterations , L , z , eta )[2][1]
+    end
+
     return num/(a*sqrt(L))
 end
 
@@ -709,7 +717,8 @@ function nrg_full_thermo(
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
-            etafac::Float64=1.0 ) where {R<:Real}
+            etafac::Float64=1.0 ,
+            eta::Function=x->1.0 ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
         println( "ERROR: calculation must be IMP for computing the spectral function" )
@@ -771,13 +780,26 @@ function nrg_full_thermo(
     println( "--- ATOMIC PART ---" )
     println( ":::::::::::::::::::" )
     println()
+
+    #   --------------   #
+    #%% discretization %%#
+    #   --------------   #
+    #channel_symstructure = Dict( 
+    #        k=>[get_hoppings(N,L,z,coupling;scheme=discretization)
+    #            for coupling in couplings]
+    #        for (k,couplings) in channel_etas
+    #)
+    #scale_symparams = Dict( 
+    #        k=>[h[1][1] for h in hops] 
+    #        for (hops,hop in 
+
     
     #   ------------------- #
     #%% rescaled parameters #
     #   ------------------- #
-    hop_symparams     = Dict( oirreps2indices[k]=>@.rescale(v,L,z,discretization) for (k,v) in hop_symparams )
-    epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in epsilon_symparams )
-    u_symparams       = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in u_symparams )
+    hop_symparams     = Dict( oirreps2indices[k]=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in hop_symparams )
+    epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in epsilon_symparams )
+    u_symparams       = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in u_symparams )
     println( "RESCALED PARAMETERS FOR H0" )
     @show epsilon_symparams 
     @show u_symparams 
@@ -1136,9 +1158,10 @@ end
 function multiplets_2part( 
             cg_o_dir ,
             asym_dir ,
-            atom_orbital_irreps ,
             atom_config ,
             identityrep )
+
+    atom_orbital_irreps = collect(keys(atom_config))
 
     # orbital symmetry
     (oirreps,

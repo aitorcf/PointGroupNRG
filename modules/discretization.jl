@@ -13,6 +13,8 @@
 #
 # ===============================================
 
+include( "lanczos.jl" )
+
 
 # computes the values of z given N_z
 get_Z( Nz::Int64 ) = collect( Float64(i)/Nz for i=0:(Nz-1) )
@@ -29,9 +31,10 @@ end
 # asymptotic formula.
 function compute_xi_vector( N::Int64 , 
                             z::Float64 , 
-                            L::Float64 ; 
+                            L::Float64 ;
                             discretization::String="standard" ,
-                            verbose::Bool=false ) 
+                            verbose::Bool=false ,
+                            eta::Function=x->1.0 ) 
 
     zz = BigFloat(z)
     LL = BigFloat(L)
@@ -55,6 +58,10 @@ function compute_xi_vector( N::Int64 ,
 
         return vcat( [ϵ[i]/ebars[i] for i=1:N7] , 
                      [1 for _=(N7+1):N] )
+
+    elseif discretization=="lanczos" 
+        
+        return get_hoppings( N , L , z , eta )[3]
 
     end
 end

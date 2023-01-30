@@ -2,6 +2,7 @@ include( "symbols.jl" )
 include( "numericals.jl" )
 include( "symmetry.jl" )
 include( "discretization.jl" )
+include( "lanczos.jl" )
 
 using StaticArrays
 using ProgressMeter
@@ -940,7 +941,8 @@ function NRG( iterations::Int64,
               Karray_spin::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) ,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
               etafac::Float64=1.0 ,
-              alpha::Float64=1.0 )
+              alpha::Float64=1.0 ,
+              eta::Function=x->1.0 )
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -953,6 +955,8 @@ function NRG( iterations::Int64,
     numbers        = []
     partitions     = []
     entropies      = []
+    heatcaps       = []
+    free_energies  = []
     impspins       = []
     impnums        = []
     impmults       = []
@@ -964,7 +968,11 @@ function NRG( iterations::Int64,
     maxs_tot = 0
     eigenvals5::Matrix{Float64} = zeros(Float64,iterations-1,5)
 
-    ξ = compute_xi_vector( iterations , z , L ; discretization=discretization )
+    if discretization!=="lanczos" 
+        ξ = compute_xi_vector( iterations , z , L ; discretization=discretization )
+    elseif discretization=="lanczos" 
+        e,ebar,ξ = get_hoppings( iterations , L , z , eta )
+    end
 
     for n=2:iterations
 
@@ -1049,18 +1057,26 @@ function NRG( iterations::Int64,
 
         # thermodynamics 
         println( "THERMODYNAMICS" )
-        t    = temperature( n , L , betabar ; z=z , discretization=discretization )
+        if discretization!=="lanczos" 
+            t = temperature( n , L , betabar ; z=z , discretization=discretization )
+        elseif discretization=="lanczos" 
+            t = temperature( n , L , betabar ; z=z , discretization=discretization , ebar0=ebar[1] )
+        end
         ρ    = partition(  irrEU , betabar , oindex2dimensions )
         entr = entropy(    irrEU , betabar , oindex2dimensions )
         mag  = magsusc(    irrEU , betabar , oindex2dimensions )
         N    = number(     irrEU , betabar , oindex2dimensions )
         en   = energy(     irrEU , betabar , oindex2dimensions )
+        c    = heatcap(    irrEU , betabar , oindex2dimensions )
+        f    = free_energy(irrEU , betabar , oindex2dimensions )
         @show t 
         @show ρ 
         @show entr
         @show mag
         @show N
         @show en
+        @show c 
+        @show f
         println()
         push!( magnetizations , mag )
         push!( temperatures , t )
@@ -1068,6 +1084,8 @@ function NRG( iterations::Int64,
         push!( partitions , ρ )
         push!( numbers , N )
         push!( entropies , entr )
+        push!( heatcaps , c )
+        push!( free_energies , f )
 
         eigs = sort([ e for (E,U) in values(irrEU) for e in E ])[1:5]
         eigenvals5[(n-1),:] = [(e-eigs[1]) for e in eigs[1:5]]
@@ -1127,6 +1145,8 @@ function NRG( iterations::Int64,
              e=energies , 
              p=partitions ,
              n=numbers , 
+             c=heatcaps ,
+             f=free_energies ,
              entr=entropies,
              perf=performance ,
              impmults=impmults ,

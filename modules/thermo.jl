@@ -7,16 +7,25 @@
 include( "discretization.jl" )
 using DelimitedFiles 
 
-function temperature( N::Int64 , L::Float64 , betabar::Float64 ; z::Float64=0.0 , discretization="standard" ) 
+function temperature( N::Int64 , 
+                      L::Float64 , 
+                      betabar::Float64 ; 
+                      z::Float64=0.0 , 
+                      discretization::String="standard" ,
+                      ebar0::Float64=1.0 ) 
 
     if discretization=="standard"
 
-        return 0.5 * (1+L^(-1)) * L^(z-(N-2)/2) / (betabar)#*(L^(-z)) # compensate for the L^(z) on betabar 
+        return 0.5 * (1+L^(-1)) * L^(z-(N-2)/2) / (betabar)
 
     elseif discretization=="co2005" 
 
         eco0_z = compute_epsilon_co2005(8,z,L)[9]*L^4
-        return eco0_z*L^(-(N-2))/betabar 
+        return eco0_z*L^(-(N-2)/2)/betabar 
+
+    elseif discretization=="lanczos" 
+
+        return ebar0*L^(-(N-2)/2)/betabar
 
     end
 end
@@ -24,12 +33,13 @@ end
 function partition( 
             irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
             betabar::Float64 ,
-            oirreps2dimensions::Dict )
+            oirreps2dimensions::Dict )::Float64
 
     #   Z = Tr exp( - betabar * H_N )
     #     = Sum_G( D * ( Sum_i exp(-betabar*E_i) ))
+    #
 
-    part = 0
+    part::Float64 = 0.0
     for (G,(E,U)) in irrEU
         # orbital and spin
         (I,S) = G[2:3] 
@@ -38,6 +48,7 @@ function partition(
         Do = oirreps2dimensions[I]
         Ds = 2*S+1
         D = Do*Ds
+
         
         # weighted sum over G 
         part += D * sum( exp( - betabar * e ) for e in E )
@@ -49,24 +60,25 @@ end
 function partition( 
             irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
             betabar::Float64 ,
-            oindex2dimensions::Vector{Int64} )
+            oindex2dimensions::Vector{Int64} )::Float64
     #   Z = Tr exp( - betabar * H_N )
     #     = Sum_G( D * ( Sum_i exp(-betabar*E_i) ))
 
-    part = 0
+    part::Float64 = 0.0
     for (G,(E,U)) in irrEU
         # orbital and spin
         (I,S) = G[2:3] 
+
 
         # degeneracy/dimensionality
         Do = oindex2dimensions[I]::Int64
         Ds = S+1
         D = Do*Ds
-        
+
         # weighted sum over G 
         part += D * sum( exp( - betabar * e ) for e in E )
     end
-    return part::Float64
+    return part
 end
 
 function magsusc( irrEU , betabar , oirreps2dimensions::Dict ; verbose=false )
@@ -184,6 +196,7 @@ function number(
     return N/part 
 end
 
+# string method
 function energy( irrEU , betabar , oirreps2dimensions::Dict ; verbose=false )
 
     part = partition( irrEU , betabar , oirreps2dimensions )
@@ -230,6 +243,31 @@ function energy(
     end
     return energy/part 
 end
+# int method
+function energy2( 
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            betabar::Float64 ,
+            oindex2dimensions::Vector{Int64} ;
+            verbose=false )
+
+    part::Float64 = partition( irrEU , betabar , oindex2dimensions )
+
+    energy::Float64 = 0
+    for (G,(E,U)) in irrEU
+        # orbital and spin
+        (N,I,S) = G
+
+        # degeneracy/dimensionality
+        Do = oindex2dimensions[I]
+        Ds = S+1
+        D = Do*Ds
+        
+        # weighted sum over G 
+        contrib = D * sum( (e*e*exp( - betabar * e )) for e in E ) 
+        energy += contrib
+    end
+    return energy/part 
+end
 
 # int method 
 function entropy( 
@@ -239,7 +277,32 @@ function entropy(
             verbose=false )
 
     part::Float64 = partition( irrEU , betabar , oindex2dimensions ) 
-    return log(part)
+    e::Float64 = energy(irrEU,betabar,oindex2dimensions)
+    return log(part) + betabar*e
+
+end
+
+# int method 
+function heatcap(
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            betabar::Float64 ,
+            oindex2dimensions::Vector{Int64} ;
+            verbose=false )
+
+    e  = energy(  irrEU , betabar , oindex2dimensions ) 
+    e2 = energy2( irrEU , betabar , oindex2dimensions )
+    return betabar*betabar*( e2 - e*e )
+
+end
+
+# int method 
+function free_energy(
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            betabar::Float64 ,
+            oindex2dimensions::Vector{Int64} ;
+            verbose=false )
+
+    return log(partition(irrEU,betabar,oindex2dimensions))
 
 end
 
@@ -476,12 +539,12 @@ function write_thermodata_onez( nrg ,
         filename = "thermodata/thermo_clean_$(orbital)_z$z.dat" 
         println( "Saving thermodynamic data to $filename..." )
         writedlm( filename , 
-                  [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr] )
+                  [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr nrg.c nrg.f] )
     elseif calculation=="IMP"
         filename = "thermodata/thermo_imp_$(orbital)_z$z.dat"   
         println( "Saving thermodynamic data to $filename..." )
         writedlm( filename , 
-                  [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr] )
+                  [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr nrg.c nrg.f] )
     end
 end
 
