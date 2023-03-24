@@ -182,7 +182,7 @@ function rescale(
             L::Float64 ,
             z::Float64 ,
             discretization::String ;
-            iterations::Int64=1 ,
+            iterations::Int64=30 ,
             eta::Function=x->1.0 ) where {N<:Number}
     # apply initial rescaling to parameter A:
     #
@@ -202,6 +202,20 @@ function rescale(
     end
 
     return num/(a*sqrt(L))
+end
+function rescale( 
+            num::N ,
+            L::Float64 ,
+            z::Float64 ,
+            scale::Float64 ) where {N<:Number}
+    # apply initial rescaling to parameter A:
+    #
+    #   A → A/( √Λ ϵ^z_0(Λ) ),
+    #
+    # where ϵ^z_0(Λ) is the hopping to the first
+    # shell (not the innermost one, but the next one).
+    #
+    return num/(scale*sqrt(L))
 end
 
 # IMP method
@@ -692,7 +706,7 @@ function construct_custom_orbital_space(
 
 end
         
-function nrg_full_thermo( 
+function nrg_full( 
             label::String ,
             calculation::String ,
             L::Float64 ,
@@ -707,9 +721,10 @@ function nrg_full_thermo(
             atom_config::Dict{String,Int64} ,
             shell_config::Dict{String,Int64} ,
             identityrep::String ,
-            epsilon_symparams::Dict{ Tuple{String,Int64} , ComplexF64 } ,
+            epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ,
             hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
+            channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
             discretization="standard" ,
             distworkers::Int64=0 ,
             method::String="" ,
@@ -718,12 +733,14 @@ function nrg_full_thermo(
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             etafac::Float64=1.0 ,
-            eta::Function=x->1.0 ) where {R<:Real}
+            eta::Function=x->1.0 ,
+            Nz=1 ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
         println( "ERROR: calculation must be IMP for computing the spectral function" )
         return nothing 
     end
+
     
     # orbital irreps present in the atom
     atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
@@ -771,6 +788,23 @@ function nrg_full_thermo(
     # spin symmetry
     cg_s_fullmatint = get_cg_s_fullmatint( max_spin2 );
 
+    # ------------------------------------ #
+    # improve dictionary lookup for pcgred #
+    # ------------------------------------ #
+    #max_population_atom  = sum( 2*O*oirreps2dimensions[I] for (I,O) in atom_config )
+    #max_population_shell = sum( 2*O*oirreps2dimensions[I] for (I,O) in shell_config )
+    #Ndim = max_population_atom + iterations*max_population_shell
+    #Idim = length(oirreps)
+    #Sdim = max_spin2
+    #maxISdim = maximum((Idim,Sdim))
+    #ISdim = Idim*Sdim
+    #Gdim = Ndim*Idim*Sdim
+    #dimtup = ( ISdim , Sdim , 1 ) 
+    #begin global
+    #    @eval function Base.hash( x::NTuple{3,NTuple{3,Int64}} )
+    #        UInt64(sum( sum.((x[1].*$dimtup,x[2].*$dimtup,x[3].*$dimtup)).*($(Gdim^2),$Gdim,1) ))
+    #    end
+    #end
 
     #   ===========   #
     #%% ATOMIC PART %%#
@@ -784,28 +818,80 @@ function nrg_full_thermo(
     #   --------------   #
     #%% discretization %%#
     #   --------------   #
-    #channel_symstructure = Dict( 
-    #        k=>[get_hoppings(N,L,z,coupling;scheme=discretization)
-    #            for coupling in couplings]
-    #        for (k,couplings) in channel_etas
-    #)
-    #scale_symparams = Dict( 
-    #        k=>[h[1][1] for h in hops] 
-    #        for (hops,hop in 
 
+    # default behavior: eta=x->1
+    if length(channel_etas)==0 
+        channel_etas = Dict( k=>Function[x->0.5 for i in 1:size(v)[1]]
+                             for (k,v) in hop_symparams 
+        )
+    end
+    
+    # symmetry-wise channel structure 
+    #       irrep => [ ϵ , ̄ϵ , ξ ]
+    channel_symstructure = Dict( 
+            k=>[get_hoppings(iterations,L,z,coupling)
+                for coupling in couplings]
+            for (k,couplings) in channel_etas
+    )
+    
+    # symmetry-wise etabar 
+    etabar_sym = Dict( 
+            k=>[s[4] for s in v]
+            for (k,v) in channel_symstructure 
+    )
+    @show etabar_sym
+    println()
+
+    # scale parameter: first asymptotic hopping element 
+    #       irrep => [ ̄ϵ[1] ]
+    scale_symparams = Dict( 
+            k=>[h[2][1] for h in s] 
+            for (k,s) in channel_symstructure 
+    )
+    @show scale_symparams
+    println()
+    scale = maximum([v for (k,V) in scale_symparams for v in V])
+    factor_symparams = Dict( k=>v./scale for (k,v) in scale_symparams )
+    @show factor_symparams
+    println()
+
+    # hopping parameters: ξ = ϵ / ̄ϵ
+    #       irrep => [ ξ ]
+    xi_symparams::Dict{Int64,Vector{Vector{ComplexF64}}} = Dict( 
+            oirreps2indices[k]=>[ComplexF64.(h[3].*factor_symparams[k][i]) for (i,h) in enumerate(s)] 
+            for (k,s) in channel_symstructure
+    )
     
     #   ------------------- #
     #%% rescaled parameters #
     #   ------------------- #
-    hop_symparams     = Dict( oirreps2indices[k]=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in hop_symparams )
-    epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in epsilon_symparams )
-    u_symparams       = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=eta) for (k,v) in u_symparams )
+    oindices2irreps = Dict( v=>k for (k,v) in oirreps2indices )
+    println()
+    if discretization=="lanczos"
+        hop_symparams     = Dict( oirreps2indices[k]=>(@.rescale(v,L,z,scale)) for (k,v) in hop_symparams )
+        for (k,v) in hop_symparams 
+            for i in 1:size(v)[2]
+                @show hop_symparams[k][:,i]
+                @show etabar_sym[oindices2irreps[k]][i]
+                hop_symparams[k][:,i] .*= etabar_sym[oindices2irreps[k]][i]
+                @show hop_symparams[k][:,i]
+                println()
+            end
+        end
+        epsilon_symparams = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in epsilon_symparams )
+        u_symparams       = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in u_symparams )
+    else
+        hop_symparams     = Dict( oirreps2indices[k]=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in hop_symparams )
+        epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in epsilon_symparams )
+        u_symparams       = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in u_symparams )
+    end
     println( "RESCALED PARAMETERS FOR H0" )
     @show epsilon_symparams 
     @show u_symparams 
     @show hop_symparams
     println()
 
+    
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
@@ -1073,13 +1159,15 @@ function nrg_full_thermo(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
+                   xi_symparams ,
                    mm_i ;
                    mine=mine ,
                    distributed=distributed ,
                    method=method ,
                    z=z ,
                    discretization=discretization ,
-                   verbose=false )
+                   verbose=false ,
+                   Nz=Nz)
     else 
         nrg = NRG( iterations,
                    cutoff_type,

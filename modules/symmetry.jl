@@ -763,7 +763,7 @@ function check_atomic( s::State ; verbose=false )
 end
 
 
-function epsilon_sym( symstates , symparams ; verbose=false )
+function epsilon_sym( symstates , symparams::Dict{Tuple{String,Int64},ComplexF64} ; verbose=false )
     symstates_n1 = symstates_n( symstates , 1 )
     basis = pickrandom( symstates_n1 )[2].basis
     n = length( basis.states )
@@ -778,6 +778,27 @@ function epsilon_sym( symstates , symparams ; verbose=false )
             epsop += symparams[(q[1],q[5])]*component*cop*adjoint(cop)
         end
     end
+    return epsop
+end
+function epsilon_sym( symstates , symparams::Dict{String,Vector{ComplexF64}} ; verbose=false )
+    println( "ALTERNATIVE EPSILON SYM" )
+    # transform to previous convention (above)
+    symparams = Dict( (k,r)=>v for (k,V) in symparams for (r,v) in enumerate(V) )
+    symstates_n1 = symstates_n( symstates , 1 )
+    basis = pickrandom( symstates_n1 )[2].basis
+    n = length( basis.states )
+    coperators = basis2coperators( basis )
+    epsop = Operator( 0 , basis )
+    for (q,s) in symstates_n1
+        verbose && println( s )
+        # construct the corresponding part of the operator
+        for (i,component) in enumerate(s.vector)
+            component==0 && continue
+            cop = coperators[i]
+            epsop += symparams[(q[1],q[5])]*component*cop*adjoint(cop)
+        end
+    end
+    @show epsop.matrix
     return epsop
 end
 

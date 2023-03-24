@@ -62,7 +62,9 @@ function integrate( f::Function ,
 
 end
 
-function representative_energy( interval ; scheme="alternative" , eta::Function=x->1.0 ) 
+function representative_energy( interval::NTuple{2,BigFloat} ; 
+                                scheme::String="standard" , 
+                                eta::Function=x->1.0 )::BigFloat
 
     if scheme=="alternative" 
 
@@ -78,11 +80,12 @@ function representative_energy( interval ; scheme="alternative" , eta::Function=
 
 end
 
-function get_f1_E( eta::Function , 
-                   L::BigFloat , 
-                   z::BigFloat , 
-                   N::Int64 ;
-                   scheme="alternative" )
+function get_f1_E_etabar( 
+            eta::Function , 
+            L::BigFloat , 
+            z::BigFloat , 
+            N::Int64 ;
+            scheme="standard" )
 
     # diagonal conduction matrix elements
     E  = BigFloat[ 0 for n in 1:(2*N) ]
@@ -101,7 +104,7 @@ function get_f1_E( eta::Function ,
     x_pn1::BigFloat = 0.0
     interval::NTuple{2,BigFloat} = (0.0,0.0)
 
-    for n=1:N
+    @inbounds for n=1:N
 
         # negative part
         idx = n
@@ -120,8 +123,10 @@ function get_f1_E( eta::Function ,
         f1[idx] = sqrt( integrate(eta,interval) / etabar )
 
     end
+    
+    #f1 ./= sum(abs2.(f1))
 
-    return (f1,E)
+    return (f1,E,etabar)
 
 end
 
@@ -129,14 +134,17 @@ function get_hoppings( N::Int64 ,
                        L::Float64 , 
                        z::Float64 , 
                        eta::Function ;
-                       scheme="alternative" )
+                       scheme="standard" )
+
+    # N=40 is sufficient before asympotic
+    M = minimum((N,20))
 
     # convert Float64 to BigFloat
     LL = BigFloat(L) 
     zz = BigFloat(z)
 
     # obtain innermost shell and diagonal basis elements
-    (f1,E) = get_f1_E( eta , LL , zz ,  N ; scheme=scheme )
+    (f1,E,etabar) = get_f1_E_etabar( eta , LL , zz ,  M ; scheme=scheme )
 
     # construct diagonal hamiltonian 
     H::Matrix{BigFloat} = diagm( E )
@@ -145,25 +153,24 @@ function get_hoppings( N::Int64 ,
     Hp = lanczos( H , f1 )
 
     # off-diagonal entries ϵ
-    hops = [Hp[i,i+1] for i in 1:N]
+    hops = [Hp[i,i+1] for i in 1:M]
 
     ## diagonal entries 
     #diags = [Hp[i,i] for i in 1:N]
     #@show diags
 
     # asymptotic off-diagonals ̄ϵ
-    hopscaling = [abs(hops[i]*sqrt(L)-hops[i+1]) for i in 7:12]
+    hopscaling = [abs(hops[i]/sqrt(L)-hops[i+1]) for i in 7:minimum((M-1,12))]
     C = findfirst( x->x==minimum(hopscaling) , hopscaling )+6
-    C = 7
-    @show C
     hop0 = hops[C]*LL^((C-1)/2)
-    hops_asymptotic = [hop0*LL^(-(n-1)/2) for n in 1:N] 
+    hops_asymptotic = [hop0*LL^(-(n-1)/2) for n in 1:M] 
 
     # fractions ξ
-    xis = hops ./ hops_asymptotic
+    xis::Vector{BigFloat} = BigFloat[0 for _ in 1:N]
+    xis[1:M] .= hops ./ hops_asymptotic
     xis[C:end] .= 1.0
 
-    return (Float64.(hops),Float64.(hops_asymptotic),Float64.(xis))
+    return (Float64.(hops),Float64.(hops_asymptotic),Float64.(xis),Float64(etabar))
 
 end
 
@@ -172,9 +179,10 @@ if test
     # -----------------------
     # TESTING 
 
-    N = 40
+    N = 10 
     L = 10.0
-    eta = x->1.0
+    z = 0.0
+    eta = x->0.5
     scheme = "standard" 
 
     z = 0.0
@@ -182,38 +190,27 @@ if test
     println( "z = $z" )
     println( "======" )
     h,ha,xi = get_hoppings(N,L,z,eta;scheme=scheme) 
-    @show h 
-    println()
-    @show ha 
-    println()
-    @show xi
-    println()
-    analytic = [(n>1 ? (1-L^(-(n-2)-1)) * (1-L^(-2*(n-2)-1))^(-0.5) * (1-L^(-2*(n-2)-3))^(-0.5) : 0.0) for n in 1:N]
-    @show analytic
-    println()
-
+    @show ha[1]
 
     z = 0.5
     println( "======" )
     println( "z = $z" )
     println( "======" )
-    h2,ha2,xi2 = get_hoppings(N,L,z,eta;scheme=scheme ) 
-    @show h2 
-    println()
-    @show ha2 
-    println()
-    @show xi2
-    println()
-    @show analytic
+    h,ha,xi = get_hoppings(N,L,z,eta;scheme=scheme) 
+    @show ha[1]
 
-    println( "==========" )
-    println( "COMPARISON" )
-    println( "==========" )
-    @show ha[1]*L^z 
-    @show ha2[1]
-    analytic = [(n>1 ? (1-L^(-(n-2)-1)) * (1-L^(-2*(n-2)-1))^(-0.5) * (1-L^(-2*(n-2)-3))^(-0.5) : 0.0) for n in 1:N]
-
-
+    #@show h 
+    #println()
+    #@show ha 
+    #println()
+    #@show xi
+    #println()
+    #analytic = [(n>1 ? (1-L^(-(n-2)-1)) * (1-L^(-2*(n-2)-1))^(-0.5) * (1-L^(-2*(n-2)-3))^(-0.5) : 0.0) for n in 1:(N+1)]
+    #popfirst!(analytic)
+    #@show analytic
+    #println()
+    #diff = sum(abs2.(analytic.-xi))
+    #@show diff
 
     # -----------------------
 

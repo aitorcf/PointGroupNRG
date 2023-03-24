@@ -926,6 +926,7 @@ function NRG( iterations::Int64,
               combinations_uprima::Dict{NTuple{3,Int64}, Vector{NTuple{3,NTuple{4,Int64}}}},
               betabar::Float64 ,
               oindex2dimensions::Vector{Int64} ,
+              xi_symparams::Dict{ Int64 , Vector{Vector{ComplexF64}} } ,
               mm_i ;
               verbose::Bool=false ,
               distributed::Bool=false ,
@@ -942,7 +943,8 @@ function NRG( iterations::Int64,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
               etafac::Float64=1.0 ,
               alpha::Float64=1.0 ,
-              eta::Function=x->1.0 )
+              eta::Function=x->1.0 ,
+              Nz=1 )
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -968,11 +970,15 @@ function NRG( iterations::Int64,
     maxs_tot = 0
     eigenvals5::Matrix{Float64} = zeros(Float64,iterations-1,5)
 
-    if discretization!=="lanczos" 
-        ξ = compute_xi_vector( iterations , z , L ; discretization=discretization )
-    elseif discretization=="lanczos" 
+    if discretization=="lanczos" 
         e,ebar,ξ = get_hoppings( iterations , L , z , eta )
+    else
+        ξ = compute_xi_vector( iterations , z , L ; discretization="standard" )
     end
+    @show ξ
+
+    # NEW 
+    Nt = Nz==1 ? 1 : Int64(Nz/2)
 
     for n=2:iterations
 
@@ -1007,9 +1013,17 @@ function NRG( iterations::Int64,
         end
 
         # hopping parameter
-        hop_symparams = Dict( k=>ComplexF64.(ξ[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
-                              for (k,v) in hop_symparams )
-        println( "shell hopping = $(round(ξ[n-1],sigdigits=3))" )
+        if discretization=="lanczos"
+            hop_symparams = Dict( k=>diagm(ComplexF64.([xi_symparams[k][i][n-1]
+                                                        for i in 1:length(xi_symparams[k])]))
+                                  for (k,v) in xi_symparams )
+        else
+            hop_symparams = Dict( k=>ComplexF64.(ξ[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
+                                  for (k,v) in hop_symparams )
+        end
+        @show hop_symparams
+
+        #println( "shell hopping = $(round(ξ[n-1],sigdigits=3))" )
 
         # construct and diagonalize ( m_u | H_1 | m_v )
         println( "Diagonalizing Hamiltonian..." )
@@ -1057,35 +1071,42 @@ function NRG( iterations::Int64,
 
         # thermodynamics 
         println( "THERMODYNAMICS" )
-        if discretization!=="lanczos" 
-            t = temperature( n , L , betabar ; z=z , discretization=discretization )
-        elseif discretization=="lanczos" 
-            t = temperature( n , L , betabar ; z=z , discretization=discretization , ebar0=ebar[1] )
+        @show Nt
+        for m in 1:Nt 
+
+            fac = L^(m/Nz)
+
+            if discretization!=="lanczos" 
+                t = temperature( n , L , betabar*fac ; z=z , discretization=discretization )
+            elseif discretization=="lanczos" 
+                t = temperature( n , L , betabar*fac ; z=z , discretization=discretization , ebar0=ebar[1] )
+            end
+
+            ρ    = partition(  irrEU , betabar*fac , oindex2dimensions )
+            entr = entropy(    irrEU , betabar*fac , oindex2dimensions )
+            mag  = magsusc(    irrEU , betabar*fac , oindex2dimensions )
+            N    = number(     irrEU , betabar*fac , oindex2dimensions )
+            en   = energy(     irrEU , betabar*fac , oindex2dimensions )
+            c    = heatcap(    irrEU , betabar*fac , oindex2dimensions )
+            f    = free_energy(irrEU , betabar*fac , oindex2dimensions )
+            @show t 
+            @show ρ 
+            @show entr
+            @show mag
+            @show N
+            @show en
+            @show c 
+            @show f
+            println()
+            push!( magnetizations , mag )
+            push!( temperatures , t )
+            push!( energies , en )
+            push!( partitions , ρ )
+            push!( numbers , N )
+            push!( entropies , entr )
+            push!( heatcaps , c )
+            push!( free_energies , f )
         end
-        ρ    = partition(  irrEU , betabar , oindex2dimensions )
-        entr = entropy(    irrEU , betabar , oindex2dimensions )
-        mag  = magsusc(    irrEU , betabar , oindex2dimensions )
-        N    = number(     irrEU , betabar , oindex2dimensions )
-        en   = energy(     irrEU , betabar , oindex2dimensions )
-        c    = heatcap(    irrEU , betabar , oindex2dimensions )
-        f    = free_energy(irrEU , betabar , oindex2dimensions )
-        @show t 
-        @show ρ 
-        @show entr
-        @show mag
-        @show N
-        @show en
-        @show c 
-        @show f
-        println()
-        push!( magnetizations , mag )
-        push!( temperatures , t )
-        push!( energies , en )
-        push!( partitions , ρ )
-        push!( numbers , N )
-        push!( entropies , entr )
-        push!( heatcaps , c )
-        push!( free_energies , f )
 
         eigs = sort([ e for (E,U) in values(irrEU) for e in E ])[1:5]
         eigenvals5[(n-1),:] = [(e-eigs[1]) for e in eigs[1:5]]

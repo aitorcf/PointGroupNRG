@@ -17,6 +17,7 @@ function temperature( N::Int64 ,
     if discretization=="standard"
 
         return 0.5 * (1+L^(-1)) * L^(z-(N-2)/2) / (betabar)
+        
 
     elseif discretization=="co2005" 
 
@@ -522,7 +523,7 @@ function write_impurity_info( nrg ,
     multfile = "thermodata/impmult_$(orbital)_z$z.dat" 
     open(multfile,write=true) do f
         for m in omults
-            write(f,"$(m[1]),$(m[2]),$(m[3]/2) ")
+            write(f,"$(m[1]),$(m[2]),$(m[3]) ")
             for n in 1:length(nrg.impmults)
                 write(f,"$(nrg.impmults[end+1-n][mult2index[m]]) ")
             end

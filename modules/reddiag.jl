@@ -773,36 +773,36 @@ function compute_hopelement_redmat(
         verbose && println( "B sum = $B\n" )
         B==zero(B) && continue
 
-        pcgred_iaj = compute_pcgred_iaj(
-                        m_i , m_a_block , m_j ,
-                        oindex2dimensions ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        Csum_o_array ,
-                        Csum_s_array ,
-                        pcgred_block ,
-                        combs_uvprima_local ,
-                        U_i ,# = U_ut 
-                        U_j ,# = U_vt
-                        zeromat ;
-                        verbose=verbose )
-        verbose && println( "( m_i || f^†_{m_a} || m_j ) = $pcgred_iaj\n" )
+    pcgred_iaj = compute_pcgred_iaj(
+                    m_i , m_a_block , m_j ,
+                    oindex2dimensions ,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ,
+                    Csum_o_array ,
+                    Csum_s_array ,
+                    pcgred_block ,
+                    combs_uvprima_local ,
+                    U_i ,# = U_ut 
+                    U_j ,# = U_vt
+                    zeromat ;
+                    verbose=verbose )
+    verbose && println( "( m_i || f^†_{m_a} || m_j ) = $pcgred_iaj\n" )
 
-        hopelement += sign*
-                      hoparam*
-                      B*
-                      pcgred_iaj*
-                      conj(pcgred_nuamu)
-        if verbose 
-            c = sign*hoparam*B*pcgred_iaj*conj(pcgred_nuamu)
-            println( "contribution to hopelement = $c\n" )
-        end
-
+    hopelement += sign*
+                  hoparam*
+                  B*
+                  pcgred_iaj*
+                  conj(pcgred_nuamu)
+    if verbose 
+        c = sign*hoparam*B*pcgred_iaj*conj(pcgred_nuamu)
+        println( "contribution to hopelement = $c\n" )
     end
 
-    verbose && println( "hopelement = $hopelement\n" )
+end
 
-    return hopelement 
+verbose && println( "hopelement = $hopelement\n" )
+
+return hopelement 
 
 end
 
@@ -1216,21 +1216,34 @@ function compute_CG_Csum_orbital(
 
     # orbital sum 
     sum_o::ComplexF64 = zero(ComplexF64)
+    #@inbounds for i_u  in 1:dI_u,
+    #              i_up in 1:dI_u,
+    #              i_v  in 1:dI_v,
+    #              i_ij in 1:dI_ij,
+    #              i_mu in 1:dI_mu,
+    #              i_nu in 1:dI_nu,
+    #              i_a  in 1:dI_a
+
+    #    sum_o += cgomat_avu[i_a,i_v,i_up]*
+    #             conj(cgomat_muiu[i_mu,i_ij,i_u])*
+    #             cgomat_nujv[i_nu,i_ij,i_v]*
+    #             conj(cgomat_anumu[i_a,i_nu,i_mu])
+
+    #end
     @inbounds for i_u  in 1:dI_u,
-                  i_up in 1:dI_u,
                   i_v  in 1:dI_v,
                   i_ij in 1:dI_ij,
                   i_mu in 1:dI_mu,
                   i_nu in 1:dI_nu,
                   i_a  in 1:dI_a
 
-        sum_o += cgomat_avu[i_a,i_v,i_up]*
+        sum_o += cgomat_avu[i_a,i_v,i_u]*
                  conj(cgomat_muiu[i_mu,i_ij,i_u])*
                  cgomat_nujv[i_nu,i_ij,i_v]*
                  conj(cgomat_anumu[i_a,i_nu,i_mu])
 
     end
-
+    
     return (sum_o/dI_u)::ComplexF64
 
 end
@@ -1271,15 +1284,28 @@ function compute_CG_Csum_spin(
 
     # spin sum 
     sum_s::ComplexF64 = zero(ComplexF64)
+    #@inbounds for si_u  in 1:dS_u,
+    #              si_up in 1:dS_u,
+    #              si_v  in 1:dS_v,
+    #              si_ij in 1:dS_ij,
+    #              si_mu in 1:dS_mu,
+    #              si_nu in 1:dS_nu,
+    #              si_a  in 1:dS_a
+
+    #    sum_s += cgsmat_avu[si_a,si_v,si_up]*
+    #             conj(cgsmat_muiu[si_mu,si_ij,si_u])*
+    #             cgsmat_nujv[si_nu,si_ij,si_v]*
+    #             conj(cgsmat_anumu[si_a,si_nu,si_mu])
+
+    #end
     @inbounds for si_u  in 1:dS_u,
-                  si_up in 1:dS_u,
                   si_v  in 1:dS_v,
                   si_ij in 1:dS_ij,
                   si_mu in 1:dS_mu,
                   si_nu in 1:dS_nu,
                   si_a  in 1:dS_a
 
-        sum_s += cgsmat_avu[si_a,si_v,si_up]*
+        sum_s += cgsmat_avu[si_a,si_v,si_u]*
                  conj(cgsmat_muiu[si_mu,si_ij,si_u])*
                  cgsmat_nujv[si_nu,si_ij,si_v]*
                  conj(cgsmat_anumu[si_a,si_nu,si_mu])
@@ -1504,15 +1530,28 @@ function compute_Ksum_orbital(
     cgomat_aji  = @view cg_o_fullmatint[(I_a,I_j,I_i)][:,:,:]
 
     osum::ComplexF64 = zero(ComplexF64)
-    for i_u    in 1:dI_u,
-        i_ut   in 1:dI_u,
-        i_v    in 1:dI_v,
-        i_a    in 1:dI_a,
-        i_munu in 1:dI_munu,
-        i_i    in 1:dI_i,
-        i_j    in 1:dI_j 
+    #for i_u    in 1:dI_u,
+    #    i_ut   in 1:dI_u,
+    #    i_v    in 1:dI_v,
+    #    i_a    in 1:dI_a,
+    #    i_munu in 1:dI_munu,
+    #    i_i    in 1:dI_i,
+    #    i_j    in 1:dI_j 
 
-        osum += cgomat_avu[i_a,i_v,i_ut]*
+    #    osum += cgomat_avu[i_a,i_v,i_ut]*
+    #            conj(cgomat_muiu[i_munu,i_i,i_u])*
+    #            cgomat_nujv[i_munu,i_j,i_v]*
+    #            conj(cgomat_aji[i_a,i_j,i_i])
+    #    
+    #end
+    @inbounds for i_u    in 1:dI_u,
+                  i_v    in 1:dI_v,
+                  i_a    in 1:dI_a,
+                  i_munu in 1:dI_munu,
+                  i_i    in 1:dI_i,
+                  i_j    in 1:dI_j 
+
+        osum += cgomat_avu[i_a,i_v,i_u]*
                 conj(cgomat_muiu[i_munu,i_i,i_u])*
                 cgomat_nujv[i_munu,i_j,i_v]*
                 conj(cgomat_aji[i_a,i_j,i_i])
@@ -1549,15 +1588,28 @@ function compute_Ksum_spin(
     cgsmat_aji  = @view cg_s_fullmatint[(S_a,S_j,S_i)][:,:,:]
 
     ssum::ComplexF64 = zero(ComplexF64)
-    for si_u    in 1:dS_u,
-        si_ut   in 1:dS_u,
-        si_v    in 1:dS_v,
-        si_a    in 1:dS_a,
-        si_munu in 1:dS_munu,
-        si_i    in 1:dS_i,
-        si_j    in 1:dS_j 
+    #for si_u    in 1:dS_u,
+    #    si_ut   in 1:dS_u,
+    #    si_v    in 1:dS_v,
+    #    si_a    in 1:dS_a,
+    #    si_munu in 1:dS_munu,
+    #    si_i    in 1:dS_i,
+    #    si_j    in 1:dS_j 
 
-        ssum += cgsmat_avu[si_a,si_v,si_ut]*
+    #    ssum += cgsmat_avu[si_a,si_v,si_ut]*
+    #            conj(cgsmat_muiu[si_munu,si_i,si_u])*
+    #            cgsmat_nujv[si_munu,si_j,si_v]*
+    #            conj(cgsmat_aji[si_a,si_j,si_i])
+    #    
+    #end
+    @inbounds for si_u    in 1:dS_u,
+                  si_v    in 1:dS_v,
+                  si_a    in 1:dS_a,
+                  si_munu in 1:dS_munu,
+                  si_i    in 1:dS_i,
+                  si_j    in 1:dS_j 
+
+        ssum += cgsmat_avu[si_a,si_v,si_u]*
                 conj(cgsmat_muiu[si_munu,si_i,si_u])*
                 cgsmat_nujv[si_munu,si_j,si_v]*
                 conj(cgsmat_aji[si_a,si_j,si_i])
