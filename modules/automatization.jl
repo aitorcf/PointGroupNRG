@@ -859,6 +859,7 @@ function nrg_full(
             oirreps2indices[k]=>[ComplexF64.(h[3].*factor_symparams[k][i]) for (i,h) in enumerate(s)] 
             for (k,s) in channel_symstructure
     )
+    @show xi_symparams;
     
     #   ------------------- #
     #%% rescaled parameters #
@@ -1185,6 +1186,7 @@ function nrg_full(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
+                   xi_symparams ,
                    mm_i ;
                    mine=mine ,
                    distributed=distributed ,
@@ -1217,16 +1219,13 @@ function nrg_full(
     #   ==============   #
     #%% SAVING TO FILE %%#
     #   ==============   #
+    println( "WRITING" )
 
     # thermo dir 
     isdir("thermodata") || mkdir("thermodata")
     # impurity properties 
     if calculation=="IMP" 
         write_impurity_info( nrg , omults , mult2index , label , z )
-    end
-
-    if spectral 
-        writedlm( "spectral/spectral.dat" , nrg.specfunc )
     end
 
     # thermodata for this given value of z
@@ -1239,9 +1238,13 @@ function nrg_full(
         end
     end
 
+    # spectral
     if spectral
+        println( "SPECTRAL" )
         isdir("spectral") || mkdir("spectral")
-        writedlm( "spectral/spectral.dat" , nrg.specfunc )
+        open( "spectral/spectral.dat" , write=true ) do f
+            writedlm( f , nrg.specfunc )
+        end
     end
 
 end

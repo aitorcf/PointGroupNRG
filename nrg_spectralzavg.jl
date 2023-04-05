@@ -11,12 +11,16 @@ Nz      = parse(Int64,ARGS[2])
 calculation = "IMP"
 
 # script and z values
-scriptname = "./nrgdynamics_$(orbital).jl"
+scriptname = "./nrg_$(orbital).jl"
 Z = get_Z(Nz) #.+ (0.5/Nz)
 
 # delete previous files
-files = glob( "spectral/spectral_$(orbital)*.dat" )
-rm.(files)
+if isdir("spectral")
+    files = glob( "spectral/spectral_$(orbital)*.dat" )
+    rm.(files)
+else
+    mkdir("spectral")
+end
 
 println( "& ====================== &" )
 println( "& Z-AVERAGED CALCULATION &" )
@@ -29,7 +33,7 @@ println()
 
 # doing the computation
 @time for z in Z  
-    cmd = `./$scriptname $calculation $z` 
+    cmd = `./$scriptname $calculation $z spectral` 
     run(cmd)
     cmd = `mv spectral/spectral.dat spectral/spectral_$(orbital)_z$(z).dat`
     run(cmd)
