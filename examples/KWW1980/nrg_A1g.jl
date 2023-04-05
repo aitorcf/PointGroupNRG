@@ -18,7 +18,6 @@ include( "../../modules/spectral.jl" )
 include( "../../modules/reddiag.jl" )
 include( "../../modules/diagonalization.jl" )
 include( "../../modules/automatization.jl" )
-include( "../../modules/templates.jl" )
     
 
 #   ==========   #
@@ -43,19 +42,19 @@ calculation = "IMP"
 z = 0.0
 
 # numerical parameters
-L = 2.5
+L = 10.0
 betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 200
+cutoff_magnitude = 100
 minmult = 0 
 mine = 0.0
 
 
 # gammafac = U/(πΓ)
-#gammafac = 12.66 # calculation A
-gammafac = 1.013 # calculation B
+gammafac = 12.66 # calculation A
+#gammafac = 1.013 # calculation B
 # one-body coupling parameters
 u   = 1e-3
 eps = -u/2.0
@@ -84,13 +83,13 @@ shell_config = Dict( "A1g" => 1 )
 identityrep = "A1g"
 # atomic hamiltonian parameters
 epsilon_symparams = Dict( 
-    ("A1g",1) => ComplexF64(eps)
+    "A1g" => ComplexF64[eps]
 )
 u_symparams = Dict( 
     ("A1g",0) => ComplexF64[u][:,:]
 )
 hop_symparams = Dict( 
-    ("A1g") => gam*ComplexF64[1][:,:]
+    "A1g" => gam*ComplexF64[1][:,:]
 )
 
 #   ==============   #
@@ -160,25 +159,27 @@ println()
 #            atom_config ,
 #            identityrep )
 
-nrg_full_thermo( 
-            label,
-            calculation,
-            L,
-            z,
-            distributed,
-            iterations,
-            cutoff_type,
-            cutoff_magnitude,
-            max_spin2,
-            cg_o_dir,
-            asym_dir,
-            atom_config,
-            shell_config,
-            identityrep,
-            epsilon_symparams ,
-            u_symparams,
-            hop_symparams;
-            discretization=discretization,
-            spectral=spectral,
-            etafac=etafac,
-            betabar=betabar)
+nrg_full( 
+  label,
+  calculation,
+  L,
+  z,
+  distributed,
+  iterations,
+  cutoff_type,
+  cutoff_magnitude,
+  max_spin2,
+  cg_o_dir,
+  asym_dir,
+  atom_config,
+  shell_config,
+  identityrep,
+  epsilon_symparams ,
+  u_symparams,
+  hop_symparams;
+  discretization=discretization,
+  spectral=spectral,
+  etafac=etafac,
+  betabar=betabar,
+  Nz=4
+)

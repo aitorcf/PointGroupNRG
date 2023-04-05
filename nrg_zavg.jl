@@ -63,24 +63,38 @@ if (calculations!==("CLEAN",) && !spectral)
 
     println( "Averaging thermodynamic functions over values of z..." )
     th_tot  = Dict()
+    thclean_tot = Dict()
+    thimp_tot = Dict()
 
     for z in Z
         th_z   = readdlm( "thermodata/th_diff_$(label)_z$z.dat" )
+        thclean_z = readdlm( "thermodata/thermo_clean_$(label)_z$z.dat" ) 
+        thimp_z = readdlm( "thermodata/thermo_imp_$(label)_z$z.dat" ) 
         t = th_z[:,1] 
-        th_tot[z] = Dict( round(t[i],sigdigits=3)=>th_z[i,:] for i in 1:length(t) )
+        th_tot[z] = Dict( round(t[i],sigdigits=2)=>th_z[i,:] for i in 1:length(t) )
+        thclean_tot[z] = Dict( round(t[i],sigdigits=2)=>thclean_z[i,:] for i in 1:length(t) ) 
+        thimp_tot[z] = Dict( round(t[i],sigdigits=2)=>thimp_z[i,:] for i in 1:length(t) ) 
     end
 
     th_zavg = Dict()
+    thclean_zavg = Dict()
+    thimp_zavg = Dict()
     T = sort(collect(keys(th_tot[Z[end]])))
-    T = T[2:(length(T)-2)]
+    T = T[Nz:(end-Nz)]
     for t in T
         th_zavg[t]  = sum( th_tot[z][t] for z in Z )/Nz
+        thclean_zavg[t] = sum( thclean_tot[z][t] for z in Z )/Nz 
+        thimp_zavg[t] = sum( thimp_tot[z][t] for z in Z )/Nz 
     end
 
     println()
     
     th_zavg_vec = [th_zavg[t] for t in T]
+    thclean_zavg_vec = [thclean_zavg[t] for t in T]
+    thimp_zavg_vec = [thimp_zavg[t] for t in T]
     writedlm( "thermodata/th_zavg_$(label).dat" , th_zavg_vec )
+    writedlm( "thermodata/th_cleanavg_$(label).dat" , thclean_zavg_vec )
+    writedlm( "thermodata/th_impavg_$(label).dat" , thimp_zavg_vec )
 end
 #%% spectral averaging
 if spectral 

@@ -33,7 +33,7 @@ distworkers = 6
 # parallel method: distfor or async
 method = "distfor"
 # discretization ("standard" or "co2005")
-discretization = "co2005"
+discretization = "lanczos"
 
 # clean system or with impurity added
 calculation = "IMP"
@@ -47,7 +47,7 @@ betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 50
+cutoff_magnitude = 100
 minmult = 0 
 mine = 0.0
 

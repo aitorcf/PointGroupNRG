@@ -710,12 +710,9 @@ function nrg_full(
             label::String ,
             calculation::String ,
             L::Float64 ,
-            z::Float64 ,
-            distributed::Bool ,
             iterations::Int64 ,
             cutoff_type::String ,
             cutoff_magnitude::R ,
-            max_spin2::Int64 ,
             cg_o_dir::String ,
             asym_dir::String ,
             atom_config::Dict{String,Int64} ,
@@ -724,6 +721,9 @@ function nrg_full(
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ,
             hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
+            distributed::Bool=false,
+            z::Float64=0.0 ,
+            max_spin2::Int64=10 ,
             channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
             discretization="standard" ,
             distworkers::Int64=0 ,
@@ -733,14 +733,12 @@ function nrg_full(
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             etafac::Float64=1.0 ,
-            eta::Function=x->1.0 ,
             Nz=1 ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
         println( "ERROR: calculation must be IMP for computing the spectral function" )
         return nothing 
     end
-
     
     # orbital irreps present in the atom
     atom_orbital_irreps::Vector{String} = collect(keys(atom_config))

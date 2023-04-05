@@ -1,11 +1,9 @@
 #!/usr/bin/env julia
 
+
 #   =================   #
 #%% NECESSARY MODULES %%#
 #   =================   #
-
-using DelimitedFiles
-using SparseArrays
 
 include( "../../modules/symbols.jl" )
 include( "../../modules/numericals.jl" )
@@ -45,22 +43,23 @@ calculation = "IMP"
 z = 0.0
 
 # numerical parameters
-L = 3.0
+L = 10.0
 betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 100
+cutoff_magnitude = 50
 minmult = 0 
 mine = 0.0
 
 
 # one-body coupling parameters
-eps   = -0.1
+fac = 1
+eps   = -0.1*fac
 u_11  = 1*abs(eps)
 u_h   = 0.3*u_11
 u_12  = u_11-2*u_h
-gam   = u_11/pi*1e-2
+gam   = u_11/pi*0.1
 # coulomb coupling parameters
 #u_eg  = u_11
 #u_a1g = u_12 + u_h/2.0
@@ -69,12 +68,12 @@ u_eg  = u_11 - u_h/4.0
 u_a1g = u_11 + u_h/4.0
 u_a2g = u_11 - 3.0*u_h/4.0
 
-iterations = 60
+iterations = 40
 
 max_spin2 = 8
 
 spectral = false
-etafac = 1.0
+etafac = 0.4
 
 
 # directory where the orbital cg info is stored
@@ -88,7 +87,7 @@ shell_config = Dict( "Eg" => 1 )
 identityrep = "A1g"
 # atomic hamiltonian parameters
 epsilon_symparams = Dict( 
-    ("Eg",1) => ComplexF64(eps)
+    "Eg" => ComplexF64[eps]
 )
 u_symparams = Dict( 
     ("A1g",0) => ComplexF64[u_a1g][:,:],
@@ -96,8 +95,9 @@ u_symparams = Dict(
     ("Eg", 0) => ComplexF64[u_eg][:,:]
 )
 hop_symparams = Dict( 
-    ("Eg") => sqrt(2*gam/pi)*ComplexF64[1][:,:]
+    "Eg" => sqrt(2*gam/pi)*ComplexF64[1][:,:]
 )
+
 
 #   ==============   #
 #%% EXTERNAL INPUT %%#
@@ -159,6 +159,23 @@ else
 end
 println()
 
+# improve efficiency of dictionary lookup
+max_population_atom  = 4
+max_population_shell = 4
+Ndim = max_population_atom + iterations*max_population_shell
+Idim = 3
+Sdim = max_spin2
+maxISdim = maximum((Idim,Sdim))
+ISdim = Idim*Sdim
+Gdim = Ndim*Idim*Sdim
+dimtup = ( ISdim , Sdim , 1 ) 
+@eval function Base.hash( x::NTuple{3,NTuple{3,Int64}} )
+    UInt64(sum( sum.((x[1].*$dimtup,x[2].*$dimtup,x[3].*$dimtup)).*($(Gdim^2),$Gdim,1) ))
+end
+
+imp_spectrum = Dict( 
+        (2,"A2g",1.0) => [0.0],
+        (1,"Eg",0.5)  => [1.0] )
 
 if stage=="multiplets"
 
@@ -183,12 +200,11 @@ elseif stage=="spectrum"
 
 elseif stage=="nrg"
 
-    nrg_full_thermo( 
-                label,
+    nrg_full( 
+                labe,
                 calculation,
                 L,
-                z,
-                distributed,
+                z, distributed,
                 iterations,
                 cutoff_type,
                 cutoff_magnitude,
@@ -202,6 +218,8 @@ elseif stage=="nrg"
                 u_symparams,
                 hop_symparams;
                 spectral=spectral,
-                etafac=etafac)
+                etafac=etafac,
+                Nz=2)
+ #               imp_spectrum=imp_spectrum)
 
 end

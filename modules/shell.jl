@@ -15,7 +15,8 @@ using ProgressMeter
 #
 # ...........................................
 
-function basis2coperators( basis::CB ; n::Int64=-1 ) where {CB<:CanonicalBasis}
+function basis2coperators( basis::CB ; 
+                           n::Int64=-1 ) where {CB<:CanonicalBasis}
     #
     # given a canonical basis, it returns an array of 
     # creation operators, one for each element of the basis.
@@ -44,7 +45,8 @@ function basis2coperators( basis::CB ; n::Int64=-1 ) where {CB<:CanonicalBasis}
     return coperators 
 end
 
-function shell_coperators( shell_basis::CB , hiztegia ) where {CB<:CanonicalBasis}
+function shell_coperators( shell_basis::CB , 
+                           hiztegia::D ) where {CB<:CanonicalBasis,D<:Dict}
     # same as basis2coperators (above) but stores the creation
     # operators as a dictionary.
     #
