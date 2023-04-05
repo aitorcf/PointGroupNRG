@@ -1219,8 +1219,7 @@ function nrg_full(
     #   ==============   #
     #%% SAVING TO FILE %%#
     #   ==============   #
-    println( "WRITING" )
-
+    
     # thermo dir 
     isdir("thermodata") || mkdir("thermodata")
     # impurity properties 
@@ -1240,7 +1239,6 @@ function nrg_full(
 
     # spectral
     if spectral
-        println( "SPECTRAL" )
         isdir("spectral") || mkdir("spectral")
         open( "spectral/spectral.dat" , write=true ) do f
             writedlm( f , nrg.specfunc )
