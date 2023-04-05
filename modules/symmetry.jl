@@ -781,7 +781,6 @@ function epsilon_sym( symstates , symparams::Dict{Tuple{String,Int64},ComplexF64
     return epsop
 end
 function epsilon_sym( symstates , symparams::Dict{String,Vector{ComplexF64}} ; verbose=false )
-    println( "ALTERNATIVE EPSILON SYM" )
     # transform to previous convention (above)
     symparams = Dict( (k,r)=>v for (k,V) in symparams for (r,v) in enumerate(V) )
     symstates_n1 = symstates_n( symstates , 1 )
@@ -798,7 +797,6 @@ function epsilon_sym( symstates , symparams::Dict{String,Vector{ComplexF64}} ; v
             epsop += symparams[(q[1],q[5])]*component*cop*adjoint(cop)
         end
     end
-    @show epsop.matrix
     return epsop
 end
 

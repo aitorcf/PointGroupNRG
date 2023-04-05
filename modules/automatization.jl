@@ -1218,6 +1218,8 @@ function nrg_full(
     #%% SAVING TO FILE %%#
     #   ==============   #
 
+    # thermo dir 
+    isdir("thermodata") || mkdir("thermodata")
     # impurity properties 
     if calculation=="IMP" 
         write_impurity_info( nrg , omults , mult2index , label , z )
@@ -1237,7 +1239,10 @@ function nrg_full(
         end
     end
 
-    spectral && writedlm( "spectral/spectral.dat" , nrg.specfunc )
+    if spectral
+        isdir("spectral") || mkdir("spectral")
+        writedlm( "spectral/spectral.dat" , nrg.specfunc )
+    end
 
 end
 
@@ -1289,7 +1294,7 @@ function atomic_spectrum(
             asym_dir::String ,
             atom_config::Dict{String,Int64} ,
             identityrep::String ,
-            epsilon_symparams::Dict{ Tuple{String,Int64} , ComplexF64 } ,
+            epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ;
             max_spin2::Int64=10 ,
             distributed::Bool=false ,
