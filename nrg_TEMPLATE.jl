@@ -147,7 +147,6 @@ if stage=="multiplets"
     multiplets_2part( 
                 cg_o_dir ,
                 asym_dir ,
-                atom_orbital_irreps ,
                 atom_config ,
                 identityrep )
 

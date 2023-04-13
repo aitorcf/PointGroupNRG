@@ -1,5 +1,3 @@
-using SharedArrays 
-using StaticArrays
 using Distributed
 
 # There are two main groups of functions:
