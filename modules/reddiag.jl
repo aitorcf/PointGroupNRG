@@ -444,44 +444,41 @@ function compute_pcgred_iaj_full(
                             for (G_u,R_u) in G2R_uv for (G_v,R_v) in G2R_uv
                             for (G_a,R_a) in G2R_a )
 
-    #GG_ij = Set( m_i[1:3] for (G_uv,combs) in combinations_uprima_new 
-    #                      for (m_u,m_mu,m_i) in combs )
-    #combinations_iprima = Dict( G_i=>(m_u,m_mu,m_i) for  )
+    mm_i::Set{NTuple{4,Int64}} = Set( m_i for (G_uv,combs) in combinations_uprima_new 
+                                          for (m_u,m_mu,m_i) in combs )
+    GG_i::Set{NTuple{3,Int64}} = Set( m_i[1:3] for m_i in mm_i )
+    G2rr_i::Dict{NTuple{3,Int64} , Vector{Int64}} = Dict( G_i=>sort([m_i[4] for m_i in mm_i if m_i[1:3]==G_i])
+                   for G_i in GG_i ) 
 
-    @inbounds for (G_uv,combs) in combinations_uprima_new,
-                  (m_u,m_mu,m_i) in combs,
-                  (m_v,m_nu,m_j) in combs
+   @inbounds for (G_i::NTuple{3,Int64},rr_i::Vector{Int64}) in G2rr_i,
+                 (G_j::NTuple{3,Int64},rr_j::Vector{Int64}) in G2rr_i,
+                 (G_a::NTuple{3,Int64},R_a::Int64) in G2R_a
 
-        G_i,r_i   = m_i[1:3], m_i[4]
-        G_j,r_j   = m_j[1:3], m_j[4]
-        G_mu,r_mu = m_mu[1:3],m_mu[4]
-        G_nu,r_nu = m_nu[1:3],m_nu[4]
-        
         N_i,I_i,S_i    = G_i
         N_j,I_j,S_j    = G_j
-        N_mu,I_mu,S_mu = G_mu
-        N_nu,I_nu,S_nu = G_nu
+        N_a,I_a,S_a    = G_a
 
-        N_nu==(N_mu+1) || continue
-        N_i==(N_j+1)   || continue
+        N_i==(N_j+1) || continue
+        ((I_a,I_j,I_i) in keys(cg_o_fullmatint)) || continue
+        ((S_a,S_j,S_i) in keys(cg_s_fullmatint)) || continue
 
-        U_i = irrEU[G_i][2]
-        U_j = irrEU[G_j][2]
+        U_i::Matrix{ComplexF64} = irrEU[G_i][2]
+        U_j::Matrix{ComplexF64} = irrEU[G_j][2]
 
-        combs_uvprima_local = combs_uvprima[(G_i,G_j)]
+        combs_uvprima_local::Vector{NTuple{6,NTuple{4,Int64}}} = combs_uvprima[(G_i,G_j)]
 
-        @inbounds for m_a in multiplets_a_block 
+        zeromat::Array{ComplexF64,3} = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
+        pcgred_gcomb::Array{ComplexF64,3} = zeromat
 
-            G_a,r_a = m_a[1:3],m_a[4]
-            N_a,I_a,S_a = G_a
+        @inbounds for r_j::Int64 in rr_j,
+                      r_a::Int64 in 1:R_a,
+                      r_i::Int64 in rr_i
 
-            ((G_nu,G_a,G_mu) in keys(pcgred_shell))  || continue
-            ((I_a,I_j,I_i) in keys(cg_o_fullmatint)) || continue
-            ((S_a,S_j,S_i) in keys(cg_s_fullmatint)) || continue
+            m_i::NTuple{4,Int64} = (G_i...,r_i)
+            m_j::NTuple{4,Int64} = (G_j...,r_j)
+            m_a::NTuple{4,Int64} = (G_a...,r_a)
 
-            zeromat = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
-
-            pcgred_iaj_full[G_i,G_a,G_j][r_i,r_a,r_j] = 
+            pcgred_gcomb[r_i,r_a,r_j] = 
                         compute_pcgred_iaj(
                             m_i , m_a , m_j ,
                             Csum_o_array ,
@@ -494,12 +491,10 @@ function compute_pcgred_iaj_full(
 
         end
 
-    end
-
-    for (k,mat) in pcgred_iaj_full 
-        if isapprox(sum(abs2.(mat)),0.0)
-            pop!( pcgred_iaj_full , k )
+        if !isapprox(sum(abs2.(pcgred_gcomb)),0.0)
+            pcgred_iaj_full[(G_i,G_a,G_j)] = pcgred_gcomb
         end
+
     end
 
     return pcgred_iaj_full
