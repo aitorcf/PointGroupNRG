@@ -460,11 +460,12 @@ function compute_pcgred_iaj_full(
         U_j::Matrix{ComplexF64} = irrEU[G_j][2]
 
         combs_uvprima_local::Vector{NTuple{6,NTuple{4,Int64}}} = combs_uvprima[(G_i,G_j)]
-        GG_munu = Set( (m_mu[1:3],m_nu[1:3]) for (_,m_mu,_,_,m_nu,_) in combs_uvprima_local )
+        GG_munu = Set( (m_mu[1:3],m_nu[1:3]) for (_,m_mu,_,_,m_nu,_) in combs_uvprima_local 
+            if (m_mu[1:3],G_a,m_nu[1:3]) in keys(pcgred_block))
         GmuGnu2combs::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}}} =
             Dict( (G_mu,G_nu)=>[(m_u,m_mu,m_i,m_v,m_nu,m_j) 
                                 for (m_u,m_mu,m_i,m_v,m_nu,m_j) in combs_uvprima_local 
-                                if (m_i==m_j && m_mu[1:3]==G_mu && m_nu[1:3]==G_nu && ((G_mu,G_a,G_nu) in keys(pcgred_block)) )] 
+                                if (m_i==m_j && m_mu[1:3]==G_mu && m_nu[1:3]==G_nu)] 
                   for (G_mu,G_nu) in GG_munu )
 
         zeromat::Array{ComplexF64,3} = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
