@@ -1,0 +1,21 @@
+# main dir
+./* 
+!nrg_TEMPLATE.jl 
+!multiplets_TEMPLATE.jl
+!nrg_zavg.jl
+!nrg_spectralzavg.jl
+!README.md
+!TODO.txt
+
+# modules
+modules/twostepdiag.jl
+modules/dmnrg.jl
+modules/templates.jl
+
+# butterfly modules
+modules_butterfly/*
+
+# examples
+examples/**/*
+!examples/KWW1980/**/*
+!examples/Eg/**/*

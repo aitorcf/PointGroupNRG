@@ -48,7 +48,7 @@ betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 50
+cutoff_magnitude = 700
 minmult = 0 
 mine = 0.0
 
@@ -68,7 +68,7 @@ u_eg  = u_11 - u_h/4.0
 u_a1g = u_11 + u_h/4.0
 u_a2g = u_11 - 3.0*u_h/4.0
 
-iterations = 40
+iterations = 10
 
 max_spin2 = 8
 
@@ -182,7 +182,6 @@ if stage=="multiplets"
     multiplets_2part( 
                 cg_o_dir ,
                 asym_dir ,
-                atom_orbital_irreps ,
                 atom_config ,
                 identityrep )
 
@@ -200,26 +199,25 @@ elseif stage=="spectrum"
 
 elseif stage=="nrg"
 
-    nrg_full( 
-                labe,
-                calculation,
-                L,
-                z, distributed,
-                iterations,
-                cutoff_type,
-                cutoff_magnitude,
-                max_spin2,
-                cg_o_dir,
-                asym_dir,
-                atom_config,
-                shell_config,
-                identityrep,
-                epsilon_symparams ,
-                u_symparams,
-                hop_symparams;
-                spectral=spectral,
-                etafac=etafac,
-                Nz=2)
+    nrg_full( label,
+              calculation,
+              L,
+              iterations,
+              cutoff_type,
+              cutoff_magnitude,
+              cg_o_dir,
+              asym_dir,
+              atom_config,
+              shell_config,
+              identityrep,
+              epsilon_symparams ,
+              u_symparams,
+              hop_symparams;
+              spectral=spectral,
+              etafac=etafac,
+              z=z,
+              precompute_iaj=true)
+              #Nz=2)
  #               imp_spectrum=imp_spectrum)
 
 end
