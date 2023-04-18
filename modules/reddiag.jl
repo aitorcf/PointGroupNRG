@@ -406,21 +406,15 @@ end
 
 
 function compute_pcgred_iaj_full(
-                multiplets_block::Set{NTuple{4,Int64}}, 
-                multiplets_shell::Set{NTuple{4,Int64}},
                 multiplets_a_block::Vector{NTuple{4,Int64}}, 
                 Csum_o_array::Array{ComplexF64,6} ,
                 Csum_s_array::Array{ComplexF64,6} ,
                 pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
-                pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
                 cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
                 cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
                 combs_uvprima::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}} },
                 combinations_uprima_new::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} },
                 irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} })
-
-    println( "FULL IAJ MATRIX CALCULATION" )
-
 
     G2R_uv::Dict{NTuple{3,Int64},Int64} = Dict()
     @inbounds for (G_uv,mults) in combinations_uprima_new,
@@ -450,13 +444,13 @@ function compute_pcgred_iaj_full(
     G2rr_i::Dict{NTuple{3,Int64} , Vector{Int64}} = Dict( G_i=>sort([m_i[4] for m_i in mm_i if m_i[1:3]==G_i])
                    for G_i in GG_i ) 
 
-   @inbounds for (G_i::NTuple{3,Int64},rr_i::Vector{Int64}) in G2rr_i,
-                 (G_j::NTuple{3,Int64},rr_j::Vector{Int64}) in G2rr_i,
-                 (G_a::NTuple{3,Int64},R_a::Int64) in G2R_a
+    for (G_i::NTuple{3,Int64},rr_i::Vector{Int64}) in G2rr_i,
+        (G_j::NTuple{3,Int64},rr_j::Vector{Int64}) in G2rr_i,
+        (G_a::NTuple{3,Int64},R_a::Int64) in G2R_a
 
-        N_i,I_i,S_i    = G_i
-        N_j,I_j,S_j    = G_j
-        N_a,I_a,S_a    = G_a
+        N_i,I_i,S_i = G_i
+        N_j,I_j,S_j = G_j
+        N_a,I_a,S_a = G_a
 
         N_i==(N_j+1) || continue
         ((I_a,I_j,I_i) in keys(cg_o_fullmatint)) || continue
@@ -466,28 +460,64 @@ function compute_pcgred_iaj_full(
         U_j::Matrix{ComplexF64} = irrEU[G_j][2]
 
         combs_uvprima_local::Vector{NTuple{6,NTuple{4,Int64}}} = combs_uvprima[(G_i,G_j)]
+        GG_munu = Set( (m_mu[1:3],m_nu[1:3]) for (_,m_mu,_,_,m_nu,_) in combs_uvprima_local )
+        GmuGnu2combs::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}}} =
+            Dict( (G_mu,G_nu)=>[(m_u,m_mu,m_i,m_v,m_nu,m_j) 
+                                for (m_u,m_mu,m_i,m_v,m_nu,m_j) in combs_uvprima_local 
+                                if (m_i==m_j && m_mu[1:3]==G_mu && m_nu[1:3]==G_nu && ((G_mu,G_a,G_nu) in keys(pcgred_block)) )] 
+                  for (G_mu,G_nu) in GG_munu )
 
         zeromat::Array{ComplexF64,3} = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
         pcgred_gcomb::Array{ComplexF64,3} = zeromat
 
-        @inbounds for r_j::Int64 in rr_j,
-                      r_a::Int64 in 1:R_a,
-                      r_i::Int64 in rr_i
+        for r_j::Int64 in rr_j,
+            r_a::Int64 in 1:R_a,
+            r_i::Int64 in rr_i
 
-            m_i::NTuple{4,Int64} = (G_i...,r_i)
-            m_j::NTuple{4,Int64} = (G_j...,r_j)
-            m_a::NTuple{4,Int64} = (G_a...,r_a)
+            pcgred_iaj::ComplexF64 = 0.0
 
-            pcgred_gcomb[r_i,r_a,r_j] = 
-                        compute_pcgred_iaj(
-                            m_i , m_a , m_j ,
-                            Csum_o_array ,
-                            Csum_s_array ,
-                            pcgred_block ,
-                            combs_uvprima_local ,
-                            U_i ,# = U_ut 
-                            U_j ,# = U_vt
-                            zeromat )
+            for ((G_mut,G_nut),combs) in GmuGnu2combs
+
+                pcgred_mat::Array{ComplexF64,3} = pcgred_block[(G_mut,G_a,G_nut)]
+
+                for (m_utp,m_mut,m_ijt,m_vtp,m_nut,_) in combs 
+
+                    # multiplet quantum numbers 
+                    r_utp::Int64 = m_utp[4]
+                    r_vtp::Int64 = m_vtp[4]
+                    (N_ijt,I_ijt,S_ijt,_) = m_ijt
+                    (_,I_mut,S_mut,r_mut) = m_mut
+                    (_,I_nut,S_nut,r_nut) = m_nut
+                    G_utp = m_utp[1:3] 
+                    G_vtp = m_vtp[1:3]
+                    G_ijt = m_ijt[1:3]
+                    (_,I_utp,S_utp) = G_utp
+                    (_,I_vtp,S_vtp) = G_vtp
+                    (N_ijt,I_ijt,S_ijt) = G_ijt
+                    G_mut::NTuple{3,Int64},r_mut = m_mut[1:3],m_mut[4]
+                    G_nut::NTuple{3,Int64},r_nut = m_nut[1:3],m_nut[4]
+
+                    r_ut::Int64 = r_i
+                    r_vt::Int64 = r_j
+
+                    # U matrix cofficient
+                    @inbounds uu::ComplexF64 = conj(U_i[r_utp,r_ut])*U_j[r_vtp,r_vt]
+
+                    # reduced matrix element
+                    @inbounds redmatel::ComplexF64 = pcgred_mat[r_mut,r_a,r_nut]
+
+                    # clebsch-gordan sum
+                    sidx = (S_utp,S_vtp,S_ijt,S_mut,S_nut,S_a).+1
+                    @inbounds C = Csum_o_array[I_utp,I_vtp,I_ijt,I_mut,I_nut,I_a]*
+                                  Csum_s_array[sidx...]
+
+                    # put all together
+                    pcgred_iaj += uu * C * redmatel
+
+                end
+            end
+
+            @inbounds pcgred_gcomb[r_i,r_a,r_j] = pcgred_iaj
 
         end
 
@@ -578,19 +608,23 @@ function matdiag_redmat(
 
     pcgred_iaj_full::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = Dict()
     if precompute_iaj
-        pcgred_iaj_full= compute_pcgred_iaj_full( multiplets_block, 
-                                                  multiplets_shell,
-                                                  multiplets_a_block, 
+        pcgred_iaj_full= compute_pcgred_iaj_full( multiplets_a_block, 
                                                   Csum_o_array,
                                                   Csum_s_array,
                                                   pcgred_block,
-                                                  pcgred_shell,
                                                   cg_o_fullmatint,
                                                   cg_s_fullmatint,
                                                   combs_uvprima,
                                                   combinations_uprima_new,
                                                   irrEU)
     end
+
+    multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}} = [
+        (m_a_block,m_a_shell) for m_a_block in multiplets_a_block 
+                              for m_a_shell in multiplets_a_shell 
+                              if m_a_block[2]==m_a_shell[2] 
+    ]
+
 
     if distributed 
         @everywhere multiplets_mui2u    = $multiplets_mui2u
@@ -604,8 +638,7 @@ function matdiag_redmat(
         @everywhere Bsum_s_array        = $Bsum_s_array::Array{ComplexF64,6} 
         @everywhere pcg_block           = $pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }
         @everywhere pcg_shell           = $pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }
-        @everywhere multiplets_a_block  = $multiplets_a_block::Vector{NTuple{4,Int64}} 
-        @everywhere multiplets_a_shell  = $multiplets_a_shell::Vector{NTuple{4,Int64}} 
+        @everywhere multiplets_a_combs  = $multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}}
         @everywhere combinations_uprima = $combinations_uprima::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} }
         @everywhere irrEU               = $irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
         @everywhere combs_uvprima       = $combs_uvprima::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}} }
@@ -628,8 +661,7 @@ function matdiag_redmat(
                         Bsum_s_array ,
                         pcgred_block , 
                         pcgred_shell ,
-                        multiplets_a_block ,
-                        multiplets_a_shell ,
+                        multiplets_a_combs ,
                         hop_symparams ,
                         oindex2dimensions ;
                         verbose=verbose )
@@ -652,8 +684,7 @@ function matdiag_redmat(
                         Bsum_s_array ,
                         pcgred_block , 
                         pcgred_shell ,
-                        multiplets_a_block ,
-                        multiplets_a_shell ,
+                        multiplets_a_combs ,
                         hop_symparams ,
                         oindex2dimensions ;
                         verbose=verbose,
@@ -682,8 +713,7 @@ function construct_diag_block(
             Bsum_s_array::Array{ComplexF64,6} ,
             pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
             pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
-            multiplets_a_block::Vector{NTuple{4,Int64}} ,
-            multiplets_a_shell::Vector{NTuple{4,Int64}} ,
+            multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}},
             hop_symparams::Dict{ Int64 , Matrix{ComplexF64} },
             oindex2dimensions::Vector{Int64} ;
             verbose=false ,
@@ -692,7 +722,7 @@ function construct_diag_block(
 
         verbose && println( "COMPUTING AND DIAGONALIZING G_uv=$G_uv BLOCK...\n" )
 
-        zeromat::Array{ComplexF64,3} = zeros(ComplexF64,20,length(multiplets_a_block),20)
+        zeromat::Array{ComplexF64,3} = zeros(ComplexF64,20,4,20) # discard in the future
 
         hblock::Array{ComplexF64,3} = zeros( ComplexF64 , length(mults) , length(mults) , 2 )
 
@@ -753,10 +783,8 @@ function construct_diag_block(
                     Bsum_s_array ,
                     pcgred_block , 
                     pcgred_shell ,
-                    multiplets_a_block ,
-                    multiplets_a_shell ,
+                    multiplets_a_combs ,
                     hop_symparams ,
-                    oindex2dimensions ,
                     U_i , U_j ,
                     combs_uvprima_local ,
                     zeromat ;
@@ -768,14 +796,17 @@ function construct_diag_block(
         
         # [E,hop] --> realE
         R::Int64 = length(mults)
-        hblock_complete::Matrix{ComplexF64} = zeros(ComplexF64,R,R)
-        @inbounds for r_u::Int64 in 1:R, 
-                      r_v::Int64 in 1:R 
-            hblock_complete[r_u,r_v] = sum(hblock[r_u,r_v,:]) + conj(hblock[r_v,r_u,2])
-        end
+        #hblock_complete::Matrix{ComplexF64} = zeros(ComplexF64,R,R)
+        hblock_diag::Matrix{ComplexF64} = hblock[:,:,1]
+        hblock_hop::Matrix{ComplexF64} = hblock[:,:,2]
+        hblock_complete::Matrix{ComplexF64} = hblock_diag + hblock_hop + hblock_hop'
+        #for r_v::Int64 in 1:R, 
+        #    r_u::Int64 in 1:R 
+        #    @inbounds hblock_complete[r_u,r_v] = sum(hblock[r_u,r_v,:]) + conj(hblock[r_v,r_u,2])
+        #end
 
         # diagonalize
-        hblock_complete = 0.5*( hblock_complete + hblock_complete' )
+        hblock_complete .= 0.5.*( hblock_complete .+ hblock_complete' )
         F = eigen( hblock_complete )
         (e,u) = ( real(F.values) , F.vectors )
         e = real.(e)
@@ -807,10 +838,8 @@ function compute_hopelement_redmat(
         Bsum_s_array::Array{ComplexF64,6} ,
         pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
         pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
-        multiplets_a_block::Vector{NTuple{4,Int64}}, 
-        multiplets_a_shell::Vector{NTuple{4,Int64}}, 
+        multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}} ,
         hop_symparams::Dict{ Int64 , Matrix{ComplexF64} } ,
-        oindex2dimensions::Vector{ Int64 } ,
         U_i::Matrix{ComplexF64}, 
         U_j::Matrix{ComplexF64},
         combs_uvprima_local::Vector{NTuple{6,NTuple{4,Int64}}},
@@ -819,7 +848,6 @@ function compute_hopelement_redmat(
         precompute_iaj::Bool=false,
         pcgred_iaj_full::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = Dict() )
 
-
     if verbose 
         println( "Computing hopping element for multiplets" )
         @show G_uv 
@@ -827,12 +855,6 @@ function compute_hopelement_redmat(
         @show m_j,m_nu 
         println()
     end
-
-    multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}} = [
-        (m_a_block,m_a_shell) for m_a_block in multiplets_a_block 
-                              for m_a_shell in multiplets_a_shell 
-                              if m_a_block[2]==m_a_shell[2] 
-    ]
 
     hopelement::ComplexF64 = zero(ComplexF64)
 
@@ -962,7 +984,12 @@ function compute_pcgred_iaj(
     redmatel::ComplexF64 = zero(ComplexF64)
 
     # iterate over multiplets in G_ut=G_i and G_vt=G_j
-    @inbounds for (m_utp::NTuple{4,Int64},m_mut::NTuple{4,Int64},m_it::NTuple{4,Int64},m_vtp::NTuple{4,Int64},m_nut::NTuple{4,Int64},m_jt::NTuple{4,Int64}) in combs_uvprima_local
+    @inbounds for (m_utp::NTuple{4,Int64},
+                   m_mut::NTuple{4,Int64},
+                   m_it::NTuple{4,Int64},
+                   m_vtp::NTuple{4,Int64},
+                   m_nut::NTuple{4,Int64},
+                   m_jt::NTuple{4,Int64}) in combs_uvprima_local
 
         # early discard of unequal block parts
         #m_it==m_jt || continue

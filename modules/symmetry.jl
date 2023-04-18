@@ -258,7 +258,7 @@ function cg_orbital( I_1::String ,
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 } = Dict()
 
     file = [ x for x in readdir( path ) 
-               if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
+           if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
     verbose && @show file 
 
     inverted = false
@@ -283,7 +283,7 @@ function cg_orbital( I_1::String ,
 
     end
 
-    return cg    
+    return cg
 end
 
 function get_cg_o_fulldict( oirreps::Vector{String} , cg_path::String )

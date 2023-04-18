@@ -2,14 +2,14 @@
 
 using LinearAlgebra 
 
-function lanczos( H::Matrix{BigFloat} , v_1::Vector{BigFloat} ) 
+function lanczos( H::Matrix{Float64} , v_1::Vector{Float64} ) 
 
     M = size(H)[1]
 
-    U::Matrix{BigFloat} = similar(H)
+    U::Matrix{Float64} = similar(H)
     U[:,1] .= v_1
 
-    vv::Vector{Vector{BigFloat}} = [v_1]
+    vv::Vector{Vector{Float64}} = [v_1]
 
     # set first seed vector
     v_n = v_1
@@ -38,18 +38,18 @@ function lanczos( H::Matrix{BigFloat} , v_1::Vector{BigFloat} )
 end
 
 function integrate( f::Function , 
-                    interval::Tuple{BigFloat,BigFloat} ;
-                    Npoints::Int64=Int64(1e4) )::BigFloat
+                    interval::Tuple{Float64,Float64} ;
+                    Npoints::Int64=Int64(1e2) )::Float64
 
 
-    d::BigFloat = interval[2]-interval[1]
-    dx::BigFloat = d/Npoints
+    d::Float64 = interval[2]-interval[1]
+    dx::Float64 = d/Npoints
 
     # xpoints 
-    xx = BigFloat[ interval[1]+n*dx for n in 0:(Npoints-1) ]
+    xx = Float64[ interval[1]+n*dx for n in 0:(Npoints-1) ]
      
-    integral::BigFloat = 0.0 
-    average::BigFloat = 0.0
+    integral::Float64 = 0.0 
+    average::Float64 = 0.0
     @inbounds for i in 1:(length(xx)-1)
 
         average = (f(xx[i])+f(xx[i+1]))/2.0
@@ -62,9 +62,9 @@ function integrate( f::Function ,
 
 end
 
-function representative_energy( interval::NTuple{2,BigFloat} ; 
+function representative_energy( interval::NTuple{2,Float64} ; 
                                 scheme::String="standard" , 
-                                eta::Function=x->1.0 )::BigFloat
+                                eta::Function=x->1.0 )::Float64
 
     if scheme=="alternative" 
 
@@ -82,27 +82,27 @@ end
 
 function get_f1_E_etabar( 
             eta::Function , 
-            L::BigFloat , 
-            z::BigFloat , 
+            L::Float64 , 
+            z::Float64 , 
             N::Int64 ;
             scheme="standard" )
 
     # diagonal conduction matrix elements
-    E  = BigFloat[ 0 for n in 1:(2*N) ]
+    E  = Float64[ 0 for n in 1:(2*N) ]
 
     # coefficients of f_0 expressed in the a_n basis
-    f1 = BigFloat[ 0 for n in 1:(2*N) ]
+    f1 = Float64[ 0 for n in 1:(2*N) ]
 
     # etabar: average of eta
-    etabar::BigFloat = integrate( x->eta(x) , 
-                        (BigFloat(-1.0),BigFloat(1.0)) ; 
+    etabar::Float64 = integrate( x->eta(x) , 
+                        (Float64(-1.0),Float64(1.0)) ; 
                         Npoints=Int64(1e6) )
 
     # type-define variables 
     idx::Int64 = 0
-    x_pn::BigFloat = 0.0
-    x_pn1::BigFloat = 0.0
-    interval::NTuple{2,BigFloat} = (0.0,0.0)
+    x_pn::Float64 = 0.0
+    x_pn1::Float64 = 0.0
+    interval::NTuple{2,Float64} = (0.0,0.0)
 
     @inbounds for n=1:N
 
@@ -139,15 +139,15 @@ function get_hoppings( N::Int64 ,
     # N=40 is sufficient before asympotic
     M = minimum((N,20))
 
-    # convert Float64 to BigFloat
-    LL = BigFloat(L) 
-    zz = BigFloat(z)
+    # convert Float64 to Float64
+    LL = Float64(L) 
+    zz = Float64(z)
 
     # obtain innermost shell and diagonal basis elements
     (f1,E,etabar) = get_f1_E_etabar( eta , LL , zz ,  M ; scheme=scheme )
 
     # construct diagonal hamiltonian 
-    H::Matrix{BigFloat} = diagm( E )
+    H::Matrix{Float64} = diagm( E )
 
     # construct off-diagonal hamiltonian
     Hp = lanczos( H , f1 )
@@ -166,7 +166,7 @@ function get_hoppings( N::Int64 ,
     hops_asymptotic = [hop0*LL^(-(n-1)/2) for n in 1:M] 
 
     # fractions ξ
-    xis::Vector{BigFloat} = BigFloat[0 for _ in 1:N]
+    xis::Vector{Float64} = Float64[0 for _ in 1:N]
     xis[1:M] .= hops ./ hops_asymptotic
     xis[C:end] .= 1.0
 

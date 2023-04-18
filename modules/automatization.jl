@@ -49,7 +49,11 @@ function get_cg_o_info(
     #                           "A2g"=> 1 )
     oindex2dimensions = collect( oirreps2dimensions[I] for I in oirreps )
 
-    return (oirreps,oirreps2indices,oirreps2dimensions,oindex2dimensions,cg_o_fullmatint)
+    return (oirreps,
+            oirreps2indices,
+            oirreps2dimensions,
+            oindex2dimensions,
+            cg_o_fullmatint)
 
 end
 
@@ -466,14 +470,14 @@ function prepare_pcgred(
 end
 
 function get_pcgred( 
-            basis ,
+            basis::CB ,
             symstates_noint ,
             multiplets,
             hiztegia ,
             oirreps2indices ,
             cg_o_fullmatint ,
             cg_s_fullmatint ;
-            verbose=false ) 
+            verbose=false ) where {CB<:CanonicalBasis}
 
     # pcg in dict format
     pcg = get_pseudoCG( symstates_noint , 
@@ -733,7 +737,8 @@ function nrg_full(
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             etafac::Float64=1.0 ,
-            Nz=1 ) where {R<:Real}
+            Nz::Int64=1 ,
+            precompute_iaj::Bool=true ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
         println( "ERROR: calculation must be IMP for computing the spectral function" )
@@ -1102,7 +1107,8 @@ function nrg_full(
                     combinations_uprima , 
                     oindex2dimensions ;
                     verbose=false ,
-                    distributed=distributed );
+                    distributed=distributed ,
+                    precompute_iaj=precompute_iaj );
     print( "AFTER ADDING INNERMOST SHELL, " )
     print_spectrum( irrEU )
 
@@ -1166,7 +1172,8 @@ function nrg_full(
                    z=z ,
                    discretization=discretization ,
                    verbose=false ,
-                   Nz=Nz)
+                   Nz=Nz ,
+                   precompute_iaj=precompute_iaj )
     else 
         nrg = NRG( iterations,
                    cutoff_type,
@@ -1201,7 +1208,8 @@ function nrg_full(
                    Karray_orbital=Karray_orbital ,
                    Karray_spin=Karray_spin ,
                    multiplets_atomhop=collect(multiplets_a_atom) ,
-                   alpha=Float64(alpha) )
+                   alpha=Float64(alpha) ,
+                   precompute_iaj=precompute_iaj )
     end
 
     println()

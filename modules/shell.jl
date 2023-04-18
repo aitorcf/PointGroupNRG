@@ -929,7 +929,7 @@ function NRG( iterations::Int64,
               betabar::Float64 ,
               oindex2dimensions::Vector{Int64} ,
               xi_symparams::Dict{ Int64 , Vector{Vector{ComplexF64}} } ,
-              mm_i ;
+              mm_i::Dict{NTuple{4,Int64},Vector{Float64}} ;
               verbose::Bool=false ,
               distributed::Bool=false ,
               method::String="distfor" ,
@@ -946,7 +946,8 @@ function NRG( iterations::Int64,
               etafac::Float64=1.0 ,
               alpha::Float64=1.0 ,
               eta::Function=x->1.0 ,
-              Nz=1 )
+              Nz::Int64=1 ,
+              precompute_iaj::Bool=true )
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -1047,7 +1048,8 @@ function NRG( iterations::Int64,
                 combinations_uprima , 
                 oindex2dimensions ;
                 verbose=verbose ,
-                distributed=distributed );
+                distributed=distributed ,
+                precompute_iaj=precompute_iaj );
         @show ppp.time, ppp.bytes*10^-6, ppp.gctime
         push!( performance , ppp )
         
