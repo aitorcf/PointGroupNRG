@@ -1,3 +1,5 @@
+using Einsum
+
 include( "shell.jl" ) 
 include( "thermo.jl" )
 include( "reddiag.jl" )
@@ -938,30 +940,7 @@ function compute_transformedmat!(
 
     c::ComplexF64 = zero(ComplexF64)
 
-    this::Matrix{ComplexF64}        = zeros(ComplexF64,R_u,R_v)
-    transformed::Matrix{ComplexF64} = zeros(ComplexF64,R_u,R_v)
-    @inbounds for r_a in 1:R_a 
-
-        this        .= thisredmat[:,r_a,:]
-        transformed .= zero(ComplexF64)
-
-        @inbounds for r_v  in 1:R_v,
-                      r_u  in 1:R_u
-
-            c = zero(c)
-
-            @inbounds for r_vp in 1:R_v,
-                          r_up in 1:R_u
-
-                c += U_u[r_up,r_u]*U_v[r_vp,r_v]*this[r_up,r_vp]
-            end
-
-            transformed[r_u,r_v] = c
-
-        end
-
-        transformedmat[:,r_a,:] .= transformed
-    end
+    @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
 end
 
 function compute_spectral_function( 
@@ -1411,13 +1390,21 @@ function get_new_blockredmat_CGsummethod2(
 
     end
     
-    @inbounds for ((G_u,G_a,G_v),mat) in uav_diag 
+    
+    count = 0
+    @inbounds for ((G_u,G_a,G_v),diagmat) in uav_diag 
+
+        @show size(diagmat)
+        count += 1
 
 
         U_u = irrEU[G_u][2]
         U_v = irrEU[G_v][2]
 
-        compute_transformedmat!( mat , U_u , U_v , uav[G_u,G_a,G_v] )
+        #compute_transformedmat!( mat , U_u , U_v , uav[G_u,G_a,G_v] )
+
+        nondiagmat = uav[(G_u,G_a,G_v)]
+        @einsum diagmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*nondiagmat[r_up,r_a,r_vp]
 
         #@inbounds for r_u in 1:R_u,
         #              r_a in 1:R_a,
@@ -1437,6 +1424,8 @@ function get_new_blockredmat_CGsummethod2(
         #end
 
     end
+    @show count
+    println()
 
     return uav_diag
 
@@ -1537,7 +1526,8 @@ function get_new_blockredmat_CGsummethod3(
             end
 
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
-            compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+            @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
+            #compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
 
             # insert result in final dict
             uvredmat[(G_u,G_a,G_v)] = transformedmat
