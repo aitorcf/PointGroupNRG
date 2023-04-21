@@ -7,15 +7,22 @@
 !README.md
 !TODO.txt
 
+# data files 
+*.dat
+
 # modules
 modules/twostepdiag.jl
 modules/dmnrg.jl
 modules/templates.jl
 
 # butterfly modules
-modules_butterfly/*
+modules_butterfly/
 
 # examples
-examples/**/*
-!examples/KWW1980/**/*
-!examples/Eg/**/*
+examples/Butterfly/
+examples/Lanczos/
+examples/RKKY/
+examples/SSK1989/
+examples/T2g/
+examples/Eg/**/*
+!examples/Eg/nrg_Eg.jl
