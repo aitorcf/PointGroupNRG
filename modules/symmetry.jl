@@ -14,6 +14,56 @@ include( "numericals.jl" )
 #
 # **********************************************
 
+const ClearIrrep   = Tuple{Int64,String,Float64}
+const ClearPartner = Tuple{Int64,Float64}
+const ClearQNums   = Tuple{Int64,String,Float64,Int64,Float64,Int64}
+const IntIrrep   = NTuple{3,Int64}
+const IntPartner = NTuple{2,Int64}
+const IntQNums   = NTuple{6,Int64}
+
+const AbstractIrrep = Union{ClearIrrep,IntIrrep}
+const AbstractPartner = Union{ClearPartner,IntPartner}
+const AbstractQNums = Union{ClearQNums,IntQNums}
+
+const ClearTripleQ = NTuple{3,ClearQNums}
+const IntTripleQ   = NTuple{3,IntQNums}
+const AbstractTripleQ = Union{ClearTripleQ,IntTripleQ}
+const ClearTripleG = NTuple{3,ClearIrrep}
+const IntTripleG   = NTuple{3,IntIrrep}
+const AbstractTripleG = Union{ClearTripleG,IntTripleG}
+
+const ClearSymstateDict = Dict{ ClearQNums , State }
+const IntSymstateDict   = Dict{ IntQNums , State }
+const AbstractSymstateDict = Union{ClearSymstateDict,IntSymstateDict}
+
+const ClearQPCG = Dict{ ClearTripleQ , ComplexF64 }
+const IntQPCG = Dict{ IntTripleQ , ComplexF64 }
+const AbstractQPCG = Union{ClearQPCG,IntQPCG}
+
+const ClearIrrepPCG = Dict{ ClearTripleG , Array{ComplexF64,3} }
+const IntIrrepPCG   = Dict{ IntTripleG ,   Array{ComplexF64,3} }
+const AbstractIrrepPCG = Union{ClearIrrepPCG,IntIrrepPCG}
+
+const ClearMultiplet = Tuple{Int64,String,Float64,Int64}
+const IntMultiplet   = NTuple{4,Int64}
+const AbstractMultiplet = Union{ClearMultiplet,IntMultiplet}
+
+const ClearMultipletSet = Set{ClearMultiplet}
+const IntMultipletSet = Set{IntMultiplet}
+const AbstractMultipletSet = Union{ClearMultipletSet,IntMultipletSet}
+const ClearMultipletVector = Vector{ClearMultiplet}
+const IntMultipletVector = Vector{IntMultiplet}
+const AbstractMultipletVector = Union{ClearMultipletVector,IntMultipletVector}
+
+const ClearIrrepSet = Set{ClearIrrep}
+const IntIrrepSet = Set{IntIrrep}
+const AbstractIrrepSet = Union{ClearIrrepSet,IntIrrepSet}
+const ClearIrrepVector = Vector{ClearIrrep}
+const IntIrrepVector = Vector{IntIrrep}
+const AbstractIrrepVector = Union{ClearIrrepVector,IntIrrepVector}
+
+const IntCGKey = NTuple{3,Int64}
+const IntCG = Dict{ IntCGKey , Array{ComplexF64,3} }
 
 # ##################
 # ORBITAL GENERATORS 
@@ -178,10 +228,10 @@ function get_multiplets( symstates::Dict{T,S} ) where {T<:Tuple,S<:State}
     return Set( (k[1],k[2],k[3],k[end]) for k in keys(symstates) )
 end
 
-function get_irreps( symstates::Dict{T,S} ; multiplicity=false ) where {T<:Tuple,S<:State}
+function get_irreps( symstates::Dict{T,S} ; multiplicity=false )::ClearIrrepSet where {T<:Tuple,S<:State}
     # gets irreps (with multiplicities, in tuple form) 
     # of "symstates" or other Dict(q=>any) object.
-    irreps = Set( k[1:3] for k in keys(symstates) ) 
+    irreps::ClearIrrepSet = Set( k[1:3] for k in keys(symstates) ) 
     if multiplicity
         return Set( (irr,get_multiplicity(symstates,irr)) for irr in irreps )
     else
@@ -286,7 +336,7 @@ function cg_orbital( I_1::String ,
     return cg
 end
 
-function get_cg_o_fulldict( oirreps::Vector{String} , cg_path::String )
+function get_cg_o_fulldict( oirreps::Vector{String} , cg_path::String )::Dict{Tuple{String,Int64,String,Int64,String,Int64}}
     # Given a collection of orbital irreps 'oirreps', it searches in cg_path 
     # for CG information and returns the coefficients for every possible
     # combination (I_1,I_2) for I_1 and I_2 in oirreps:
@@ -943,8 +993,8 @@ end
 # SYMMETRIC DIAGONALIZATION OF ATOMIC HAMILTONIAN
 # ...............................................
 
-function symdiag( irreps_0 , symstates_0 , H )
-    irrEU_imp = Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }()
+function symdiag( irreps_0::ClearIrrepSet , symstates_0::SSD , H::O ) where {SSD<:ClearSymstateDict,O<:Operator}
+    irrEU_imp = Dict{ ClearIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} }()
     for G in irreps_0 
         #size = Int64( oirreps2dimensions[G[2]] * (2*G[3]+1) )
         Gstates = get_irrepstates_onepartner( symstates_0 , G ; partner="o1_smax" )

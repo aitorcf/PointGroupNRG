@@ -43,12 +43,12 @@ calculation = "IMP"
 z = 0.0
 
 # numerical parameters
-L = 10.0
+L = 5.0
 betabar = 1.0
 
 # cutoff
 cutoff_type = "multiplet" 
-cutoff_magnitude = 1000
+cutoff_magnitude = 100
 minmult = 0 
 mine = 0.0
 
@@ -59,7 +59,7 @@ eps   = -0.1*fac
 u_11  = 1*abs(eps)
 u_h   = 0.3*u_11
 u_12  = u_11-2*u_h
-gam   = u_11/pi*0.1
+gam   = u_11/pi*0.2
 # coulomb coupling parameters
 #u_eg  = u_11
 #u_a1g = u_12 + u_h/2.0
@@ -68,12 +68,12 @@ u_eg  = u_11 - u_h/4.0
 u_a1g = u_11 + u_h/4.0
 u_a2g = u_11 - 3.0*u_h/4.0
 
-iterations = 10
+iterations = 40
 
 max_spin2 = 8
 
-spectral = false
-etafac = 0.4
+spectral = true
+etafac = 1.0
 
 
 # directory where the orbital cg info is stored
@@ -159,23 +159,19 @@ else
 end
 println()
 
-# improve efficiency of dictionary lookup
-max_population_atom  = 4
-max_population_shell = 4
-Ndim = max_population_atom + iterations*max_population_shell
-Idim = 3
-Sdim = max_spin2
-maxISdim = maximum((Idim,Sdim))
-ISdim = Idim*Sdim
-Gdim = Ndim*Idim*Sdim
-dimtup = ( ISdim , Sdim , 1 ) 
-@eval function Base.hash( x::NTuple{3,NTuple{3,Int64}} )
-    UInt64(sum( sum.((x[1].*$dimtup,x[2].*$dimtup,x[3].*$dimtup)).*($(Gdim^2),$Gdim,1) ))
-end
-
-imp_spectrum = Dict( 
-        (2,"A2g",1.0) => [0.0],
-        (1,"Eg",0.5)  => [1.0] )
+## improve efficiency of dictionary lookup
+#max_population_atom  = 4
+#max_population_shell = 4
+#Ndim = max_population_atom + iterations*max_population_shell
+#Idim = 3
+#Sdim = max_spin2
+#maxISdim = maximum((Idim,Sdim))
+#ISdim = Idim*Sdim
+#Gdim = Ndim*Idim*Sdim
+#dimtup = ( ISdim , Sdim , 1 ) 
+#@eval function Base.hash( x::NTuple{3,NTuple{3,Int64}} )
+#    UInt64(sum( sum.((x[1].*$dimtup,x[2].*$dimtup,x[3].*$dimtup)).*($(Gdim^2),$Gdim,1) ))
+#end
 
 if stage=="multiplets"
 
@@ -216,7 +212,8 @@ elseif stage=="nrg"
               spectral=spectral,
               etafac=etafac,
               z=z,
-              precompute_iaj=true)
+              precompute_iaj=true,
+              Nz=1)
               #Nz=2)
  #               imp_spectrum=imp_spectrum)
 

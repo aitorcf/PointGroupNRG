@@ -13,6 +13,8 @@
 #
 # ===============================================
 
+using LinearAlgebra
+
 include( "lanczos.jl" )
 
 
@@ -251,7 +253,13 @@ function H11( M1::Int64 , epsilon::Vector{BigFloat} )
         H[i,i-1] = epsilon[i-1]
     end
     # take the power (2N+2)=2M1
-    Hpow::Matrix{BigFloat} = H^(2*M1)
+    Hpow::Matrix{BigFloat} = copy(H)
+    Hpowcopy = copy(Hpow)
+    for _ in 2:(2*M1)
+        Hpowcopy .= Hpow
+        mul!(Hpow,Hpowcopy,H)
+    end
+    #Hpow::Matrix{BigFloat} = H^(2*M1)
     return Hpow[1,1]
 end
 

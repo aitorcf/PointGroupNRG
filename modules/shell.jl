@@ -46,7 +46,7 @@ function basis2coperators( basis::CB ;
 end
 
 function shell_coperators( shell_basis::CB , 
-                           hiztegia::D ) where {CB<:CanonicalBasis,D<:Dict}
+                           hiztegia::D )::Dict{ ClearQNums , Operator{CB} } where {CB<:CanonicalBasis,D<:Dict}
     # same as basis2coperators (above) but stores the creation
     # operators as a dictionary.
     #
@@ -59,20 +59,20 @@ function shell_coperators( shell_basis::CB ,
     #
     # - coperator : sym => creation operatorcoperator : sym => creation operator
     #
-    coperators = Dict{ Tuple{Int64,String,Float64,Int64,Float64,Int64} , Operator }()
+    coperators = Dict{ ClearQNums , Operator{CB} }()
     @inbounds for (i,sfs) in enumerate(shell_basis.states)
         sum(sfs.occ)!==1 && continue
         idx = findfirst( sfs.occ )
         tup = sfs.hilbert.states[idx] 
         # sym = ( N , I , S , mu , m , r )
-        sym = ( convert(Int64,1) , 
-                convert(String,hiztegia[tup[2]]) , 
-                convert(Float64,0.5) , 
-                convert(Int64,tup[3]) , 
-                convert(Float64,hiztegia[tup[4]]) , 
-                convert(Int64,tup[1]) )
-        cop = sfs2coperator(sfs,shell_basis)
-        sym2cop = Dict( sym => cop )
+        sym::ClearQNums = ( convert(Int64,1) , 
+                            convert(String,hiztegia[tup[2]]) , 
+                            convert(Float64,0.5) , 
+                            convert(Int64,tup[3]) , 
+                            convert(Float64,hiztegia[tup[4]]) , 
+                            convert(Int64,tup[1]) )
+        cop::Operator{CB} = sfs2coperator(sfs,shell_basis)
+        sym2cop::Dict{ ClearQNums , Operator{CB} } = Dict{ClearQNums,Operator{CB}}( sym => cop )
         merge!( coperators , sym2cop )
     end
     return coperators 
@@ -90,11 +90,11 @@ end
 
 # int format method
 function get_pseudoCG( 
-                symstates_shell::Dict{T,S} , 
+                symstates_shell::Dict{ClearQNums,S} , 
                 basis_shell::CB , 
                 hiztegia::D , 
                 oirreps2dimensions::Dict{String,Int64} ; 
-                verbose=false ) where {T<:Tuple,S<:State,CB<:CanonicalBasis,D<:Dict}
+                verbose=false )::IntQPCG where {CB<:CanonicalBasis,S<:State,D<:Dict}
     # compute the pseudo-CG coefficients for the shells.
     #
     # input
@@ -108,38 +108,38 @@ function get_pseudoCG(
     #
     # - pseudo-CG coefficients as dict( (q_nu,q_a,q_mu)=>coeff )
     
-    pseudoCG = Dict()
+    pseudoCG_clear::ClearQPCG = ClearQPCG()
 
     # shell creation operators
-    shell_cops = shell_coperators( basis_shell , hiztegia )
+    shell_cops::Dict{ ClearQNums , Operator{CB} } = shell_coperators( basis_shell , hiztegia )
 
-    for (q_nu,s_nu) in symstates_shell, 
-        (q_mu,s_mu) in symstates_shell
+    for (q_nu::ClearQNums,s_nu::S) in symstates_shell, 
+        (q_mu::ClearQNums,s_mu::S) in symstates_shell
 
-        for (q_a,c_a) in shell_cops 
-            q = ( q_nu , q_a , q_mu ) 
+        for (q_a::ClearQNums,c_a::Operator{CB}) in shell_cops 
+            q::ClearTripleQ = ( q_nu , q_a , q_mu ) 
             # ( q_nu | c^\dagger_{q_a} | q_mu )
             # notice that it is not the complex conjugate!!!
-            coeff = s_nu * c_a * s_mu 
-            isapprox( abs(coeff) , 0.0 , atol=1e-6 ) || push!( pseudoCG , q=>coeff ) 
+            coeff::ComplexF64 = (s_nu * c_a * s_mu)::ComplexF64
+            isapprox( abs(coeff) , 0.0 , atol=1e-6 ) || push!( pseudoCG_clear , q=>coeff ) 
         end
 
     end
 
-    pseudoCG = Dict( (convert_to_int(k[1],oirreps2dimensions),
-                      convert_to_int(k[2],oirreps2dimensions),
-                      convert_to_int(k[3],oirreps2dimensions))=>v 
-                      for (k,v) in pseudoCG )
+    pseudoCG_int::IntQPCG = IntQPCG( (convert_to_int(k[1],oirreps2dimensions),
+                                      convert_to_int(k[2],oirreps2dimensions),
+                                      convert_to_int(k[3],oirreps2dimensions))=>v 
+                                      for (k::ClearTripleQ,v::ComplexF64) in pseudoCG_clear )
 
     if verbose 
-        for (q,coeff) in pseudoCG 
+        for (q,coeff) in pseudoCG_int
             println( "q = $q" )
             println( "coeff = $coeff" )
             println()
         end
     end
 
-    return pseudoCG 
+    return pseudoCG_int::IntQPCG
 end
 
 function get_pseudoCG_mat( 
@@ -214,49 +214,49 @@ function get_pseudoCG_mat(
 end
 
 # standard format method
-function get_pseudoCG( 
-            symstates_shell::Dict , 
-            basis_shell::CanonicalBasis , 
-            hiztegia::Dict ; 
-            verbose=false )
-    #
-    # compute the pseudo-CG coefficients for the shells.
-    #
-    # input:
-    #
-    # - symstates_shell : all symstates of a single shell (any)
-    # - basis_shell : basis for only that shell 
-    # - hiztegia : dict( irrep name => standard notation )
-    # - [format : "int" or "standard"]
-    #
-    # output:
-    #
-    # - pseudo-CG coefficients as dict( (q_nu,q_a,q_mu)=>coeff )
-    #
-    pseudoCG = Dict()
-
-    # shell creation operators
-    shell_cops = shell_coperators( basis_shell , hiztegia )
-
-    for (q_nu,s_nu) in symstates_shell, (q_mu,s_mu) in symstates_shell
-        for (q_a,c_a) in shell_cops 
-            q = ( q_nu , q_a , q_mu ) 
-            # ( q_nu | c^\dagger_{q_a} | q_mu )
-            # notice that it is not the complex conjugate!!!
-            coeff = s_nu * c_a * s_mu 
-            isapprox( coeff , 0 ) || push!( pseudoCG , q=>coeff ) 
-        end
-    end
-
-    if verbose 
-        for (q,coeff) in pseudoCG 
-            println( "q = $q" )
-            println( "coeff = $coeff" )
-            println()
-        end
-    end
-    return pseudoCG 
-end
+#function get_pseudoCG( 
+#            symstates_shell::Dict , 
+#            basis_shell::CanonicalBasis , 
+#            hiztegia::Dict ; 
+#            verbose=false )
+#    #
+#    # compute the pseudo-CG coefficients for the shells.
+#    #
+#    # input:
+#    #
+#    # - symstates_shell : all symstates of a single shell (any)
+#    # - basis_shell : basis for only that shell 
+#    # - hiztegia : dict( irrep name => standard notation )
+#    # - [format : "int" or "standard"]
+#    #
+#    # output:
+#    #
+#    # - pseudo-CG coefficients as dict( (q_nu,q_a,q_mu)=>coeff )
+#    #
+#    pseudoCG = Dict()
+#
+#    # shell creation operators
+#    shell_cops = shell_coperators( basis_shell , hiztegia )
+#
+#    for (q_nu,s_nu) in symstates_shell, (q_mu,s_mu) in symstates_shell
+#        for (q_a,c_a) in shell_cops 
+#            q = ( q_nu , q_a , q_mu ) 
+#            # ( q_nu | c^\dagger_{q_a} | q_mu )
+#            # notice that it is not the complex conjugate!!!
+#            coeff = s_nu * c_a * s_mu 
+#            isapprox( coeff , 0 ) || push!( pseudoCG , q=>coeff ) 
+#        end
+#    end
+#
+#    if verbose 
+#        for (q,coeff) in pseudoCG 
+#            println( "q = $q" )
+#            println( "coeff = $coeff" )
+#            println()
+#        end
+#    end
+#    return pseudoCG 
+#end
 
 
 # ################################
@@ -873,21 +873,21 @@ end
 #   Int-only elements
 # .............................
 
-function convert_to_int( multiplet::Tuple{Int64,AbstractString,Float64,Int64} , oirreps2indices )
+function convert_to_int( multiplet::ClearMultiplet , oirreps2indices::Dict{String,Int64} )::IntMultiplet
     ( N , I , S , r ) = multiplet
     return ( N , oirreps2indices[I] , Int64(2*S) , r )
 end
 
-function convert_to_int( irrep::Tuple{Int64,AbstractString,Float64} , oirreps2indices )
+function convert_to_int( irrep::ClearIrrep , oirreps2indices::Dict{String,Int64} )
     ( N , I , S ) = irrep 
     return ( N , oirreps2indices[I] , Int64(2*S) )
 end
 
-function convert_to_int( irrep::Tuple{Int64,AbstractString,Int64} , oirreps2indices )
+function convert_to_int( irrep::ClearIrrep , oirreps2indices::Dict{String,Int64} )
     ( N , I , S ) = irrep 
     return ( N , oirreps2indices[I] , Int64(2*S) )
 end
-function convert_to_int( q::Tuple{Int64,AbstractString,Number,Int64,Number,Int64} , oirreps2indices )
+function convert_to_int( q::ClearQNums , oirreps2indices::Dict{String,Int64} )
     ( N , I , S , i , s , r ) = q
     Ii = oirreps2indices[I]
     Si = Int64(2*S)
@@ -928,8 +928,7 @@ function NRG( iterations::Int64,
               combinations_uprima::Dict{NTuple{3,Int64}, Vector{NTuple{3,NTuple{4,Int64}}}},
               betabar::Float64 ,
               oindex2dimensions::Vector{Int64} ,
-              xi_symparams::Dict{ Int64 , Vector{Vector{ComplexF64}} } ,
-              mm_i::Dict{NTuple{4,Int64},Vector{Float64}} ;
+              xi_symparams::Dict{ Int64 , Vector{Vector{ComplexF64}} } ;
               verbose::Bool=false ,
               distributed::Bool=false ,
               method::String="distfor" ,
@@ -947,7 +946,9 @@ function NRG( iterations::Int64,
               alpha::Float64=1.0 ,
               eta::Function=x->1.0 ,
               Nz::Int64=1 ,
-              precompute_iaj::Bool=true )
+              precompute_iaj::Bool=true ,
+              compute_impmults::Bool=false ,
+              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict() )
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -973,12 +974,13 @@ function NRG( iterations::Int64,
     maxs_tot = 0
     eigenvals5::Matrix{Float64} = zeros(Float64,iterations-1,5)
 
+    xi::Vector{Float64} = []
     if discretization=="lanczos" 
-        e,ebar,ξ = get_hoppings( iterations , L , z , eta )
+        _,_,xi = get_hoppings( iterations , L , z , eta )
     else
-        ξ = compute_xi_vector( iterations , z , L ; discretization="standard" )
+        xi = compute_xi_vector( iterations , z , L ; discretization=discretization )
     end
-    @show ξ
+
 
     # NEW 
     Nt = Nz==1 ? 1 : Int64(Nz/2)
@@ -1021,15 +1023,13 @@ function NRG( iterations::Int64,
                                                         for i in 1:length(xi_symparams[k])]))
                                   for (k,v) in xi_symparams )
         else
-            hop_symparams = Dict( k=>ComplexF64.(ξ[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
+            hop_symparams = Dict( k=>ComplexF64.(xi[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
                                   for (k,v) in hop_symparams )
         end
         @show hop_symparams
 
-        #println( "shell hopping = $(round(ξ[n-1],sigdigits=3))" )
-
         # construct and diagonalize ( m_u | H_1 | m_v )
-        println( "Diagonalizing Hamiltonian..." )
+        print( "Diagonalizing Hamiltonian... " )
         ppp = @timed (irrEU,combinations_uprima) = matdiag_redmat( 
                 multiplets_block , 
                 multiplets_shell ,
@@ -1050,7 +1050,7 @@ function NRG( iterations::Int64,
                 verbose=verbose ,
                 distributed=distributed ,
                 precompute_iaj=precompute_iaj );
-        @show ppp.time, ppp.bytes*10^-6, ppp.gctime
+        println( "$(ppp.time)s, $(ppp.bytes*10^-9)Gb, $(ppp.gctime)s gc" )
         push!( performance , ppp )
         
         # maximum values for symmetry quantum numbers
@@ -1062,23 +1062,25 @@ function NRG( iterations::Int64,
         maxn_tot = maximum([ maxn , maxn_tot ])
 
         # impurity info
-        mm_i = imp_mults( irrEU ,
-                          oindex2dimensions ,
-                          combinations_uprima ,
-                          mm_i )
-        m_imp = mult_thermo( irrEU ,
-                             betabar ,
-                             oindex2dimensions ,
-                             mm_i )
-        @show m_imp
-        push!( impmults , m_imp )
+        if compute_impmults
+            mm_i = imp_mults( irrEU ,
+                              oindex2dimensions ,
+                              combinations_uprima ,
+                              mm_i )
+            m_imp::Vector{Float64} = mult_thermo( irrEU ,
+                                 betabar ,
+                                 oindex2dimensions ,
+                                 mm_i )
+            @show m_imp
+            push!( impmults , m_imp )
+        end
 
         # thermodynamics 
         println( "THERMODYNAMICS" )
         @show Nt
         for m in 1:Nt 
 
-            fac = L^(m/Nz)
+            fac = L^((m-1)/Nz)
 
             if discretization!=="lanczos" 
                 t = temperature( n , L , betabar*fac ; z=z , discretization=discretization )
@@ -1117,32 +1119,25 @@ function NRG( iterations::Int64,
 
         if spectral 
 
-                print( "Updating M and AA... " )
-                @time M, AA = update_redmat_AA_CGsummethod(
-                            M ,
-                            irrEU ,
-                            combinations_uprima ,
-                            collect(multiplets_atomhop) ,
-                            cg_o_fullmatint ,
-                            cg_s_fullmatint ,
-                            Karray_orbital ,
-                            Karray_spin ,
-                            AA ,
-                            oindex2dimensions ;
-                            verbose=false )
-                #M,AA = update_redmat_AA(
-                #            M,
-                #            irrEU ,
-                #            combinations_uprima ,
-                #            multiplets_atomhop ,
-                #            cg_o_fullmatint ,
-                #            cg_s_fullmatint ,
-                #            AA ,
-                #            oindex2dimensions ;
-                #            verbose=false )
-                println()
-                 
+            print( "Updating M and AA... " )
+            sss = @timed M, AA = update_redmat_AA_CGsummethod(
+                        M ,
+                        irrEU ,
+                        combinations_uprima ,
+                        collect(multiplets_atomhop) ,
+                        cg_o_fullmatint ,
+                        cg_s_fullmatint ,
+                        Karray_orbital ,
+                        Karray_spin ,
+                        AA ,
+                        oindex2dimensions ;
+                        verbose=false )
+            println( "$(sss.time)s, $(sss.bytes*10^-6)bytes, $(sss.gctime)s gc" )
+            println()
+
         end
+
+
 
     end
 
@@ -1163,6 +1158,7 @@ function NRG( iterations::Int64,
             etafac ;
             widthfac=maximum((L,maxe_avg)) ,
             number_of_hoppers=number_of_hoppers )
+
     end
 
     return ( t=temperatures , 
@@ -1198,9 +1194,9 @@ function print_performance_onestep( nrg )
     println()
 
     bytes  = [ p.bytes for p in performance]
-    b_min  = minimum( bytes )/10^9
-    b_max  = maximum( bytes )/10^9
-    b_mean = sum(bytes)/length(bytes)/10^9
+    b_min  = minimum( bytes )/1e9
+    b_max  = maximum( bytes )/1e9
+    b_mean = sum(bytes)/length(bytes)/1e9
     println( "minimum gigabytes: $b_min" )
     println( "maximum gigabytes: $b_max" )
     println( "mean gigabytes:    $b_mean" )
@@ -1292,7 +1288,7 @@ end
 # ~~~~~~~~~~~~~~~~~~~ #
 # IMPURITY MULTIPLETS #
 # ~~~~~~~~~~~~~~~~~~~ #
-function ordered_multiplets( mults ) 
+function ordered_multiplets( mults )
     max_N = maximum(k[1] for k in mults) 
     omults = []
     for N in 0:max_N 

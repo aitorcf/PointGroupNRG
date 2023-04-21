@@ -483,7 +483,7 @@ function mult_thermo(
     betabar::Float64,
     oindex2dimensions::Vector{Int64},
     mm_u::Dict{NTuple{4,Int64},Vector{Float64}};
-    verbose=false)
+    verbose=false)::Vector{Float64}
 
     M::Int64 = length(collect(values(mm_u))[1])
     mult_imp::Vector{Float64} = [0.0 for i in 1:M]

@@ -126,7 +126,7 @@ function get_redmat3( dictmat ,
     end
     return redmat
 end
-function get_redmat2( dictmat , 
+function get_redmat2( dictmat::Dict{ NTuple{3,NTuple{6,Int64}} , ComplexF64 } , 
                       multiplets_atom , 
                       multiplets_operator ,
                       cg_o_fullmatint , 
@@ -144,7 +144,7 @@ function get_redmat2( dictmat ,
     end
     
     # irrep combinations in dictmat
-    Gcombs = Set( (q_i[1:3],q_a[1:3],q_j[1:3]) 
+    Gcombs::Set{NTuple{3,NTuple{3,Int64}}} = Set( (q_i[1:3]::IntIrrep,q_a[1:3]::IntIrrep,q_j[1:3]::IntIrrep)
                   for (q_i,q_a,q_j) in keys(dictmat) )
 
     # [(irrep,multiplicity)]
@@ -444,9 +444,9 @@ function compute_pcgred_iaj_full(
     G2rr_i::Dict{NTuple{3,Int64} , Vector{Int64}} = Dict( G_i=>sort([m_i[4] for m_i in mm_i if m_i[1:3]==G_i])
                    for G_i in GG_i ) 
 
-    for (G_i::NTuple{3,Int64},rr_i::Vector{Int64}) in G2rr_i,
-        (G_j::NTuple{3,Int64},rr_j::Vector{Int64}) in G2rr_i,
-        (G_a::NTuple{3,Int64},R_a::Int64) in G2R_a
+    for (G_i,rr_i) in G2rr_i,
+        (G_j,rr_j) in G2rr_i,
+        (G_a,R_a) in G2R_a
 
         N_i,I_i,S_i = G_i
         N_j,I_j,S_j = G_j
@@ -463,17 +463,18 @@ function compute_pcgred_iaj_full(
         GG_munu = Set( (m_mu[1:3],m_nu[1:3]) for (_,m_mu,_,_,m_nu,_) in combs_uvprima_local 
             if (m_mu[1:3],G_a,m_nu[1:3]) in keys(pcgred_block))
         GmuGnu2combs::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}}} =
-            Dict( (G_mu,G_nu)=>[(m_u,m_mu,m_i,m_v,m_nu,m_j) 
-                                for (m_u,m_mu,m_i,m_v,m_nu,m_j) in combs_uvprima_local 
-                                if (m_i==m_j && m_mu[1:3]==G_mu && m_nu[1:3]==G_nu)] 
-                  for (G_mu,G_nu) in GG_munu )
+        Dict( 
+            (G_mu,G_nu)=>[(m_u,m_mu,m_i,m_v,m_nu,m_j) 
+                          for (m_u,m_mu,m_i,m_v,m_nu,m_j) in combs_uvprima_local 
+                          if (m_i==m_j && m_mu[1:3]==G_mu && m_nu[1:3]==G_nu)] 
+            for (G_mu,G_nu) in GG_munu 
+        )
 
-        zeromat::Array{ComplexF64,3} = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
-        pcgred_gcomb::Array{ComplexF64,3} = zeromat
+        pcgred_gcomb::Array{ComplexF64,3} = zeros(ComplexF64,G2R_uv[G_i],G2R_a[G_a],G2R_uv[G_j])
 
-        for r_j::Int64 in rr_j,
-            r_a::Int64 in 1:R_a,
-            r_i::Int64 in rr_i
+        for r_j in rr_j,
+            r_a in 1:R_a,
+            r_i in rr_i
 
             pcgred_iaj::ComplexF64 = 0.0
 
@@ -597,13 +598,20 @@ function matdiag_redmat(
     irrEU_new::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
 
     combs_uvprima::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}} } = Dict()
-    @inbounds for (G_u,mm_u) in combinations_uprima,
-                  (G_v,mm_v) in combinations_uprima
+    #    (G_u,G_v)=>[(m_u,m_mu,m_i,m_v,m_nu,m_j)
+    #                for (m_u,m_mu,m_i) in mm_u
+    #                for (m_v,m_nu,m_j) in mm_v 
+    #                if m_i==m_j]
+    #    for (G_u,mm_u) in combinations_uprima
+    #    for (G_v,mm_v) in combinations_uprima
+    #)
+    @inbounds for (G_u::NTuple{3,Int64},mm_u::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima,
+                  (G_v::NTuple{3,Int64},mm_v::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima
 
-        combs_uvprima[(G_u,G_v)] = [(m_u,m_mu,m_i,m_v,m_nu,m_j) 
-                                   for (m_u,m_mu,m_i) in mm_u
-                                   for (m_v,m_nu,m_j) in mm_v 
-                                   if m_i==m_j]
+                  combs_uvprima[(G_u,G_v)] = [(m_u,m_mu,m_i,m_v,m_nu,m_j)
+                                              for (m_u,m_mu,m_i) in mm_u
+                                              for (m_v,m_nu,m_j) in mm_v 
+                                              if m_i==m_j]
 
     end
 
@@ -727,87 +735,97 @@ function construct_diag_block(
 
         hblock::Array{ComplexF64,3} = zeros( ComplexF64 , length(mults) , length(mults) , 2 )
 
-        @inbounds for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in mults,
-                      (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in mults
+        multGG_ij::IntIrrepSet = Set( m_i[1:3] for (_,_,m_i) in mults ) 
+        G_ij2mults::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}} } = Dict(
+            G_i=>[(m_u,m_nu,m_i) for (m_u,m_nu,m_i) in mults if m_i[1:3]==G_i]
+            for G_i in multGG_ij
+        )
 
-            if verbose 
-                println( "Hamiltonian block" )
-                @show m_u, m_mu, m_i 
-                @show m_v, m_nu, m_j
-                println()
-            end
-
-            # block and shell quantum numbers 
-            (N_i, I_i, S_i, r_i ) = m_i
-            (N_j, I_j, S_j, r_j ) = m_j
-            G_i = (N_i, I_i, S_i)
-            G_j = (N_j, I_j, S_j)
-            (N_mu,I_mu,S_mu,r_mu) = m_mu
-            (N_nu,I_nu,S_nu,r_nu) = m_nu
-            r_u = m_u[4]
-            r_v = m_v[4]
-
-            # diagonal energy from previous step
-            #   δ_{m_u,m_v} E^[n-1]_(m_i)
-            # (m_u=m_v => m_i=m_j)
-            hblock[r_u,r_v,1] = m_u==m_v ? irrEU[G_i][1][r_i] : 
-                                           zero(ComplexF64)
-            verbose && println( "δ_{m_u,m_v} E^[n-1]_(m_i) = $(hblock[r_u,r_v,1])\n" )
-
-            # chosen partner: orbital 1, max z-spin
-            p = (N,I,S,i,s) = ( G_uv... , 1 , G_uv[3] )
-            verbose && println( "p_u = p_v = $((N,I,S,i,s))" )
-
+        #@inbounds for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in mults,
+        #              (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in mults
+        for (G_i::NTuple{3,Int64},imults::Vector{NTuple{3,NTuple{4,Int64}}}) in G_ij2mults,
+            (G_j::NTuple{3,Int64},jmults::Vector{NTuple{3,NTuple{4,Int64}}}) in G_ij2mults
+            
             # U matrices (not transposed for faster loop)
             U_i::Matrix{ComplexF64} = irrEU[G_i][2]
             U_j::Matrix{ComplexF64} = irrEU[G_j][2]
 
-            # hopping part
-            verbose && println( "Occupations: (N_nu=$N_nu,N_mu=$N_mu) and (N_i=$N_i,N_j=$N_j)\n" )
-            if (N_nu==(N_mu+1) && N_i==(N_j+1)) 
-
-                verbose && println( "Hopping possible\n" )
+            for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in imults,
+                (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in jmults
                 
-                # (mu',i'=>u'), (nu',j'=>v') combinations 
-                combs_uvprima_local = combs_uvprima[(G_i,G_j)]
 
-                # hopping element of the hamiltonian matrix
-                hblock[r_u,r_v,2] = compute_hopelement_redmat( 
-                    m_i  , m_j , 
-                    m_mu , m_nu ,
-                    G_uv , 
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ,
-                    Csum_o_array ,
-                    Csum_s_array ,
-                    Bsum_o_array ,
-                    Bsum_s_array ,
-                    pcgred_block , 
-                    pcgred_shell ,
-                    multiplets_a_combs ,
-                    hop_symparams ,
-                    U_i , U_j ,
-                    combs_uvprima_local ,
-                    zeromat ;
-                    verbose=verbose ,
-                    precompute_iaj=precompute_iaj,
-                    pcgred_iaj_full=pcgred_iaj_full)
+                if verbose 
+                    println( "Hamiltonian block" )
+                    @show m_u, m_mu, m_i 
+                    @show m_v, m_nu, m_j
+                    println()
+                end
+
+                # block and shell quantum numbers 
+                (N_i, I_i, S_i, r_i ) = m_i
+                (N_j, I_j, S_j, r_j ) = m_j
+                #G_i = (N_i, I_i, S_i)
+                #G_j = (N_j, I_j, S_j)
+                (N_mu,I_mu,S_mu,r_mu) = m_mu
+                (N_nu,I_nu,S_nu,r_nu) = m_nu
+                r_u = m_u[4]
+                r_v = m_v[4]
+
+                # diagonal energy from previous step
+                #   δ_{m_u,m_v} E^[n-1]_(m_i)
+                # (m_u=m_v => m_i=m_j)
+                hblock[r_u,r_v,1] = m_u==m_v ? irrEU[G_i][1][r_i] : 
+                                               zero(ComplexF64)
+                verbose && println( "δ_{m_u,m_v} E^[n-1]_(m_i) = $(hblock[r_u,r_v,1])\n" )
+
+                # chosen partner: orbital 1, max z-spin
+                p = (N,I,S,i,s) = ( G_uv... , 1 , G_uv[3] )
+                verbose && println( "p_u = p_v = $((N,I,S,i,s))" )
+
+                # hopping part
+                verbose && println( "Occupations: (N_nu=$N_nu,N_mu=$N_mu) and (N_i=$N_i,N_j=$N_j)\n" )
+                if (N_nu==(N_mu+1) && N_i==(N_j+1)) 
+
+                    verbose && println( "Hopping possible\n" )
+
+                    # (mu',i'=>u'), (nu',j'=>v') combinations 
+                    combs_uvprima_local::Vector{NTuple{6,NTuple{4,Int64}}} = combs_uvprima[(G_i,G_j)]
+
+                    # hopping element of the hamiltonian matrix
+                    hblock[r_u,r_v,2] = compute_hopelement_redmat( 
+                        m_i  , m_j , 
+                        m_mu , m_nu ,
+                        G_uv , 
+                        cg_o_fullmatint ,
+                        cg_s_fullmatint ,
+                        Csum_o_array ,
+                        Csum_s_array ,
+                        Bsum_o_array ,
+                        Bsum_s_array ,
+                        pcgred_block , 
+                        pcgred_shell ,
+                        multiplets_a_combs ,
+                        hop_symparams ,
+                        U_i , U_j ,
+                        combs_uvprima_local ,
+                        zeromat ;
+                        verbose=verbose ,
+                        precompute_iaj=precompute_iaj,
+                        pcgred_iaj_full=pcgred_iaj_full)
+                end
             end
         end
         
         # [E,hop] --> realE
         R::Int64 = length(mults)
-        #hblock_complete::Matrix{ComplexF64} = zeros(ComplexF64,R,R)
-        hblock_diag::Matrix{ComplexF64} = hblock[:,:,1]
-        hblock_hop::Matrix{ComplexF64} = hblock[:,:,2]
-        hblock_complete::Matrix{ComplexF64} = hblock_diag + hblock_hop + hblock_hop'
-        #for r_v::Int64 in 1:R, 
-        #    r_u::Int64 in 1:R 
-        #    @inbounds hblock_complete[r_u,r_v] = sum(hblock[r_u,r_v,:]) + conj(hblock[r_v,r_u,2])
-        #end
+        hblock_complete::Matrix{ComplexF64} = zeros(ComplexF64,R,R)
+        for r_v::Int64 in 1:R, 
+            r_u::Int64 in 1:R 
+            @inbounds hblock_complete[r_u,r_v] = hblock[r_u,r_v,1] + hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
+        end
 
         # diagonalize
-        hblock_complete .= 0.5.*( hblock_complete .+ hblock_complete' )
+        @. hblock_complete = 0.5*( hblock_complete + hblock_complete' )
         F = eigen( hblock_complete )
         (e,u) = ( real(F.values) , F.vectors )
         e = real.(e)
@@ -891,9 +909,9 @@ function compute_hopelement_redmat(
         r_a_shell = m_a_shell[4]
 
         # early discard
-        ((G_nu,G_a,G_mu) in keys(pcgred_shell))  || continue
         ((I_a,I_j,I_i) in keys(cg_o_fullmatint)) || continue
         ((S_a,S_j,S_i) in keys(cg_s_fullmatint)) || continue
+        ((G_nu,G_a,G_mu) in keys(pcgred_shell))  || continue
 
         verbose && println( "symmetry discard passed\n" )
 

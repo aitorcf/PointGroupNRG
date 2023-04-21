@@ -1,5 +1,6 @@
 using Glob
 
+include( "symmetry.jl" )
 include( "shell.jl" )
 include( "lanczos.jl" )
 
@@ -14,17 +15,17 @@ function get_cg_o_info(
     end
 
     # all needed orbital irreps, their indices and dimensions.
-    oirreps = cg_shortcircuit( cg_o_dir , 
-                               atom_orbital_irreps )::Vector{String}
-    oirreps2indices = Dict( o=>i for (i,o) in enumerate(oirreps) )
+    oirreps::Vector{String} = cg_shortcircuit( cg_o_dir , 
+                                               atom_orbital_irreps )::Vector{String}
+    oirreps2indices::Dict{String,Int64} = Dict( o=>i for (i,o) in enumerate(oirreps) )
     if verbose 
         @show oirreps 
         @show oirreps2indices
     end
 
     # clebsch-gordan matrix
-    cg_o_full = get_cg_o_fulldict( oirreps , cg_o_dir )
-    cg_o_fullmatint = get_cg_o_fullmatint( cg_o_full , oirreps )
+    cg_o_full::Dict{Tuple{String,Int64,String,Int64,String,Int64}} = get_cg_o_fulldict( oirreps , cg_o_dir )
+    cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_o_fullmatint( cg_o_full , oirreps )
     if verbose 
         println( "Orbital CG matrix:" )
         print_dict( cg_o_fullmatint ) 
@@ -47,7 +48,7 @@ function get_cg_o_info(
     #oirreps2dimensions = Dict( "Eg" => 2 ,
     #                           "A1g"=> 1 ,
     #                           "A2g"=> 1 )
-    oindex2dimensions = collect( oirreps2dimensions[I] for I in oirreps )
+    oindex2dimensions::Vector{Int64} = collect( oirreps2dimensions[I] for I in oirreps )
 
     return (oirreps,
             oirreps2indices,
@@ -97,11 +98,11 @@ function get_symstates_basis_multiplets(
     end
     
     # basis 
-    basis = collect(values(symstates))[1].basis 
+    basis::CanonicalBasis = collect(values(symstates))[1].basis 
 
     # multiplets 
-    multiplets = get_multiplets( symstates )
-    multiplets_a = Set( m for m in multiplets if m[1]==1 )
+    multiplets::Set{Tuple{Int64,String,Float64,Int64}} = get_multiplets( symstates )
+    multiplets_a::Set{Tuple{Int64,String,Float64,Int64}} = Set( m for m in multiplets if m[1]==1 )
 
     # printing
     if verbose 
@@ -224,9 +225,9 @@ end
 
 # IMP method
 function get_irrEU_initial( 
-            symstates_0::Dict{T,S} , 
+            symstates_0::SD , 
             H::O ;
-            verbose=false ) where {T<:Tuple,S<:State,O<:Operator}
+            verbose::Bool=false ) where {SD<:AbstractSymstateDict,O<:Operator}
 
     irreps_0 = get_irreps( symstates_0 )
     irrEU_imp = symdiag( irreps_0 , symstates_0 , H )
@@ -299,7 +300,7 @@ function irrEU2int( irrEU , oirreps2indices )
     return Dict( (convert_to_int(G,oirreps2indices),(E,U)) 
                  for (G,(E,U)) in irrEU )
 end
-function multiplets2int( multiplets , oirreps2indices )
+function multiplets2int( multiplets::ClearMultipletSet , oirreps2indices::Dict{String,Int64} )::IntMultipletSet
     return Set( convert_to_int(m,oirreps2indices) for m in multiplets )
 end
 
@@ -319,17 +320,17 @@ function setup_impmultinfo(
             multiplets_block ,
             irrEU ,
             betabar ,
-            oindex2dimensions )
+            oindex2dimensions )::Tuple{Dict{IntMultiplet,Vector{Float64}},Vector{Float64}}
     
     omults = ordered_multiplets(multiplets_block)
     mult2index = Dict( m=>i for (i,m) in 
                        enumerate(omults))
-    mm_i = Dict( 
-                m=>[(i==mult2index[m] ? 1.0 : 0.0)
-                    for i in 1:length(multiplets_block)] 
-                    for m in omults
-               )
-    m_imp = mult_thermo( irrEU ,
+   mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict( 
+        m=>[(i==mult2index[m] ? 1.0 : 0.0)
+            for i in 1:length(multiplets_block)] 
+            for m in omults
+   )
+   m_imp::Vector{Float64} = mult_thermo( irrEU ,
                          betabar ,
                          oindex2dimensions ,
                          mm_i )
@@ -446,17 +447,17 @@ function prepare_pcgred(
     # pcg in reduced matrix format
     multiplets_a = collect(filter( x->x[1]==1 , multiplets_shell ))
     pcgred_atom = get_redmat2( pcg ,
-                              multiplets_shell ,
-                              multiplets_a ,
-                              cg_o_fullmatint ,
-                              cg_s_fullmatint ;
-                              verbose=false )
-    pcgred_shell = get_redmat2( pcg ,
                                multiplets_shell ,
                                multiplets_a ,
                                cg_o_fullmatint ,
                                cg_s_fullmatint ;
                                verbose=false )
+    pcgred_shell = get_redmat2( pcg ,
+                                multiplets_shell ,
+                                multiplets_a ,
+                                cg_o_fullmatint ,
+                                cg_s_fullmatint ;
+                                verbose=false )
     if verbose
         println( "pcgred atom" )
         print_dict( pcgred_atom )
@@ -471,16 +472,16 @@ end
 
 function get_pcgred( 
             basis::CB ,
-            symstates_noint ,
-            multiplets,
-            hiztegia ,
-            oirreps2indices ,
-            cg_o_fullmatint ,
-            cg_s_fullmatint ;
-            verbose=false ) where {CB<:CanonicalBasis}
+            symstates_noint::ClearSymstateDict ,
+            multiplets::IntMultipletSet,
+            hiztegia::D ,
+            oirreps2indices::Dict{String,Int64} ,
+            cg_o_fullmatint::IntCG ,
+            cg_s_fullmatint::IntCG ;
+            verbose::Bool=false )::IntIrrepPCG where {CB<:CanonicalBasis,D<:Dict}
 
     # pcg in dict format
-    pcg = get_pseudoCG( symstates_noint , 
+    pcg::IntQPCG = get_pseudoCG( symstates_noint , 
                         basis , 
                         hiztegia , 
                         oirreps2indices )
@@ -491,8 +492,8 @@ function get_pcgred(
     #end
 
     # pcg in reduced matrix format
-    multiplets_a = collect(filter( x->x[1]==1 , multiplets ))
-    pcgred = get_redmat2( pcg ,
+    multiplets_a::IntMultipletVector = collect(filter( x->x[1]==1 , multiplets ))
+    pcgred::IntIrrepPCG = get_redmat2( pcg ,
                           multiplets ,
                           multiplets_a ,
                           cg_o_fullmatint ,
@@ -738,7 +739,8 @@ function nrg_full(
             spectral::Bool=false ,
             etafac::Float64=1.0 ,
             Nz::Int64=1 ,
-            precompute_iaj::Bool=true ) where {R<:Real}
+            precompute_iaj::Bool=true ,
+            compute_impmults=false ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
         println( "ERROR: calculation must be IMP for computing the spectral function" )
@@ -782,32 +784,14 @@ function nrg_full(
     #   ==========================   #
 
     # orbital symmetry
-    (oirreps,
-     oirreps2indices,
-     oirreps2dimensions,
-     oindex2dimensions,
-     cg_o_fullmatint) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
+    (oirreps::Vector{String},
+     oirreps2indices::Dict{String,Int64},
+     oirreps2dimensions::Dict{String,Int64},
+     oindex2dimensions::Vector{Int64},
+     cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}}) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
 
     # spin symmetry
-    cg_s_fullmatint = get_cg_s_fullmatint( max_spin2 );
-
-    # ------------------------------------ #
-    # improve dictionary lookup for pcgred #
-    # ------------------------------------ #
-    #max_population_atom  = sum( 2*O*oirreps2dimensions[I] for (I,O) in atom_config )
-    #max_population_shell = sum( 2*O*oirreps2dimensions[I] for (I,O) in shell_config )
-    #Ndim = max_population_atom + iterations*max_population_shell
-    #Idim = length(oirreps)
-    #Sdim = max_spin2
-    #maxISdim = maximum((Idim,Sdim))
-    #ISdim = Idim*Sdim
-    #Gdim = Ndim*Idim*Sdim
-    #dimtup = ( ISdim , Sdim , 1 ) 
-    #begin global
-    #    @eval function Base.hash( x::NTuple{3,NTuple{3,Int64}} )
-    #        UInt64(sum( sum.((x[1].*$dimtup,x[2].*$dimtup,x[3].*$dimtup)).*($(Gdim^2),$Gdim,1) ))
-    #    end
-    #end
+    cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_s_fullmatint( max_spin2 );
 
     #   ===========   #
     #%% ATOMIC PART %%#
@@ -824,21 +808,21 @@ function nrg_full(
 
     # default behavior: eta=x->1
     if length(channel_etas)==0 
-        channel_etas = Dict( k=>Function[x->0.5 for i in 1:size(v)[1]]
+        channel_etas = Dict{String,Vector{Function}}( k=>Function[x->0.5 for i in 1:size(v)[1]]
                              for (k,v) in hop_symparams 
         )
     end
     
     # symmetry-wise channel structure 
     #       irrep => [ ϵ , ̄ϵ , ξ ]
-    channel_symstructure = Dict( 
+    channel_symstructure = Dict{String,Vector{Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Float64}}}( 
             k=>[get_hoppings(iterations,L,z,coupling)
                 for coupling in couplings]
             for (k,couplings) in channel_etas
     )
     
     # symmetry-wise etabar 
-    etabar_sym = Dict( 
+    etabar_sym = Dict{String,Vector{Float64}}( 
             k=>[s[4] for s in v]
             for (k,v) in channel_symstructure 
     )
@@ -847,14 +831,14 @@ function nrg_full(
 
     # scale parameter: first asymptotic hopping element 
     #       irrep => [ ̄ϵ[1] ]
-    scale_symparams = Dict( 
+    scale_symparams = Dict{String,Vector{Float64}}( 
             k=>[h[2][1] for h in s] 
             for (k,s) in channel_symstructure 
     )
     @show scale_symparams
     println()
-    scale = maximum([v for (k,V) in scale_symparams for v in V])
-    factor_symparams = Dict( k=>v./scale for (k,v) in scale_symparams )
+    scale::Float64 = maximum([v for (k,V) in scale_symparams for v in V])
+    factor_symparams = Dict{String,Vector{Float64}}( k=>v./scale for (k,v) in scale_symparams )
     @show factor_symparams
     println()
 
@@ -872,7 +856,7 @@ function nrg_full(
     oindices2irreps = Dict( v=>k for (k,v) in oirreps2indices )
     println()
     if discretization=="lanczos"
-        hop_symparams     = Dict( oirreps2indices[k]=>(@.rescale(v,L,z,scale)) for (k,v) in hop_symparams )
+        hop_symparams_int = Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>(@.rescale(v,L,z,scale)) for (k,v) in hop_symparams )
         for (k,v) in hop_symparams 
             for i in 1:size(v)[2]
                 @show hop_symparams[k][:,i]
@@ -885,7 +869,7 @@ function nrg_full(
         epsilon_symparams = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in epsilon_symparams )
         u_symparams       = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in u_symparams )
     else
-        hop_symparams     = Dict( oirreps2indices[k]=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in hop_symparams )
+        hop_symparams_int = Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in hop_symparams )
         epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in epsilon_symparams )
         u_symparams       = Dict( k=>@.rescale(v,L,z,discretization;iterations=iterations,eta=x->1.0) for (k,v) in u_symparams )
     end
@@ -899,8 +883,14 @@ function nrg_full(
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
+    symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
+    multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
     if calculation=="IMP"
-        symstates_atom_noint,basis_atom,multiplets_atom_noint,multiplets_a_atom_noint = 
+        symstates_atom_noint,
+        basis_atom,
+        multiplets_atom_noint,
+        multiplets_a_atom_noint = 
             get_symstates_basis_multiplets( 
                     atom_config,
                     oirreps2dimensions,
@@ -908,34 +898,34 @@ function nrg_full(
                     asym_dir,
                     cg_o_dir ;
                     verbose=true )
-        omults = ordered_multiplets(multiplets_atom_noint)
-        mult2index = Dict( m=>i for (i,m) in 
-                           enumerate(omults))
-        global multiplets_atom = multiplets2int( multiplets_atom_noint , 
-                                                 oirreps2indices )
-        global multiplets_a_atom = multiplets2int( multiplets_a_atom_noint , 
-                                                   oirreps2indices )
+        omults::Vector{Tuple{Int64,String,Float64,Int64}} = ordered_multiplets(multiplets_atom_noint)
+        mult2index::Dict{Tuple{Int64,String,Float64,Int64}} = Dict( m=>i for (i,m) in 
+                                                                    enumerate(omults))
+        multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
+                                                                oirreps2indices )
+        multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
+                                                                  oirreps2indices )
     else 
         multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
-        global multiplets_atom = multiplets2int(multiplets_atom_noint,
+        multiplets_atom = multiplets2int(multiplets_atom_noint,
                                                 oirreps2indices)
-        global multiplets_a_atom = multiplets_atom
+        multiplets_a_atom = multiplets_atom
     end
 
     #   ------------------------ #
     #%% reduced pcg coefficients #
     #   ------------------------ #
-    pcgred_atom = 
+    pcgred_atom::IntIrrepPCG = 
         calculation=="CLEAN" ? 
-        Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}}() :
+        IntIrrepPCG() :
         get_pcgred( basis_atom ,
-                    symstates_atom_noint ,
-                    multiplets_atom ,
+                    symstates_atom_noint::ClearSymstateDict ,
+                    multiplets_atom::IntMultipletSet ,
                     hiztegia ,
-                    oirreps2indices ,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ;
-                    verbose=false )
+                    oirreps2indices::Dict{String,Int64} ,
+                    cg_o_fullmatint::IntCG ,
+                    cg_s_fullmatint::IntCG ;
+                    verbose=false )::IntIrrepPCG
         
     #   ------------- #
     #%% impurity atom #
@@ -943,24 +933,28 @@ function nrg_full(
     if calculation=="IMP"
 
         # operators
-        epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
-        coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+        epsilon::Operator{typeof(basis_atom)} = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+        coulomb::Operator{typeof(basis_atom)} = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
 
         # hamiltonian 
-        global H = epsilon + coulomb 
+        H::Operator{typeof(basis_atom)} = epsilon + coulomb 
 
     end
 
     #   -----   #
     #%% irreu %%#
     #   -----   #
+    irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
     if calculation=="IMP"
-        global irrEU = get_irrEU_initial(symstates_atom_noint,H;verbose=true)
+        irrEU_clear = 
+            get_irrEU_initial(symstates_atom_noint,H;verbose=true)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
     elseif calculation=="CLEAN" 
-        global irrEU = get_irrEU_initial(identityrep,oirreps2indices)
+        irrEU_clear = 
+            get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
     end
-    print_spectrum( irrEU )
-    irrEU = irrEU2int( irrEU , oirreps2indices ) 
+    print_spectrum( irrEU_clear )
+    irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
+        irrEU2int( irrEU_clear , oirreps2indices ) 
 
 
     #   ==================   #
@@ -975,10 +969,10 @@ function nrg_full(
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
-    symstates_shell_noint,
+    symstates_shell_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State},
     basis_shell,
-    multiplets_shell_noint,
-    multiplets_a_shell_noint = 
+    multiplets_shell_noint::Set{Tuple{Int64,String,Float64,Int64}},
+    multiplets_a_shell_noint::Set{Tuple{Int64,String,Float64,Int64}} = 
         get_symstates_basis_multiplets( 
                 shell_config,
                 oirreps2dimensions,
@@ -986,15 +980,15 @@ function nrg_full(
                 asym_dir,
                 cg_o_dir ;
                 verbose=true )
-    multiplets_shell = multiplets2int( multiplets_shell_noint , 
+    multiplets_shell::Set{NTuple{4,Int64}} = multiplets2int( multiplets_shell_noint , 
                                        oirreps2indices )
-    multiplets_a_shell = multiplets2int( multiplets_a_shell_noint , 
+    multiplets_a_shell::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_shell_noint , 
                                          oirreps2indices )
 
     #   ------------------------ #
     #%% reduced pcg coefficients #
     #   ------------------------ #
-    pcgred_shell = get_pcgred( 
+    pcgred_shell::Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}} = get_pcgred( 
                 basis_shell ,
                 symstates_shell_noint ,
                 multiplets_shell ,
@@ -1017,14 +1011,17 @@ function nrg_full(
     #   ------------------------   #
     #%% impurity quantum numbers %%#
     #   ------------------------   #
-    mm_i,m_imp = setup_impmultinfo( 
-                    multiplets_atom ,
-                    irrEU ,
-                    betabar ,
-                    oindex2dimensions )
-    println( "IMPURITY COMPOSITION" )
-    @show m_imp
-    println()
+    mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict()
+    if compute_impmults
+        mm_i,m_imp::Vector{Float64} = 
+            setup_impmultinfo( multiplets_atom ,
+                               irrEU ,
+                               betabar ,
+                               oindex2dimensions )
+        println( "IMPURITY COMPOSITION" )
+        @show m_imp
+        println()
+    end
 
     #   ------------------------------ #
     #%% precompute clebsch-gordan sums #
@@ -1093,7 +1090,7 @@ function nrg_full(
                     multiplets_atom , 
                     multiplets_shell ,
                     irrEU , 
-                    hop_symparams , 
+                    hop_symparams_int , 
                     cg_o_fullmatint , 
                     cg_s_fullmatint ,
                     Csum_o_array ,
@@ -1115,12 +1112,18 @@ function nrg_full(
     #   --------------------------- #
     #%% update impurity information # 
     #   --------------------------- #
-    mm_i,m_imp = update_impmultinfo( 
-                    mm_i ,
-                    irrEU ,
-                    betabar ,
-                    oindex2dimensions ,
-                    combinations_uprima )
+    if compute_impmults
+        mm_i,m_imp = update_impmultinfo( 
+                        mm_i ,
+                        irrEU ,
+                        betabar ,
+                        oindex2dimensions ,
+                        combinations_uprima )
+    end
+
+    #   --------------------------- #
+    #%% update spectral information # 
+    #   --------------------------- #
     if spectral 
         global M, AA = update_redmat_AA_CGsummethod(
                 M,
@@ -1150,7 +1153,7 @@ function nrg_full(
                    cutoff_type,
                    cutoff_magnitude,
                    L,
-                   hop_symparams,
+                   hop_symparams_int,
                    irrEU,
                    multiplets_shell,
                    cg_o_fullmatint,
@@ -1164,8 +1167,7 @@ function nrg_full(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
-                   xi_symparams ,
-                   mm_i ;
+                   xi_symparams ;
                    mine=mine ,
                    distributed=distributed ,
                    method=method ,
@@ -1173,13 +1175,15 @@ function nrg_full(
                    discretization=discretization ,
                    verbose=false ,
                    Nz=Nz ,
-                   precompute_iaj=precompute_iaj )
+                   precompute_iaj=precompute_iaj ,
+                   compute_impmults=compute_impmults ,
+                   mm_i=mm_i )
     else 
         nrg = NRG( iterations,
                    cutoff_type,
                    cutoff_magnitude,
                    L,
-                   hop_symparams,
+                   hop_symparams_int,
                    irrEU,
                    multiplets_shell,
                    cg_o_fullmatint,
@@ -1193,8 +1197,7 @@ function nrg_full(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
-                   xi_symparams ,
-                   mm_i ;
+                   xi_symparams ;
                    mine=mine ,
                    distributed=distributed ,
                    method=method ,
@@ -1209,7 +1212,9 @@ function nrg_full(
                    Karray_spin=Karray_spin ,
                    multiplets_atomhop=collect(multiplets_a_atom) ,
                    alpha=Float64(alpha) ,
-                   precompute_iaj=precompute_iaj )
+                   precompute_iaj=precompute_iaj ,
+                   compute_impmults=compute_impmults ,
+                   mm_i=mm_i )
     end
 
     println()
@@ -1218,9 +1223,9 @@ function nrg_full(
     #%% PERFORMANCE %%#
     #   ===========   #
 
-    println( "===========" )
-    println( "PERFORMANCE" )
-    println( "===========" )
+    println( "===========================" )
+    println( "DIAGONALIZATION PERFORMANCE" )
+    println( "===========================" )
     print_performance_onestep(nrg)
     println()
 
@@ -1230,27 +1235,34 @@ function nrg_full(
     
     # thermo dir 
     isdir("thermodata") || mkdir("thermodata")
+
     # impurity properties 
-    if calculation=="IMP" 
-        write_impurity_info( nrg , omults , mult2index , label , z )
-    end
-
-    # thermodata for this given value of z
-    write_thermodata_onez( nrg , calculation , label , z )
-
-    # thermo diff
-    if calculation=="IMP"
-        if length(glob("thermodata/thermo_clean_$(label)_z$z.dat"))!==0 
-            write_thermodiff( label , z )
+    if compute_impmults
+        if calculation=="IMP" 
+            write_impurity_info( nrg , omults , mult2index , label , z )
         end
     end
 
+    #thermodata 
+    if !spectral
+
+        # thermodata for this given value of z
+        write_thermodata_onez( nrg , calculation , label , z )
+
+        # thermo diff
+        if calculation=="IMP"
+            if length(glob("thermodata/thermo_clean_$(label)_z$z.dat"))!==0 
+                write_thermodiff( label , z )
+            end
+        end
+
     # spectral
-    if spectral
+    elseif spectral
         isdir("spectral") || mkdir("spectral")
         open( "spectral/spectral.dat" , write=true ) do f
             writedlm( f , nrg.specfunc )
         end
+
     end
 
 end

@@ -134,7 +134,7 @@ function get_hoppings( N::Int64 ,
                        L::Float64 , 
                        z::Float64 , 
                        eta::Function ;
-                       scheme="standard" )
+                       scheme="standard" )::Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Float64}
 
     # N=40 is sufficient before asympotic
     M = minimum((N,20))
