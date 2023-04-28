@@ -738,15 +738,16 @@ function nrg_full(
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             etafac::Float64=1.0 ,
+            orbitalresolved::Bool=false,
             Nz::Int64=1 ,
             precompute_iaj::Bool=true ,
             compute_impmults=false ) where {R<:Real}
 
     if (spectral && calculation=="CLEAN") 
-        println( "ERROR: calculation must be IMP for computing the spectral function" )
+        error( "Calculation must be IMP for computing the spectral function" )
         return nothing 
     end
-    
+    @show z 
     # orbital irreps present in the atom
     atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
 
@@ -806,7 +807,7 @@ function nrg_full(
     #%% discretization %%#
     #   --------------   #
 
-    # default behavior: eta=x->1
+    # default behavior: eta=x->1/2
     if length(channel_etas)==0 
         channel_etas = Dict{String,Vector{Function}}( k=>Function[x->0.5 for i in 1:size(v)[1]]
                              for (k,v) in hop_symparams 
@@ -1046,31 +1047,43 @@ function nrg_full(
     #   -------- #
     if spectral 
 
-        global M = pcgred_atom 
+        M = pcgred_atom 
         part0 = get_partition0(irrEU,oindex2dimensions)
-        A = redM2A( M,
+        if orbitalresolved 
+            A = redM2A_orbitalresolved( 
+                    M,
                     collect(multiplets_a_atom),
                     cg_o_fullmatint,
                     cg_s_fullmatint,
                     irrEU,
-                    part0)
-        global AA = [A]
+                    part0
+            )
+        else
+            A = redM2A( 
+                    M,
+                    collect(multiplets_a_atom),
+                    cg_o_fullmatint,
+                    cg_s_fullmatint,
+                    irrEU,
+                    part0
+            )
+        end
+        AA = [A]
 
         Mo_tot = length(oirreps2indices) 
         II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_atom )]))
         Ms_atomspin = maximum([m[3] for m in multiplets_atom])
         Ms_shellspin = maximum([m[3] for m in multiplets_shell]) 
-        Ms_tot = maximum((Ms_atomspin,Ms_shellspin))
-        global Karray_orbital,Karray_spin = 
+        Ms_tot = maximum((max_spin2,Ms_atomspin,Ms_shellspin))
+        Karray_orbital,Karray_spin = 
                     compute_Ksum_arrays(
                         oindex2dimensions,
                         cg_o_fullmatint,
                         cg_s_fullmatint,
                         Mo_tot ,
                         II_a ,
-                        max_spin2 ,
                         Ms_tot )
-        global alpha = compute_ebar0_z( z , L ; discretization=discretization )
+        alpha = compute_ebar0_z( z , L ; discretization=discretization )
     end
         
     #   ---------------   #
@@ -1125,18 +1138,33 @@ function nrg_full(
     #%% update spectral information # 
     #   --------------------------- #
     if spectral 
-        global M, AA = update_redmat_AA_CGsummethod(
-                M,
-                irrEU ,
-                combinations_uprima ,
-                collect(multiplets_a_atom) ,
-                cg_o_fullmatint ,
-                cg_s_fullmatint ,
-                Karray_orbital ,
-                Karray_spin ,
-                AA ,
-                oindex2dimensions ;
-                verbose=false )
+        if orbitalresolved 
+            M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+                    M,
+                    irrEU ,
+                    combinations_uprima ,
+                    collect(multiplets_a_atom) ,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ,
+                    Karray_orbital ,
+                    Karray_spin ,
+                    AA ,
+                    oindex2dimensions ;
+                    verbose=false )
+        else
+            M, AA = update_redmat_AA_CGsummethod(
+                    M,
+                    irrEU ,
+                    combinations_uprima ,
+                    collect(multiplets_a_atom) ,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ,
+                    Karray_orbital ,
+                    Karray_spin ,
+                    AA ,
+                    oindex2dimensions ;
+                    verbose=false )
+        end
     end
 
 
@@ -1192,7 +1220,7 @@ function nrg_full(
                    Csum_s_array ,
                    Bsum_o_array ,
                    Bsum_s_array ,
-                   pcgred_shell,
+                   pcgred_shell ,
                    collect(multiplets_a_shell), 
                    combinations_uprima,
                    betabar,
@@ -1205,9 +1233,10 @@ function nrg_full(
                    discretization=discretization ,
                    verbose=false ,
                    spectral=true ,
+                   etafac=etafac ,
+                   orbitalresolved=orbitalresolved ,
                    M=M,
                    AA=AA , 
-                   etafac=etafac ,
                    Karray_orbital=Karray_orbital ,
                    Karray_spin=Karray_spin ,
                    multiplets_atomhop=collect(multiplets_a_atom) ,
@@ -1258,9 +1287,23 @@ function nrg_full(
 
     # spectral
     elseif spectral
+
         isdir("spectral") || mkdir("spectral")
-        open( "spectral/spectral.dat" , write=true ) do f
-            writedlm( f , nrg.specfunc )
+
+        if orbitalresolved
+
+            for (i,m) in enumerate(multiplets_a_atom)
+                open( "spectral/spectral_$(label)_o$(i)_z$(z).dat" , write=true ) do f
+                    writedlm( f , nrg.specfunc )
+                end
+            end
+
+        else
+
+            open( "spectral/spectral_$(label)_z$(z).dat" , write=true ) do f
+                writedlm( f , nrg.specfunc )
+            end
+
         end
 
     end

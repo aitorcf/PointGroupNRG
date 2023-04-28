@@ -940,7 +940,30 @@ function compute_transformedmat!(
 
     c::ComplexF64 = zero(ComplexF64)
 
-    @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
+    this::Matrix{ComplexF64}        = zeros(ComplexF64,R_u,R_v)
+    transformed::Matrix{ComplexF64} = zeros(ComplexF64,R_u,R_v)
+    @inbounds for r_a in 1:R_a 
+
+        this        .= thisredmat[:,r_a,:]
+        transformed .= zero(ComplexF64)
+
+        @inbounds for r_v  in 1:R_v,
+                      r_u  in 1:R_u
+
+            c = zero(c)
+
+            @inbounds for r_vp in 1:R_v,
+                          r_up in 1:R_u
+
+                c += U_u[r_up,r_u]*U_v[r_vp,r_v]*this[r_up,r_vp]
+            end
+
+            transformed[r_u,r_v] = c
+
+        end
+
+        transformedmat[:,r_a,:] .= transformed
+    end
 end
 
 function compute_spectral_function( 
@@ -1526,8 +1549,8 @@ function get_new_blockredmat_CGsummethod3(
             end
 
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
-            @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
-            #compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+            #@einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
+            compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
 
             # insert result in final dict
             uvredmat[(G_u,G_a,G_v)] = transformedmat
