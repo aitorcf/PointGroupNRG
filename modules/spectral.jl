@@ -634,7 +634,7 @@ function redM2A(
     end
 
     # m => ( E_m , [ weight- , weight+ ] )
-    A::Dict{ NTuple{4,Int64} , Tuple{Float64,Vector{Float64}} } = 
+    A::Dict{ IntMultiplet , Tuple{Float64,Vector{Float64}} } = 
         Dict( (G...,r)=>(E[r],[0.0,0.0]) 
               for (G,(E,U)) in irrEU 
               for r in 1:length(E) )
@@ -707,10 +707,116 @@ function redM2A(
             if !psector
 
                 A[m_u][2] .+= [w/partition,0.0]
-                
+
             elseif psector
 
                 A[m_v][2] .+= [0.0,w/partition]
+
+            end
+        end
+    end
+
+    return A
+end
+
+# Compute orbital resolved A
+function redM2A_orbitalresolved( 
+        Mred::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+        multiplets_a::Vector{NTuple{4,Int64}} ,
+        cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+        partition::Int64 ;
+        verbose=false )
+
+    if verbose 
+        println( "~~~~~~~~~~~~~~~~~~" )
+        println( "COMPUTING A MATRIX" )
+        println( "~~~~~~~~~~~~~~~~~~" )
+        println()
+    end
+
+    Norbitals = size(collect(values(Mred))[1])[2]
+
+    # orbital
+    A::Dict{ NTuple{2,IntMultiplet} , Tuple{Float64,Vector{Float64}} } = Dict( 
+        ((G...,r),m_a)=>(E[r],[0.0,0.0])
+        for m_a in multiplets_a
+        for (G,(E,U)) in irrEU
+        for r in 1:length(E) 
+    )
+    # ground multiplet 
+    #G0::NTuple{3,Int64} = first(collect( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) ))
+    GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) )
+
+    if verbose 
+        println( "ground irreps: $GG0")
+        println()
+    end
+
+    # iterate over irreducible matrices
+    if verbose 
+        println( "iterating over reduced matrix..." )
+        println()
+    end
+    for ((G_u,G_a,G_v),redmat) in Mred 
+
+        # sector: negative=false, positive=true
+        if ((G_u in GG0) && !(G_v in GG0))
+            psector = true
+        elseif ((G_v in GG0) && !(G_u in GG0))
+            psector = false 
+        else
+            continue
+        end
+
+        if verbose 
+            Gcomb = (G_u,G_a,G_v)
+            sector = psector ? "positive" : "negative"
+            println( "$Gcomb ==> $sector sector" )
+            println()
+        end
+
+        # irrep quantum numbers
+        (N_u,I_u,S_u) = G_u 
+        (N_a,I_a,S_a) = G_a
+        (N_v,I_v,S_v) = G_v
+
+        ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
+        ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
+        
+        # clebsch-gordan contribution 
+        cg = sum(abs2.(cg_o_fullmatint[(I_a,I_v,I_u)]))*
+             sum(abs2.(cg_s_fullmatint[(S_a,S_v,S_u)]))
+
+        # iterate over multiplets in irrep combination
+        for rrr in CartesianIndices(redmat)
+
+            # outer multiplicities
+            (r_u,r_a,r_v) = Tuple(rrr)
+
+            # exclude non-contributing elements
+            ((!psector && r_v==1) || ( psector && r_u==1)) || continue
+
+            # multiplets
+            m_u = (G_u...,r_u)
+            m_a = (G_a...,r_a)
+            m_v = (G_v...,r_v)
+
+            # coefficient from reduced matrix element
+            redmatel = abs2(redmat[rrr])
+
+            # total contribution 
+            w = cg*redmatel
+
+            # insert in A
+            if !psector
+
+                A[m_u,m_a][2] .+= [w/partition,0.0]
+                
+            elseif psector
+
+                A[m_v,m_a][2] .+= [0.0,w/partition]
                 
             end
         end
@@ -955,7 +1061,8 @@ function compute_transformedmat!(
             @inbounds for r_vp in 1:R_v,
                           r_up in 1:R_u
 
-                c += U_u[r_up,r_u]*U_v[r_vp,r_v]*this[r_up,r_vp]
+                c += conj(U_u[r_up,r_u]) * U_v[r_vp,r_v] * this[r_up,r_vp]
+
             end
 
             transformed[r_u,r_v] = c
@@ -1023,6 +1130,60 @@ function compute_spectral_function(
 
 end
 
+function compute_spectral_function_orbitalresolved(
+             AA ,
+             L ,
+             iterations ,
+             alpha ,
+             etafac ;
+             widthfac::Float64=2.0 )
+
+     omegas_log = [ sign*L^(-(x-2)/2.0) for sign in [-1.0,1.0]
+                                    for x in 2:0.1:(iterations-10)]
+     omegas_lin = [ sign*x for sign in [-1,1] for x in 0.001:0.001:1]
+     omegas = vcat( omegas_log , omegas_lin )
+     sort!( omegas )
+
+     multiplets_a = Set([ k[2] for k in keys(AA[1]) ])
+     spectral = Dict( m_a=> [0.0 for o in omegas] for m_a in multiplets_a )
+
+     for (i,oo) in enumerate(omegas)
+
+         o = -oo
+
+         for N in 3:2:iterations
+
+             omegaN = Float64(alpha * L^(-(N-2)/2.0) )
+             emin    = omegaN/sqrt(L)
+             emax    = omegaN*sqrt(L) #widthfac
+             local A = AA[N+1]
+             eta     = etafac*omegaN
+
+             # negative interval
+             if is_in_interval( o , -emax , -emin )
+                 for ((m,m_a),(e,coeffs)) in A
+                     Δ = o+e*omegaN
+                     spectral[m_a][i] += coeffs[1] * P(Δ,eta)
+                 end
+             end
+
+             #positive interval
+             if is_in_interval( o , emin , emax )
+                 for ((m,m_a),(e,coeffs)) in A
+                     Δ = (o-e*omegaN)
+                     spectral[m_a][i] += coeffs[2]* P(Δ,eta)
+                 end
+             end
+         end
+     end
+
+     out = Dict( m_a => [omegas spectralo.*(2/integ(omegas,spectralo))] for (m_a,spectralo) in spectral )
+     @show out
+
+     return Dict( m_a => [omegas spectralo.*(2/integ(omegas,spectralo))] for (m_a,spectralo) in spectral )
+
+ end
+
 function integ( X , Y ) 
 
     integrala = 0.0
@@ -1048,7 +1209,8 @@ function setup_redmat_AA(
             multiplets_operator ,
             cg_o_fullmatint ,
             cg_s_fullmatint ,
-            irrEU ;
+            irrEU ,
+            oindex2dimensions ;
             verbose=false )
 
     # reduced matrix
@@ -1095,6 +1257,62 @@ function setup_redmat_AA(
     return (Mred,AA) 
 
 end
+function setup_redmat_AA_orbitalresolved(
+            matdict ,
+            multiplets_atom ,
+            multiplets_operator ,
+            cg_o_fullmatint ,
+            cg_s_fullmatint ,
+            irrEU ;
+            verbose=false )
+
+    # reduced matrix
+    Mred = get_redmat3( matdict ,
+                        multiplets_atom ,
+                        multiplets_operator ,
+                        cg_o_fullmatint ,
+                        cg_s_fullmatint ;
+                        verbose=verbose)
+    if verbose
+        println( "M reduced" )
+        print_dict( Mred )
+        println()
+    end
+
+    # spectral thermo
+    G0 = [G for (G,(E,U)) in irrEU if E[1]==0][1]
+    I0,S0 = G0[2:3]
+    D0s = S0+1
+    D0o = oindex2dimensions[I0]
+    part0 = D0o*D0s
+    if verbose
+        @show part0
+        println()
+    end
+
+    # normalize irrEU just in case
+    irrEU = normalize_irrEU( irrEU )
+
+    # spectral info
+    A = redM2A_orbitalresolved( 
+                Mred,
+                collect(multiplets_operator),
+                cg_o_fullmatint,
+                cg_s_fullmatint,
+                irrEU,
+                part0;
+                verbose=verbose
+    )
+    if verbose
+        @show A
+        println()
+    end
+    AA = [A]
+
+    return (Mred,AA)
+
+end
+
 function get_partition0( irrEU , 
                          oindex2dimensions ;
                          verbose=false )
@@ -1195,6 +1413,62 @@ function update_redmat_AA_CGsummethod(
                 part0;
                 verbose=false) 
          )
+
+    if verbose 
+        println( "AA" )
+        print_dict( AA )
+    end
+
+    return ( Mred , AA )
+
+end
+function update_redmat_AA_CGsummethod_orbitalresolved(
+            Mred::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            combinations_uprima::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} },
+            multiplets_a::Vector{NTuple{4,Int64}} ,
+            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+            cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+            Karray_orbital::Array{ComplexF64,6} , 
+            Karray_spin::Array{ComplexF64,6} , 
+            AA::Vector{Dict{NTuple{2,IntMultiplet},Tuple{Float64,Vector{Float64}}}} ,
+            oindex2dimensions::Vector{Int64} ;
+            verbose=false )
+
+    Mred = get_new_blockredmat_CGsummethod3( 
+                Mred,
+                collect(multiplets_a),
+                combinations_uprima ,
+                irrEU ,
+                Karray_orbital ,
+                Karray_spin ,
+                cg_o_fullmatint ,
+                cg_s_fullmatint )
+
+
+    if verbose 
+        println( "M" )
+        print_dict( Mred ) 
+    end
+
+    # spectral thermo 
+    G0 = [G for (G,(E,U)) in irrEU if E[1]==0][1]
+    I0,S0 = G0[2:3]
+    D0s = S0+1
+    D0o = oindex2dimensions[I0]
+    part0 = D0o*D0s
+
+    push!(
+        AA,
+        redM2A_orbitalresolved(
+                Mred,
+                collect(multiplets_a),
+                cg_o_fullmatint,
+                cg_s_fullmatint,
+                irrEU,
+                part0;
+                verbose=false) 
+    )
 
     if verbose 
         println( "AA" )
@@ -1480,7 +1754,7 @@ function get_new_blockredmat_CGsummethod3(
     
     # iterate over irrep combinations G_u and G_v
     # in the new step
-    @inbounds for (G_u::NTuple{3,Int64},ucombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima,
+    for (G_u::NTuple{3,Int64},ucombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima,
                   (G_v::NTuple{3,Int64},vcombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima
 
         # irrep quantum numbers
@@ -1491,15 +1765,15 @@ function get_new_blockredmat_CGsummethod3(
         N_u==(N_v+1) || continue
         
         # diagonalization matrices 
-        U_u = conj.(irrEU[G_u][2])::Matrix{ComplexF64}  
-        U_v=        irrEU[G_v][2]::Matrix{ComplexF64} 
+        U_u = irrEU[G_u][2]::Matrix{ComplexF64}  
+        U_v=  irrEU[G_v][2]::Matrix{ComplexF64} 
 
         # irrep multiplicities
         R_u = length(ucombs)
         R_v = length(vcombs)
 
         # iterate over hopping irreps G_a
-        @inbounds for (G_a::NTuple{3,Int64},R_a::Int64) in irrmult_a
+        for (G_a::NTuple{3,Int64},R_a::Int64) in irrmult_a
 
             # irrep quantum numbers
             (N_a,I_a,S_a) = G_a
@@ -1517,7 +1791,7 @@ function get_new_blockredmat_CGsummethod3(
             # here:
             #   u = u'
             #   v = v'
-            @inbounds for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in ucombs,
+            for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in ucombs,
                           (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in vcombs
 
                 # for block matrix elements, same shell states
@@ -1536,21 +1810,30 @@ function get_new_blockredmat_CGsummethod3(
                 ((G_i,G_a,G_j) in keys(ijredmat)) || continue
 
                 # clebsch-gordan sum coefficient
-                K::ComplexF64 = Karray_orbital[I_u,I_v,I_a,I_mu,I_i,I_j]*
-                                Karray_spin[((S_u,S_v,S_a,S_mu,S_i,S_j).+1)...]
+                @inbounds Ko = Karray_orbital[I_u,I_v,I_a,I_mu,I_i,I_j]
+                @inbounds Ks = Karray_spin[((S_u,S_v,S_a,S_mu,S_i,S_j).+1)...]
+                K::ComplexF64 = Ko * Ks
                 K==zero(K) && continue
+                isnan(K) && error( "NaN in K" )
 
                 # sign factor
                 sign = ComplexF64((-1)^N_mu)
 
                 # reduced matrix sector
                 ijsector = @view ijredmat[(G_i,G_a,G_j)][r_i,:,r_j]
-                thisredmat[r_u,:,r_v] .= sign*K*ijsector[:]
+                any(isnan.(ijsector)) && error( "NaN in ijsector" )
+                @. thisredmat[r_u,:,r_v] = sign*K*ijsector#[:]
             end
 
+            any(isnan.(thisredmat)) && error( "NaN in thisredmat" )
+
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
-            #@einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
+            #for r_a in 1:R_a
+            #    @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
+            #end
             compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+
+            any(isnan.(transformedmat)) && error( "NaN in transformedmat" )
 
             # insert result in final dict
             uvredmat[(G_u,G_a,G_v)] = transformedmat
