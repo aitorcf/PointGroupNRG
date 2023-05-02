@@ -1,11 +1,9 @@
-using Einsum
-
 include( "shell.jl" ) 
 include( "thermo.jl" )
 include( "reddiag.jl" )
 
 function is_in_interval( omega , emin , emax ) 
-    return (omega>emin && omega<emax)
+    return (omega>=emin && omega<=emax)
 end
 
 # initial M matrix
@@ -1698,10 +1696,10 @@ function get_new_blockredmat_CGsummethod2(
         U_u = irrEU[G_u][2]
         U_v = irrEU[G_v][2]
 
-        #compute_transformedmat!( mat , U_u , U_v , uav[G_u,G_a,G_v] )
+        compute_transformedmat!( mat , U_u , U_v , uav[G_u,G_a,G_v] )
 
         nondiagmat = uav[(G_u,G_a,G_v)]
-        @einsum diagmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*nondiagmat[r_up,r_a,r_vp]
+        #@einsum diagmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*nondiagmat[r_up,r_a,r_vp]
 
         #@inbounds for r_u in 1:R_u,
         #              r_a in 1:R_a,
