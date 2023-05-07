@@ -85,7 +85,7 @@ function get_symstates_basis_multiplets(
                                     onemult_hilbert ,
                                     hiztegia ,
                                     identityrep ,
-                                    "$(asym_dir)$(oirrep)_julia/" )
+                                    "$(asym_dir)/$(oirrep)_julia/" )
             push!( separate_symstates , onemult_symstates )
         end
     end
@@ -733,10 +733,10 @@ function nrg_full(
             discretization="standard" ,
             distworkers::Int64=0 ,
             method::String="" ,
-            minmult::Int64=0 ,
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
+            spectral_method::String="sakai1989",
             etafac::Float64=1.0 ,
             orbitalresolved::Bool=false,
             Nz::Int64=1 ,
@@ -1075,6 +1075,7 @@ function nrg_full(
         Ms_atomspin = maximum([m[3] for m in multiplets_atom])
         Ms_shellspin = maximum([m[3] for m in multiplets_shell]) 
         Ms_tot = maximum((max_spin2,Ms_atomspin,Ms_shellspin))
+        Ms_shell = maximum((Ms_atomspin,Ms_shellspin))
         Karray_orbital,Karray_spin = 
                     compute_Ksum_arrays(
                         oindex2dimensions,
@@ -1082,7 +1083,8 @@ function nrg_full(
                         cg_s_fullmatint,
                         Mo_tot ,
                         II_a ,
-                        Ms_tot )
+                        Ms_tot ,
+                        Ms_shell)
         alpha = compute_ebar0_z( z , L ; discretization=discretization )
     end
         
@@ -1233,6 +1235,7 @@ function nrg_full(
                    discretization=discretization ,
                    verbose=false ,
                    spectral=true ,
+                   spectral_method=spectral_method,
                    etafac=etafac ,
                    orbitalresolved=orbitalresolved ,
                    M=M,
@@ -1311,10 +1314,11 @@ function nrg_full(
 end
 
 function multiplets_2part( 
-            cg_o_dir ,
-            asym_dir ,
-            atom_config ,
-            identityrep )
+            cg_o_dir::String ,
+            multiplet_dir::String ,
+            atom_config::Dict{String,Int64} ,
+            identityrep::String ;
+            max_spin2::Int64=10 )
 
     atom_orbital_irreps = collect(keys(atom_config))
 
@@ -1334,7 +1338,7 @@ function multiplets_2part(
                 atom_config,
                 oirreps2dimensions,
                 identityrep,
-                asym_dir,
+                multiplet_dir,
                 cg_o_dir ;
                 verbose=true )
     multiplets_atom_twopart = filter( 
@@ -1352,36 +1356,19 @@ function multiplets_2part(
 end
 
 function atomic_spectrum( 
-            label::String ,
-            z::Float64 ,
             cg_o_dir::String ,
             asym_dir::String ,
             atom_config::Dict{String,Int64} ,
             identityrep::String ,
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ;
-            max_spin2::Int64=10 ,
-            distributed::Bool=false ,
-            method::String="distfor" ,
-            calculation::String="IMP" )
+            max_spin2::Int64=10 )
+
+    calculation = "IMP"
 
     # orbital irreps present in the atom
     atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
 
-    println( "====================" )
-    println( "SETUP AND PARAMETERS" )
-    println( "====================" )
-    @show distributed 
-    @show z
-    distributed && @show distworkers
-    distributed && @show method
-    println( "OCCUPATION ENERGIES" )
-    print_dict( epsilon_symparams ) 
-    println( "COULOMB PARAMETERS" )
-    print_dict( u_symparams ) 
-    println()
-    
-            
     # hiztegia
     hiztegia = Dict{String,Any}( o=>o for (o,_) in atom_config )
     merge!( hiztegia , Dict( "u"=>0.5, "d"=>-0.5 ) )
@@ -1391,15 +1378,14 @@ function atomic_spectrum(
     #   ==========================   #
 
     # orbital symmetry
-    (oirreps,
-     oirreps2indices,
-     oirreps2dimensions,
-     oindex2dimensions,
-     cg_o_fullmatint) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
+    (oirreps::Vector{String},
+     oirreps2indices::Dict{String,Int64},
+     oirreps2dimensions::Dict{String,Int64},
+     oindex2dimensions::Vector{Int64},
+     cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}}) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
 
     # spin symmetry
-    cg_s_fullmatint = get_cg_s_fullmatint( max_spin2 );
-
+    cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_s_fullmatint( max_spin2 );
 
     #   ===========   #
     #%% ATOMIC PART %%#
@@ -1409,22 +1395,19 @@ function atomic_spectrum(
     println( "--- ATOMIC PART ---" )
     println( ":::::::::::::::::::" )
     println()
-    
-    #   ------------------- #
-    #%% rescaled parameters #
-    #   ------------------- #
-    epsilon_symparams = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in epsilon_symparams )
-    u_symparams       = Dict( k=>@.rescale(v,L,z,discretization) for (k,v) in u_symparams )
-    println( "RESCALED PARAMETERS FOR H0" )
-    @show epsilon_symparams 
-    @show u_symparams 
-    println()
+
 
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
+    symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
+    multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
     if calculation=="IMP"
-        symstates_atom_noint,basis_atom,multiplets_atom_noint,multiplets_a_atom_noint = 
+        symstates_atom_noint,
+        basis_atom,
+        multiplets_atom_noint,
+        multiplets_a_atom_noint = 
             get_symstates_basis_multiplets( 
                     atom_config,
                     oirreps2dimensions,
@@ -1432,29 +1415,34 @@ function atomic_spectrum(
                     asym_dir,
                     cg_o_dir ;
                     verbose=true )
-        omults = ordered_multiplets(multiplets_atom_noint)
-        mult2index = Dict( m=>i for (i,m) in 
-                           enumerate(omults))
-        global multiplets_atom = multiplets2int( multiplets_atom_noint , 
-                                                 oirreps2indices )
-        global multiplets_a_atom = multiplets2int( multiplets_a_atom_noint , 
-                                                   oirreps2indices )
+        omults::Vector{Tuple{Int64,String,Float64,Int64}} = ordered_multiplets(multiplets_atom_noint)
+        mult2index::Dict{Tuple{Int64,String,Float64,Int64}} = Dict( m=>i for (i,m) in 
+                                                                    enumerate(omults))
+        multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
+                                                                oirreps2indices )
+        multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
+                                                                  oirreps2indices )
+    else 
+        multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
+        multiplets_atom = multiplets2int(multiplets_atom_noint,
+                                                oirreps2indices)
+        multiplets_a_atom = multiplets_atom
     end
 
     #   ------------------------ #
     #%% reduced pcg coefficients #
     #   ------------------------ #
-    pcgred_atom = 
+    pcgred_atom::IntIrrepPCG = 
         calculation=="CLEAN" ? 
-        Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}}() :
+        IntIrrepPCG() :
         get_pcgred( basis_atom ,
-                    symstates_atom_noint ,
-                    multiplets_atom ,
+                    symstates_atom_noint::ClearSymstateDict ,
+                    multiplets_atom::IntMultipletSet ,
                     hiztegia ,
-                    oirreps2indices ,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ;
-                    verbose=false )
+                    oirreps2indices::Dict{String,Int64} ,
+                    cg_o_fullmatint::IntCG ,
+                    cg_s_fullmatint::IntCG ;
+                    verbose=false )::IntIrrepPCG
         
     #   ------------- #
     #%% impurity atom #
@@ -1462,22 +1450,25 @@ function atomic_spectrum(
     if calculation=="IMP"
 
         # operators
-        epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
-        coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+        epsilon::Operator{typeof(basis_atom)} = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+        coulomb::Operator{typeof(basis_atom)} = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
 
         # hamiltonian 
-        global H = epsilon + coulomb 
+        H::Operator{typeof(basis_atom)} = epsilon + coulomb 
 
     end
 
     #   -----   #
     #%% irreu %%#
     #   -----   #
+    irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
     if calculation=="IMP"
-        global irrEU = get_irrEU_initial(symstates_atom_noint,H;verbose=true)
+        irrEU_clear = 
+            get_irrEU_initial(symstates_atom_noint,H;verbose=true)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
     elseif calculation=="CLEAN" 
-        global irrEU = get_irrEU_initial(identityrep,oirreps2indices)
+        irrEU_clear = 
+            get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
     end
-    print_spectrum( irrEU )
+    print_spectrum( irrEU_clear )
 
 end

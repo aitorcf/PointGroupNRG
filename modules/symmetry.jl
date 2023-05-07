@@ -307,15 +307,15 @@ function cg_orbital( I_1::String ,
     #
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 } = Dict()
 
-    file = [ x for x in readdir( path ) 
-           if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
+    file = [ x for x in readdir( "$(path)/" ) 
+             if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
     verbose && @show file 
 
     inverted = false
     occursin("$(I_2)x$(I_1)",file) && (inverted=true)
 
     I_3::String = "a"
-    for line in readlines( path * file ) 
+    for line in readlines( "$(path)/$(file)" ) 
 
         line=="" && continue
         sline = split(strip(line)," ")
@@ -336,7 +336,9 @@ function cg_orbital( I_1::String ,
     return cg
 end
 
-function get_cg_o_fulldict( oirreps::Vector{String} , cg_path::String )::Dict{Tuple{String,Int64,String,Int64,String,Int64}}
+function get_cg_o_fulldict( 
+            oirreps::Vector{String} , 
+            cg_path::String )::Dict{Tuple{String,Int64,String,Int64,String,Int64}}
     # Given a collection of orbital irreps 'oirreps', it searches in cg_path 
     # for CG information and returns the coefficients for every possible
     # combination (I_1,I_2) for I_1 and I_2 in oirreps:

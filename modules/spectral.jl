@@ -1071,34 +1071,84 @@ function compute_transformedmat!(
     end
 end
 
-function compute_spectral_function( 
+# Wrapper for the various spectral calculation methods
+function compute_spectral_function(
+            AA ,
+            L ,
+            iterations ,
+            first_hopping_amplitude ;
+            etafac=1.0 ,
+            method="sakai1989" )
+
+    if method=="fullrange"
+        return compute_spectral_function_FullRange(
+                AA ,
+                L ,
+                iterations ,
+                first_hopping_amplitude ,
+                etafac 
+        )
+    elseif method=="sakai1989"
+        return compute_spectral_function_Sakai1989(
+                AA ,
+                L ,
+                iterations ,
+                first_hopping_amplitude ,
+                etafac
+        )
+    elseif method=="frota1986"
+        return compute_spectral_function_Frota1986(
+                AA ,
+                L ,
+                iterations ,
+                first_hopping_amplitude
+        )
+    end
+end
+
+# Compute spectral functions for energies in the
+# range between omega_N and maximum( maximum_energy , L )
+function compute_spectral_function_FullRange( 
             AA ,
             L ,
             iterations ,
             alpha ,
             etafac ;
-            widthfac::Float64=2.0 ,
-            number_of_hoppers::Int64=1 )
+            z::Float64=0.0 )
     
-    omegas_log = [ sign*L^(-(x-2)/2.0) for sign in [-1.0,1.0] 
-                                   for x in 2:0.1:(iterations-2)]
-    omegas_lin = [ sign*x for sign in [-1.0,1.0] 
+    # combine energies in linear and logarithmic scales 
+    omegas_log = Float64[ sign*L^(-(x-2)/2.0) for sign in [-1.0,1.0] 
+                   for x in 2:0.1:(iterations-2)]
+    omegas_lin = Float64[ sign*x for sign in [-1.0,1.0] 
                                    for x in 0.001:0.001:1]
-    omegas = vcat( omegas_log , omegas_lin )
-    sort!( omegas )
-    spectral = [0.0 for o in omegas]
+    omegas::Vector{Float64} = sort(vcat( omegas_log , omegas_lin ))
+
+    # spectral function
+    spectral = Float64[0.0 for o in omegas]
 
     for (i,oo) in enumerate(omegas)
 
         o = -oo
 
+        # odd iterations only in order to minimize oscillations
         for N in 3:2:iterations 
 
+            # local A dictionary
+            A = AA[N+1]
+
+            # energy scale for this step
             omegaN  = Float64( alpha * L^(-(N-2)/2.0) )#* sqrt(L) )
-            emin    = omegaN/sqrt(L)
-            emax    = omegaN*sqrt(L) #widthfac
+
+            # maximum energy achieved in this step
+            maximum_step_energy = maximum(collect( v[1] for v in values(A) ))
+
+            # set reliable energy range 
+            widthfac = maximum((L,maximum_step_energy))
+            emin    = omegaN
+            emax    = omegaN*widthfac
+
+            # broadening factor for the step
             eta     = etafac*omegaN
-            local A = AA[N+1]
             
             # negative interval 
             if is_in_interval( o , -emax , -emin )
@@ -1120,11 +1170,186 @@ function compute_spectral_function(
         end
     end
 
-    integrala = sum( (spectral[i]+spectral[i+1])*(omegas[i+1]-omegas[i])/2.0 for i=1:(length(omegas)-1) )
-
-    spectral .*= number_of_hoppers/integrala
-
     return [omegas spectral]
+
+end
+
+# Spectral function as computed by Sakai, Shimizu, Kasuya (1989).
+# - Compute function only at one energy for each step, then
+#   interpolate the results.
+# - Not suitable for z averaging.
+using Interpolations
+function interpolate_spectral_function( 
+        xx::Vector{Float64} , 
+        yy::Vector{Float64} ;
+        step_reductor::Int64=100 )
+
+    # integer range for interpolation 
+    range_input = 1:length(yy)
+    range_output = 1:(1.0/(step_reductor-1)):length(yy)
+
+    # interpolate y
+    interpolator_y = cubic_spline_interpolation( range_input , yy )
+    interpolator_x = cubic_spline_interpolation( range_input , xx )
+    yy_dense = map( interpolator_y , range_output )
+    xx_dense = map( interpolator_x , range_output )
+
+    return xx_dense,yy_dense
+
+end
+function compute_spectral_function_Sakai1989( 
+            AA ,
+            L ,
+            iterations ,
+            first_hopping_amplitude ,
+            etafac )
+
+    # the chosen energies are 
+    #
+    #   e = K_factor * omega_N
+    #
+    # K_factor is chosen so that the energy
+    # is in the middle of the minimum reliable range.
+    maximum_energies = collect( maximum(collect( v[1] for v in values(A) )) for A in AA )
+    average_energymax = sum(maximum_energies)/length(maximum_energies)
+    K_factor = average_energymax/2.0
+
+    # chosen energies
+    omegas_odd = sort([ 
+        ( K_factor * sign * first_hopping_amplitude * L^(-(N-2)/2.0) )
+        for sign in [-1.0,1.0]
+        for N in 3:2:iterations
+    ])
+    omegas_even = sort([ 
+        ( K_factor * sign * first_hopping_amplitude * L^(-(N-2)/2.0) )
+        for sign in [-1.0,1.0]
+        for N in 2:2:iterations
+    ])
+
+    # spectral function
+    spectral_odd  = [0.0 for _ in omegas_odd]
+    spectral_even = [0.0 for _ in omegas_even]
+
+    for (i,N) in enumerate(3:2:iterations)
+
+        # energy at which to compute the spectral function
+        omega_positive =  omegas_odd[i]
+        omega_negative = -omegas_odd[i]
+
+        # energy scale for step N
+        omegaN = omega_positive/K_factor
+
+        # local A dictionary
+        A = AA[N+1]
+
+        # rescaled broadening
+        eta = etafac*omegaN
+
+        for (m,(eigenenergy,coeffs)) in A
+
+            # positive energy range
+            Delta_positive = omega_positive - eigenenergy*omegaN
+            spectral_odd[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+
+            # negative energy range
+            Delta_negative = omega_negative + eigenenergy*omegaN
+            spectral_odd[i] += coeffs[2]*P(Delta_negative,eta)
+
+        end
+
+    end
+    for (i,N) in enumerate(2:2:iterations)
+
+        # energy at which to compute the spectral function
+        omega_positive =  omegas_even[i]
+        omega_negative = -omegas_even[i]
+
+        # energy scale for step N
+        omegaN = omega_positive/K_factor
+
+        # local A dictionary
+        A = AA[N+1]
+
+        # rescaled broadening
+        eta = etafac*omegaN
+
+        for (m,(eigenenergy,coeffs)) in A
+
+            # positive energy range
+            Delta_positive = omega_positive - eigenenergy*omegaN
+            spectral_even[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+
+            # negative energy range
+            Delta_negative = omega_negative + eigenenergy*omegaN
+            spectral_even[i] += coeffs[2]*P(Delta_negative,eta)
+
+        end
+
+    end
+
+    # interpolate spectral function to dense energy grid
+    omegas_even,spectral_even = interpolate_spectral_function( omegas_even  , spectral_even )
+    omegas_odd ,spectral_odd  = interpolate_spectral_function( omegas_odd   , spectral_odd )
+    @show spectral_odd
+    @show spectral_even
+
+    # average even and odd
+    #
+    # new energies
+    omegas_linear_positive = collect(0.01:0.01:1)
+    omegas = sort(vcat( -omegas_linear_positive , omegas_linear_positive , omegas_even , omegas_odd ))
+    filter!( x->(abs(x)<=1.0) , omegas )
+    # create linear interpolators from computed even and odd
+    linear_interpolator_even = linear_interpolation( omegas_even , spectral_even )
+    linear_interpolator_odd  = linear_interpolation( omegas_odd  , spectral_odd  )
+    # linerar interpolate to new mesh 
+    linear_interpolation_even = vcat(map(x->[x linear_interpolator_even(x)],omegas)...)
+    linear_interpolation_odd  = vcat(map(x->[x linear_interpolator_odd(x)],omegas)...)
+    @show linear_interpolation_even 
+    @show linear_interpolation_odd
+    # compute average
+    spectral_average = 0.5*( linear_interpolation_even + linear_interpolation_odd )
+
+    return [omegas -spectral_average]
+
+end
+
+# Discrete spectral function in Frota & Oliveira 1986
+function compute_spectral_function_Frota1986( 
+            AA ,
+            L ,
+            iterations ,
+            alpha )
+
+    spectral_vector = Matrix{Float64}[]
+    for N in 3:2:iterations 
+
+        # spectral weights
+        A = AA[N+1]
+
+        # energy scale
+        omegaN  = Float64( alpha * L^(-(N-2)/2.0) )
+        
+        # introduce spectral weights
+        for (m,(e,coeffs)) in A
+
+            # energy
+            omega = e * omegaN
+
+            # weights in the positive and negative regions
+            isapprox( coeffs[2] , 0.0 ) || push!( spectral_vector , [ omega coeffs[2]] )
+            isapprox( coeffs[1] , 0.0 ) || push!( spectral_vector , [-omega coeffs[1]] )
+        end
+
+    end
+
+    # sort vector by energies
+    sort!( spectral_vector , by=x->x[1,1] )
+
+    # concatenate to obtain matrix
+    spectral_matrix = vcat(spectral_vector...)
+
+    return spectral_matrix
 
 end
 
@@ -1160,23 +1385,20 @@ function compute_spectral_function_orbitalresolved(
              # negative interval
              if is_in_interval( o , -emax , -emin )
                  for ((m,m_a),(e,coeffs)) in A
-                     Δ = o+e*omegaN
-                     spectral[m_a][i] += coeffs[1] * P(Δ,eta)
+                     D = o+e*omegaN
+                     spectral[m_a][i] += coeffs[1] * P(D,eta)
                  end
              end
 
              #positive interval
              if is_in_interval( o , emin , emax )
                  for ((m,m_a),(e,coeffs)) in A
-                     Δ = (o-e*omegaN)
-                     spectral[m_a][i] += coeffs[2]* P(Δ,eta)
+                     D = (o-e*omegaN)
+                     spectral[m_a][i] += coeffs[2]* P(D,eta)
                  end
              end
          end
      end
-
-     out = Dict( m_a => [omegas spectralo.*(2/integ(omegas,spectralo))] for (m_a,spectralo) in spectral )
-     @show out
 
      return Dict( m_a => [omegas spectralo.*(2/integ(omegas,spectralo))] for (m_a,spectralo) in spectral )
 

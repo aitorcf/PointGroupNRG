@@ -1,6 +1,5 @@
 #%%
 using Combinatorics 
-using Base.Iterators
 using LinearAlgebra
 import Base.:show
 import Base.:*
@@ -189,7 +188,7 @@ end
 
 # CONSTRUCTOR
 function OrbitalCanonicalBasis( n::Int64 , m::Int64 )
-    combs = map( x->[i for i in x] , product([1:m for _ in 1:n]...))
+    combs = map( x->[i for i in x] , Base.Iterators.product([1:m for _ in 1:n]...))
     states::Vector{OrbitalBasisElement} = 
         [OrbitalBasisElement(comb) 
          for comb in sort(reshape(combs,(m^n)))]
@@ -208,10 +207,8 @@ end
 # CONSTRUCTOR
 function SpinCanonicalBasis( n::Int64 )
     m = 2
-    #combs = map( x->[i for i in x] , 
-    #             product( [('↑','↓') for _ in 1:n]... ) )
     combs = map( x->[i for i in x] , 
-                 product( [('↑','↓') for _ in 1:n]... ) )
+                 Base.Iterators.product( [('↑','↓') for _ in 1:n]... ) )
     states::Vector{SpinBasisElement} = 
         [SpinBasisElement(comb) 
          for comb in sort(reshape(combs,(m^n)))]
@@ -983,7 +980,7 @@ function cg_orbital( I_1 , I_2 , path ; verbose=false )
     #
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 } = 
         Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 }()
-    file = [ x for x in readdir(path) 
+    file = [ x for x in readdir("$(path)/") 
                if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
     verbose && @show file 
 
@@ -991,7 +988,7 @@ function cg_orbital( I_1 , I_2 , path ; verbose=false )
     occursin("$(I_2)x$(I_1)",file) && (inverted=true)
 
     I_3::String = "a"
-    for line in readlines( path * file ) 
+    for line in readlines( "$(path)/$(file)" ) 
         line=="" && continue
         sline = split(strip(line)," ")
         I_3 = length(sline)==2 ? sline[2] : I_3
@@ -1212,9 +1209,12 @@ end
 # ***************
 # Iir2states part
 # ...............
-function get_Iir2states( N::Int64 , M::Int64 , 
-                         orbital::String , cg_path::String ;
-                         verbose=false )
+function get_Iir2states( 
+            N::Int64 , 
+            M::Int64 , 
+            orbital::String , 
+            cg_path::String ;
+            verbose=false )
 
     basis_o = OrbitalCanonicalBasis(N,M)
     oirreps = cg_shortcircuit( cg_path , orbital )
@@ -1659,22 +1659,32 @@ end
 # ##############################################
 function compute_asymstates_allN( orbital::String ,
                                   cg_path::String ,
-                                  asym_path::String ;
-                                  verbose=false )
+                                  multiplets_path::String ;
+                                  verbose::Bool=false )
+
+    # add convention name to multiplet folder
+    multiplets_path *= "/$(orbital)_julia"
+
+    # create asym dir if it does not exist
+    isdir(multiplets_path) || mkdir( multiplets_path )
+
+    # compute multiplet states
     for n in 2:2*get_M(orbital,cg_path)
-        compute_asymstates_N( orbital , n , cg_path , asym_path ; verbose=verbose )
+        compute_asymstates_N( orbital , n , cg_path , multiplets_path ; verbose=verbose )
     end
 end
 
-function compute_asymstates_N( orbital::String , 
-                               N::Int64 ,
-                               cg_path::String ,
-                               asym_path::String ;
-                               verbose=false ,
-                               identityrep="" )
+function compute_asymstates_N( 
+            orbital::String , 
+            N::Int64 ,
+            cg_path::String ,
+            asym_path::String ;
+            verbose=false ,
+            identityrep="" )
 
     # orbital dimensions
     M = get_M( orbital , cg_path )
+
 
     # compound basis 
     basis_c = CompoundCanonicalBasis( N , M )
@@ -1711,10 +1721,10 @@ function compute_asymstates_N( orbital::String ,
         sym = (identityrep,0.0,1,0.0,1)
         ISisr = Dict( sym => s )
 
-        filename = "$(asym_path)N$N.txt" 
+        filename = "$(asym_path)/N$N.txt" 
         cmd = `touch $filename` 
         run(cmd)
-        open( asym_path*"N$N.txt" , "w" ) do io 
+        open( "$(asym_path)/N$N.txt" , "w" ) do io 
             for (k,s) in ISisr 
                 symstring = reduce( * , map(x->"$x ",[k...]) )
                 canrep = s.vec 
@@ -1920,15 +1930,15 @@ function compute_asymstates_N( orbital::String ,
     # *******
     # WRITING
     # .......
-    filename = "$(asym_path)N$N.txt" 
+    filename = "$(asym_path)/N$N.txt" 
     cmd = `touch $filename` 
     run(cmd)
-    open( asym_path*"N$N.txt" , "w" ) do io 
+    open( "$(asym_path)/N$N.txt" , "w" ) do io 
         for (k,s) in ISisr 
             symstring = reduce( * , map(x->"$x ",[k...]) )
             canrep = s.vec 
             canstring = reduce( * , map(x->"($x)  ",canrep) ) 
-            asymrep = collect(flatten(nullspace(hcat(asymsubspace,-canrep),atol=1e-6)[1:size(asymsubspace,2),:]))
+            asymrep = collect(Base.Iterators.flatten(nullspace(hcat(asymsubspace,-canrep),atol=1e-6)[1:size(asymsubspace,2),:]))
             for e in asymrep 
                 if abs(e)!==0.0 
                     if real(e)<0.0

@@ -1,8 +1,7 @@
 include( "symbols.jl" )
+
 using Combinatorics
 using LinearAlgebra
-using SharedArrays
-using Distributed
 
 import Base.:* 
 import Base.:+

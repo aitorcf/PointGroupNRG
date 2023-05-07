@@ -1,12 +1,9 @@
 include( "symbols.jl" )
 include( "numericals.jl" )
 include( "symmetry.jl" )
+#include( "spectral.jl")
 include( "discretization.jl" )
 include( "lanczos.jl" )
-
-using StaticArrays
-using ProgressMeter
-
 
 # ###########################################
 # SHELL CREATION OPERATORS
@@ -783,8 +780,7 @@ function cut_off!(
             discarded = []
         end
     else 
-        println( "error: type must be 'multiplet' or 'energy'" )
-        return "error: type must be 'multiplet' or 'energy'" 
+        error( "type must be 'multiplet' or 'energy'" )
     end
 
     # apply cutoff to irrEU
@@ -937,18 +933,20 @@ function NRG( iterations::Int64,
               z::Float64=0.0 ,
               discretization::String="standard" ,
               spectral::Bool=false ,
+              spectral_method::String="sakai1989",
+              etafac::Float64=1.0 ,
+              orbitalresolved::Bool=false ,
               M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
-              AA::Vector{Dict{ NTuple{4,Int64} , Tuple{Float64,Vector{Float64}} }}=Dict{ NTuple{4,Int64} , Tuple{Float64,Vector{Float64}} }[] ,
+              AA::Vector{T}=[] ,
               Karray_orbital::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) , 
               Karray_spin::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) ,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
-              etafac::Float64=1.0 ,
               alpha::Float64=1.0 ,
               eta::Function=x->1.0 ,
               Nz::Int64=1 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
-              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict() )
+              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ) where {T}
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -1120,24 +1118,53 @@ function NRG( iterations::Int64,
         if spectral 
 
             print( "Updating M and AA... " )
-            sss = @timed M, AA = update_redmat_AA_CGsummethod(
-                        M ,
-                        irrEU ,
-                        combinations_uprima ,
-                        collect(multiplets_atomhop) ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        Karray_orbital ,
-                        Karray_spin ,
-                        AA ,
-                        oindex2dimensions ;
-                        verbose=false )
+
+            if orbitalresolved
+
+                sss = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+                            M ,
+                            irrEU ,
+                            combinations_uprima ,
+                            collect(multiplets_atomhop) ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            Karray_orbital ,
+                            Karray_spin ,
+                            AA ,
+                            oindex2dimensions ;
+                            verbose=false )
+
+            else 
+
+                sss = @timed M, AA = update_redmat_AA_CGsummethod(
+                            M ,
+                            irrEU ,
+                            combinations_uprima ,
+                            collect(multiplets_atomhop) ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            Karray_orbital ,
+                            Karray_spin ,
+                            AA ,
+                            oindex2dimensions ;
+                            verbose=false )
+            end
+
+            for matrix in values(M)
+                if any(isnan.(matrix))
+                    error( "NaN in M")
+                end
+            end
+            for weights in [x[2] for x in values(AA[end])]
+                if any(isnan.(weights))
+                    error( "NaN in A" )
+                end
+            end
+
             println( "$(sss.time)s, $(sss.bytes*10^-6)bytes, $(sss.gctime)s gc" )
             println()
 
         end
-
-
 
     end
 
@@ -1145,19 +1172,27 @@ function NRG( iterations::Int64,
     @show maxe_avg
     println( "Maximum irrep qnums: N=$maxn_tot , 2S=$maxs_tot\n" )
 
-    spec = zeros(Float64,1,1)
     if spectral 
 
-        number_of_hoppers = sum( oindex2dimensions[m_a[2]]*(m_a[3]+1)
-                                 for m_a in multiplets_atomhop )
-        spec = compute_spectral_function(
-            AA ,
-            L ,
-            iterations ,
-            alpha ,
-            etafac ;
-            widthfac=maximum((L,maxe_avg)) ,
-            number_of_hoppers=number_of_hoppers )
+        if orbitalresolved
+            spec = compute_spectral_function_orbitalresolved(
+                AA ,
+                L ,
+                iterations ,
+                alpha ,
+                etafac )
+        else
+
+            spec = compute_spectral_function(
+                AA ,
+                L ,
+                iterations ,
+                alpha ;
+                etafac=etafac,
+                method=spectral_method
+            )
+
+        end
 
     end
 
@@ -1171,7 +1206,7 @@ function NRG( iterations::Int64,
              entr=entropies,
              perf=performance ,
              impmults=impmults ,
-             specfunc=spec )
+             specfunc= spectral ? spec : nothing )
 end
 
 
