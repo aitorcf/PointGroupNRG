@@ -1189,7 +1189,8 @@ function NRG( iterations::Int64,
                 iterations ,
                 alpha ;
                 etafac=etafac,
-                method=spectral_method
+                method=spectral_method,
+                label=label
             )
 
         end

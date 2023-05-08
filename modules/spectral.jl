@@ -1078,7 +1078,9 @@ function compute_spectral_function(
             iterations ,
             first_hopping_amplitude ;
             etafac=1.0 ,
-            method="sakai1989" )
+            method="sakai1989" ,
+            label="" )
+
 
     if method=="fullrange"
         return compute_spectral_function_FullRange(
@@ -1094,7 +1096,8 @@ function compute_spectral_function(
                 L ,
                 iterations ,
                 first_hopping_amplitude ,
-                etafac
+                etafac ,
+                label
         )
     elseif method=="frota1986"
         return compute_spectral_function_Frota1986(
@@ -1202,7 +1205,8 @@ function compute_spectral_function_Sakai1989(
             L ,
             iterations ,
             first_hopping_amplitude ,
-            etafac )
+            etafac ,
+            label )
 
     # the chosen energies are 
     #
@@ -1212,7 +1216,7 @@ function compute_spectral_function_Sakai1989(
     # is in the middle of the minimum reliable range.
     maximum_energies = collect( maximum(collect( v[1] for v in values(A) )) for A in AA )
     average_energymax = sum(maximum_energies)/length(maximum_energies)
-    K_factor = average_energymax/2.0
+    K_factor = average_energymax/4.0
 
     # chosen energies
     omegas_odd = sort([ 
@@ -1233,8 +1237,8 @@ function compute_spectral_function_Sakai1989(
     for (i,N) in enumerate(3:2:iterations)
 
         # energy at which to compute the spectral function
-        omega_positive =  omegas_odd[i]
-        omega_negative = -omegas_odd[i]
+        omega_positive = -omegas_odd[i]
+        omega_negative =  omegas_odd[i]
 
         # energy scale for step N
         omegaN = omega_positive/K_factor
@@ -1261,8 +1265,8 @@ function compute_spectral_function_Sakai1989(
     for (i,N) in enumerate(2:2:iterations)
 
         # energy at which to compute the spectral function
-        omega_positive =  omegas_even[i]
-        omega_negative = -omegas_even[i]
+        omega_positive = -omegas_even[i]
+        omega_negative =  omegas_even[i]
 
         # energy scale for step N
         omegaN = omega_positive/K_factor
@@ -1287,11 +1291,25 @@ function compute_spectral_function_Sakai1989(
 
     end
 
+    # write non-interpolated (discrete) spectral data
+    open( "spectral/spectral_$(label)_z$(z)_discrete_even.dat" , write=true ) do f
+        writedlm( f , [omegas_even spectral_even] )
+    end
+    open( "spectral/spectral_$(label)_z$(z)_discrete_odd.dat" , write=true ) do f
+        writedlm( f , [omegas_odd spectral_odd] )
+    end
+
     # interpolate spectral function to dense energy grid
     omegas_even,spectral_even = interpolate_spectral_function( omegas_even  , spectral_even )
     omegas_odd ,spectral_odd  = interpolate_spectral_function( omegas_odd   , spectral_odd )
-    @show spectral_odd
-    @show spectral_even
+
+    # write interpolated even and odd spectral data
+    open( "spectral/spectral_$(label)_z$(z)_interpolated_even.dat" , write=true ) do f
+        writedlm( f , [omegas_even spectral_even] )
+    end
+    open( "spectral/spectral_$(label)_z$(z)_interpolated_odd.dat" , write=true ) do f
+        writedlm( f , [omegas_odd spectral_odd] )
+    end
 
     # average even and odd
     #
@@ -1305,12 +1323,10 @@ function compute_spectral_function_Sakai1989(
     # linerar interpolate to new mesh 
     linear_interpolation_even = vcat(map(x->[x linear_interpolator_even(x)],omegas)...)
     linear_interpolation_odd  = vcat(map(x->[x linear_interpolator_odd(x)],omegas)...)
-    @show linear_interpolation_even 
-    @show linear_interpolation_odd
     # compute average
     spectral_average = 0.5*( linear_interpolation_even + linear_interpolation_odd )
 
-    return [omegas -spectral_average]
+    return [omegas spectral_average[:,2]]
 
 end
 
@@ -1319,7 +1335,7 @@ function compute_spectral_function_Frota1986(
             AA ,
             L ,
             iterations ,
-            alpha )
+            first_hopping_amplitude )
 
     spectral_vector = Matrix{Float64}[]
     for N in 3:2:iterations 
@@ -1328,7 +1344,7 @@ function compute_spectral_function_Frota1986(
         A = AA[N+1]
 
         # energy scale
-        omegaN  = Float64( alpha * L^(-(N-2)/2.0) )
+        omegaN  = Float64( first_hopping_amplitude * L^(-(N-2)/2.0) )
         
         # introduce spectral weights
         for (m,(e,coeffs)) in A
@@ -2012,7 +2028,7 @@ function get_new_blockredmat_CGsummethod3(
             #   u = u'
             #   v = v'
             for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in ucombs,
-                          (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in vcombs
+                (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in vcombs
 
                 # for block matrix elements, same shell states
                 m_mu==m_nu || continue
