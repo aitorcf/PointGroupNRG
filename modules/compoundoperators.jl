@@ -77,7 +77,7 @@ function pauli2_total( hilbert::HS , basis="canonical" ) where {HS<:HilbertSpace
     end
     return px^2 + py^2 + pz^2
 end
-function spin2_total( hilbert::HilbertSpace , basis="canonical" ) where {HS<:HilbertSpace}
+function spin2_total( hilbert::HS ) where {HS<:HilbertSpace}
     return 0.25 * pauli2_total( hilbert )
 end
 
