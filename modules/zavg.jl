@@ -12,9 +12,9 @@ function zavg_thermo( label::String , Z::Vector{Float64} )
     thimp_tot = Dict()
 
     for z in Z
-        th_z   = readdlm( "thermodata/th_diff_$(label)_z$z.dat" )
-        thclean_z = readdlm( "thermodata/thermo_clean_$(label)_z$z.dat" ) 
-        thimp_z = readdlm( "thermodata/thermo_imp_$(label)_z$z.dat" ) 
+        th_z      = readdlm( "thermodata/th_diff_$(label)_z$z.dat" , skipstart=1 )
+        thclean_z = readdlm( "thermodata/thermo_clean_$(label)_z$z.dat" , skipstart=1 ) 
+        thimp_z   = readdlm( "thermodata/thermo_imp_$(label)_z$z.dat" , skipstart=1 ) 
         t = th_z[:,1] 
         th_tot[z] = Dict( round(t[i],sigdigits=2)=>th_z[i,:] for i in 1:length(t) )
         thclean_tot[z] = Dict( round(t[i],sigdigits=2)=>thclean_z[i,:] for i in 1:length(t) ) 
