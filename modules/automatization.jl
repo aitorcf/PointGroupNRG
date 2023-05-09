@@ -1,4 +1,5 @@
 using Glob
+using Printf
 
 include( "symmetry.jl" )
 include( "shell.jl" )
@@ -615,16 +616,24 @@ function print_spectrum(
             savefile=false ,
             label="" )
 
-    spectrum = [ ((G...,r),e) 
-                 for (G,(E,U)) in irrEU 
-                 for (r,e) in enumerate(E) ]
+    spectrum = [ 
+        ((G...,r),e) 
+        for (G,(E,U)) in irrEU 
+        for (r,e) in enumerate(E) 
+    ]
     sort!( spectrum , by=x->x[2] )
 
+    println( "="^31 )
+    println()
     println( "SPECTRUM" )
-    for (m,e) in spectrum
-        @show m, e
+    println()
+    @printf "%20s    %7s\n" "multiplet" "energy"
+    println()
+    for (multiplet,energy) in spectrum
+        @printf "%20s    %.5f\n" multiplet energy
     end
     println()
+    println( "="^31 )
 
     if savefile 
         open( "spectrum_$label.dat" , "w" ) do f
