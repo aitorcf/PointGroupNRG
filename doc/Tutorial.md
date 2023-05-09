@@ -22,7 +22,7 @@ steps 2, 3, and 4 are integrated into a single script.
 ## 1. Multiplet calculation
 
 To start with, create a working directory for the
-calculations. Copy the file `multiplet_TEMPLATE.jl` to that
+calculations. Copy the file `multiplets_TEMPLATE.jl` to that
 directory. The file is a template for running multiplet
 calculations for a single orbital irrep, so it has to be run
 once for every orbital irrep needed. The main functioncalled at the end of the script, has the form 
