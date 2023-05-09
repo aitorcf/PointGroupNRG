@@ -5,6 +5,8 @@ include( "symmetry.jl" )
 include( "discretization.jl" )
 include( "lanczos.jl" )
 
+using Printf
+
 # ###########################################
 # SHELL CREATION OPERATORS
 #
@@ -973,7 +975,6 @@ function NRG( iterations::Int64,
     maxe_tot = 0.0
     maxn_tot = 0
     maxs_tot = 0
-    eigenvals5::Matrix{Float64} = zeros(Float64,iterations-1,5)
 
     xi::Vector{Float64} = []
     if discretization=="lanczos" 
@@ -1092,39 +1093,36 @@ function NRG( iterations::Int64,
             fac = L^((m-1)/Nz)
 
             if discretization!=="lanczos" 
-                t = temperature( n , L , betabar*fac ; z=z , discretization=discretization )
+                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization )
             elseif discretization=="lanczos" 
-                t = temperature( n , L , betabar*fac ; z=z , discretization=discretization , ebar0=ebar[1] )
+                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization , ebar0=ebar[1] )
             end
 
-            ρ    = partition(  irrEU , betabar*fac , oindex2dimensions )
-            entr = entropy(    irrEU , betabar*fac , oindex2dimensions )
-            mag  = magsusc(    irrEU , betabar*fac , oindex2dimensions )
-            N    = number(     irrEU , betabar*fac , oindex2dimensions )
-            en   = energy(     irrEU , betabar*fac , oindex2dimensions )
-            c    = heatcap(    irrEU , betabar*fac , oindex2dimensions )
-            f    = free_energy(irrEU , betabar*fac , oindex2dimensions )
-            @show t 
-            @show ρ 
-            @show entr
-            @show mag
-            @show N
-            @show en
-            @show c 
-            @show f
+            partition_function = compute_partition_function( irrEU , betabar*fac , oindex2dimensions )
+            entropy = compute_entropy( irrEU , betabar*fac , oindex2dimensions )
+            magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar*fac , oindex2dimensions )
+            number_particles = compute_average_number_of_particles( irrEU , betabar*fac , oindex2dimensions )
+            energy = compute_energy( irrEU , betabar*fac , oindex2dimensions )
+            heat_capacity = compute_heat_capacity( irrEU , betabar*fac , oindex2dimensions )
+            free_energy = compute_free_energy( irrEU , betabar*fac , oindex2dimensions )
+            @printf "%s = %.3e\n" "temperature" temperature
+            @printf "%s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
+            @printf "%s = %.3f\n" "entropy" entropy
+            @printf "%s = %.3f\n" "heat capacity" heat_capacity
+            @printf "%s = %.3f\n" "free energy" free_energy
+            @printf "%s = %i\n" "number of particles" number_particles
+            @printf "%s = %.3f\n" "energy" energy
+            @printf "%s = %.3e\n" "Z" partition_function
             println()
-            push!( magnetizations , mag )
-            push!( temperatures , t )
-            push!( energies , en )
-            push!( partitions , ρ )
-            push!( numbers , N )
-            push!( entropies , entr )
-            push!( heatcaps , c )
-            push!( free_energies , f )
+            push!( temperatures , temperature )
+            push!( magnetizations , magnetic_susceptibility )
+            push!( entropies , entropy )
+            push!( heatcaps , heat_capacity )
+            push!( free_energies , free_energy )
+            push!( numbers , number_particles )
+            push!( energies , energy )
+            push!( partitions , partition_function )
         end
-
-        eigs = sort([ e for (E,U) in values(irrEU) for e in E ])[1:5]
-        eigenvals5[(n-1),:] = [(e-eigs[1]) for e in eigs[1:5]]
 
         if spectral 
 
