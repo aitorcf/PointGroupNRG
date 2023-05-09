@@ -1079,7 +1079,8 @@ function compute_spectral_function(
             first_hopping_amplitude ;
             etafac=1.0 ,
             method="sakai1989" ,
-            label="" )
+            label="" ,
+            z=0.0 )
 
 
     if method=="fullrange"
@@ -1097,7 +1098,8 @@ function compute_spectral_function(
                 iterations ,
                 first_hopping_amplitude ,
                 etafac ,
-                label
+                label ,
+                z
         )
     elseif method=="frota1986"
         return compute_spectral_function_Frota1986(
@@ -1206,7 +1208,8 @@ function compute_spectral_function_Sakai1989(
             iterations ,
             first_hopping_amplitude ,
             etafac ,
-            label )
+            label ,
+            z )
 
     # the chosen energies are 
     #
@@ -2079,3 +2082,4 @@ function get_new_blockredmat_CGsummethod3(
     return uvredmat
 
 end
+

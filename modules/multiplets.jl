@@ -1666,7 +1666,7 @@ function compute_asymstates_allN( orbital::String ,
     multiplets_path *= "/$(orbital)_julia"
 
     # create asym dir if it does not exist
-    isdir(multiplets_path) || mkdir( multiplets_path )
+    isdir(multiplets_path) || mkpath( multiplets_path )
 
     # compute multiplet states
     for n in 2:2*get_M(orbital,cg_path)

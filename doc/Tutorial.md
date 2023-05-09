@@ -127,7 +127,7 @@ $I$ is the outer multiplicity $r$.
 orbital irrep, $2S$ is twice the total spin, and $r _1$ and
 $r_2$ are outer multiplicity labels. The format is 
 
-        I,2S => Matrix elements
+        (I,2S) => Matrix elements
 
 where each matrix element $U _{r_1,r_2}(I,2S)$ with indices $r _1,
 r _2$ is given by 
