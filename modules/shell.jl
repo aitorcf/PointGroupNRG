@@ -965,6 +965,9 @@ function NRG( iterations::Int64,
     impnums        = []
     impmults       = []
 
+    spectrum_even = Vector{Dict{IntIrrep,Vector{Float64}}}()
+    spectrum_odd  = Vector{Dict{IntIrrep,Vector{Float64}}}()
+
     performance = []
     maxes = []
     maxe_tot = 0.0
@@ -979,6 +982,8 @@ function NRG( iterations::Int64,
         xi = compute_xi_vector( iterations , z , L ; discretization=discretization )
     end
 
+    # create spectral directory
+    isdir("spectral") || mkdir("spectral")
 
     # NEW 
     Nt = Nz==1 ? 1 : Int64(Nz/2)
@@ -997,6 +1002,8 @@ function NRG( iterations::Int64,
                                                         mine=mine ,
                                                         verbose=false ,
                                                         M=M )
+
+
         # cutoff info
         equivstates = Int64( sum( (m[3]+1) for m in multiplets_block ) )
         println( "$(length(multiplets_block)) multiplets kept ($equivstates states), $(length(discarded)) multiplets discarded" )
@@ -1058,6 +1065,10 @@ function NRG( iterations::Int64,
         # occupation 
         maxn = maximum(collect( G[1] for (G,(E,U)) in irrEU ))
         maxn_tot = maximum([ maxn , maxn_tot ])
+
+        # spectrum 
+        (n%2==0)  && save_spectrum!( spectrum_even , irrEU )
+        (n%2!==0) && save_spectrum!( spectrum_odd  , irrEU )
 
         # impurity info
         if compute_impmults
@@ -1172,6 +1183,9 @@ function NRG( iterations::Int64,
     @show maxe_avg
     println( "Maximum irrep qnums: N=$maxn_tot , 2S=$maxs_tot\n" )
 
+    # dump spectra
+    write_nrg_spectra( spectrum_even , spectrum_odd )
+
     if spectral 
 
         if orbitalresolved
@@ -1190,7 +1204,8 @@ function NRG( iterations::Int64,
                 alpha ;
                 etafac=etafac,
                 method=spectral_method,
-                label=label
+                label=label ,
+                z=z
             )
 
         end
@@ -1336,3 +1351,79 @@ function ordered_multiplets( mults )
     return omults
 end
 
+# Specrtra from each iteration: Eigenvalues
+function save_spectrum!( 
+            spectrum::Vector{Dict{IntIrrep,Vector{Float64}}} , 
+            irrEU::Dict{IntIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}} )
+
+    push!(
+        spectrum ,
+        Dict(
+            G=>E
+            for (G,(E,U)) in irrEU
+        )
+    )
+
+end
+function write_iteration_spectrum(
+        f::IO ,
+        n::Int64 ,
+        iteration_spectrum::Dict{IntIrrep,Vector{Float64}} )
+
+    # n = NRG step
+    write( f , "N = $(n)\n" )
+
+    iteration_spectrum_sorted = sort(
+        [ (K,V) for (K,V) in iteration_spectrum ],
+        by = x->minimum(x[2])
+    )
+
+    # irrep iteration
+    for ((N,I,S),E) in iteration_spectrum_sorted
+
+        # line begins with irrep
+        write( f , "$(N) $(I) $(S)" )
+
+        # irrep spectrum
+        for eigenenergy in E
+            write( f , " $(eigenenergy)" )
+        end
+
+        write( f , "\n" )
+
+    end
+
+end
+function write_nrg_spectra( 
+            spectrum_even , 
+            spectrum_odd )
+
+    # even spectra
+    open( "spectrum_even.dat" , write=true ) do f 
+
+        for (i,iteration_spectrum) in enumerate(spectrum_even)
+
+            # first dump is at n=2
+            n = 2*i
+
+            # write iteration spectrum
+            write_iteration_spectrum( f , n , iteration_spectrum )
+
+        end
+    end
+
+    # odd spectra
+    open( "spectrum_odd.dat" , write=true ) do f 
+
+        for (i,iteration_spectrum) in enumerate(spectrum_odd)
+
+            # first dump is at n=3
+            n = 2*i + 1
+
+            # write iteration spectrum
+            write_iteration_spectrum( f , n , iteration_spectrum )
+
+        end
+    end
+
+end
