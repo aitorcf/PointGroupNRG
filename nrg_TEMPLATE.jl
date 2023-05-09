@@ -13,14 +13,14 @@ if run=="multiplets"
         cg_o_dir ,
         multiplets_dir ,
         atom_config ,
-        identityrep 
+        identityrep
     )
 
 elseif run=="spectrum"
 
     atomic_spectrum( 
         cg_o_dir ,
-        asym_dir ,
+        multiplets_dir ,
         atom_config ,
         identityrep ,
         epsilon_symparams ,
