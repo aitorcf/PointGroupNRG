@@ -37,7 +37,7 @@ elseif run=="nrg"
         cutoff_type ,
         cutoff_magnitude ,
         cg_o_dir ,
-        asym_dir ,
+        multiplets_dir ,
         atom_config ,
         shell_config ,
         identityrep ,
