@@ -7,7 +7,7 @@
 include("discretization.jl")
 using DelimitedFiles
 
-function temperature(N::Int64,
+function compute_temperature(N::Int64,
     L::Float64,
     betabar::Float64;
     z::Float64=0.0,
@@ -31,7 +31,7 @@ function temperature(N::Int64,
     end
 end
 
-function partition(
+function compute_partition_function(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oirreps2dimensions::Dict)::Float64
@@ -58,7 +58,7 @@ function partition(
 end
 
 # int method
-function partition(
+function compute_partition_function(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64})::Float64
@@ -82,11 +82,15 @@ function partition(
     return part
 end
 
-function magsusc(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
+function compute_magnetic_susceptibility(
+            irrEU, 
+            betabar, 
+            oirreps2dimensions::Dict; 
+            verbose=false)
 
     verbose && println("MAGNETIC SUSCEPTIBILITY CALCULATION")
 
-    part = partition(irrEU, betabar, oirreps2dimensions)
+    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
 
     mag = 0
     for (G, (E, U)) in irrEU
@@ -114,7 +118,7 @@ function magsusc(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
 end
 
 # int method
-function magsusc(
+function compute_magnetic_susceptibility(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
@@ -122,7 +126,7 @@ function magsusc(
 
     verbose && println("MAGNETIC SUSCEPTIBILITY CALCULATION")
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     mag::Float64 = 0
     for (G, (E, U)) in irrEU
@@ -150,9 +154,13 @@ function magsusc(
 end
 
 # string method
-function number(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
+function compute_average_number_of_particles(
+        irrEU, 
+        betabar, 
+        oirreps2dimensions::Dict; 
+        verbose=false)
 
-    part = partition(irrEU, betabar, oirreps2dimensions)
+    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
 
     N = 0
     for (G, (E, U)) in irrEU
@@ -172,13 +180,13 @@ function number(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
 end
 
 # int method 
-function number(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    betabar::Float64,
-    oindex2dimensions::Vector{Int64};
-    verbose=false)
+function compute_average_number_of_particles(
+        irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+        betabar::Float64,
+        oindex2dimensions::Vector{Int64};
+        verbose=false)
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     N::Float64 = 0.0
     for (G, (E, U)) in irrEU
@@ -198,9 +206,9 @@ function number(
 end
 
 # string method
-function energy(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
+function compute_energy(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
 
-    part = partition(irrEU, betabar, oirreps2dimensions)
+    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
 
     energy = 0
     for (G, (E, U)) in irrEU
@@ -220,13 +228,13 @@ function energy(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
 end
 
 # int method
-function energy(
+function compute_energy(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     energy::Float64 = 0
     for (G, (E, U)) in irrEU
@@ -251,7 +259,7 @@ function energy2(
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     energy::Float64 = 0
     for (G, (E, U)) in irrEU
@@ -271,39 +279,39 @@ function energy2(
 end
 
 # int method 
-function entropy(
+function compute_entropy(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
-    e::Float64 = energy(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
+    e::Float64 = compute_energy(irrEU, betabar, oindex2dimensions)
     return log(part) + betabar * e
 
 end
 
 # int method 
-function heatcap(
+function compute_heat_capacity(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    e = energy(irrEU, betabar, oindex2dimensions)
+    e = compute_energy(irrEU, betabar, oindex2dimensions)
     e2 = energy2(irrEU, betabar, oindex2dimensions)
     return betabar * betabar * (e2 - e * e)
 
 end
 
 # int method 
-function free_energy(
+function compute_free_energy(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    return log(partition(irrEU, betabar, oindex2dimensions))
+    return log(compute_partition_function(irrEU, betabar, oindex2dimensions))
 
 end
 
@@ -369,7 +377,7 @@ function impspin(
 
     s_imp = 0.0
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     energy = 0
     for (G, (E, U)) in irrEU
@@ -404,7 +412,7 @@ function impnum(
 
     n_imp = 0.0
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     energy = 0
     for (G, (E, U)) in irrEU
@@ -488,7 +496,7 @@ function mult_thermo(
     M::Int64 = length(collect(values(mm_u))[1])
     mult_imp::Vector{Float64} = [0.0 for i in 1:M]
 
-    part::Float64 = partition(irrEU, betabar, oindex2dimensions)
+    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     for (G, (E, U)) in irrEU
 
@@ -517,11 +525,12 @@ end
 # WRITING TO FILE #
 # ~~~~~~~~~~~~~~~ #
 
-function write_impurity_info(nrg,
-    omults,
-    mult2index,
-    orbital,
-    z)
+function write_impurity_info(
+        nrg,
+        omults,
+        mult2index,
+        orbital,
+        z)
     multfile = "thermodata/impmult_$(orbital)_z$z.dat"
     open(multfile, write=true) do f
         for m in omults
@@ -534,56 +543,42 @@ function write_impurity_info(nrg,
     end
 end
 
-function write_thermodata_onez(nrg,
-    calculation,
-    orbital,
-    z)
-    if calculation == "CLEAN"
-        filename = "thermodata/thermo_clean_$(orbital)_z$z.dat"
-        println("Saving thermodynamic data to $filename...")
-        writedlm(filename,
-            [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr nrg.c nrg.f])
-    elseif calculation == "IMP"
-        filename = "thermodata/thermo_imp_$(orbital)_z$z.dat"
-        println("Saving thermodynamic data to $filename...")
-        writedlm(filename,
-            [nrg.t nrg.m nrg.e nrg.p nrg.n nrg.entr nrg.c nrg.f])
+function write_thermodata_onez(
+        nrg,
+        calculation,
+        orbital,
+        z)
+
+    filename = "thermodata/thermo_$(lowercase(calculation))_$(orbital)_z$z.dat"
+
+    println("Saving thermodynamic data to $filename...\n\n" )
+
+    open( filename , write=true ) do f
+        write( f , "# 1 temperature | 2 magnetic susceptibility | 3 entropy | 4 heat capacity | 5 free energy | 6 number of particles | 7 energy | 8 partition function\n" )
+        writedlm(
+            f ,
+            [nrg.t nrg.m nrg.entr nrg.c nrg.f nrg.n nrg.e nrg.p]
+        )
     end
 end
 
 function write_thermodiff(orbital, z)
-    th_clean = readdlm("thermodata/thermo_clean_$(orbital)_z$z.dat")
+
+    th_clean = readdlm( "thermodata/thermo_clean_$(orbital)_z$z.dat" , skipstart=1 )
     t = th_clean[:, 1]
 
-    th_imp = readdlm("thermodata/thermo_imp_$(orbital)_z$z.dat")
+    th_imp = readdlm( "thermodata/thermo_imp_$(orbital)_z$z.dat" , skipstart=1 )
 
     if size(th_clean) !== size(th_imp)
-        println("""Different number of iterations with respect to 
-                   clean calculation. Thermodiff will not be computed.""")
+        println( "Different number of iterations with respect to clean calculation. Thermodiff will not be computed." ) 
         return nothing
     end
 
     th_diff = th_imp .- th_clean
     th_diff[:, 4] .= th_imp[:, 4] ./ th_clean[:, 4]
     th_diff[:, 1] .= th_imp[:, 1]
-    m_diff = th_diff[:, 2]
-    e_diff = th_diff[:, 3]
-    p_diff = th_diff[:, 4]
-    n_diff = th_diff[:, 5]
-    s_diff = th_diff[:, 6]
 
     mfile = "thermodata/th_diff_$(orbital)_z$z.dat"
     writedlm(mfile, th_diff)
-
-    mfile = "thermodata/th_diff_m_$(orbital)_z$z.dat"
-    writedlm(mfile, [t m_diff])
-    efile = "thermodata/th_diff_e_$(orbital)_z$z.dat"
-    writedlm(efile, [t e_diff])
-    pfile = "thermodata/th_diff_p_$(orbital)_z$z.dat"
-    writedlm(pfile, [t p_diff])
-    nfile = "thermodata/th_diff_n_$(orbital)_z$z.dat"
-    writedlm(nfile, [t n_diff])
-    sfile = "thermodata/th_diff_s_$(orbital)_z$z.dat"
-    writedlm(sfile, [t s_diff])
 
 end
