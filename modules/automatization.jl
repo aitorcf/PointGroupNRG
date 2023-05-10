@@ -749,14 +749,18 @@ function nrg_full(
             spectral_broadening::Float64=1.0 ,
             orbitalresolved::Bool=false,
             Nz::Int64=1 ,
-            precompute_iaj::Bool=true ,
-            compute_impmults=false ) where {R<:Real}
+            compute_impmults::Bool=false ) where {R<:Real}
+
+    # defaults
+    precompute_iaj = true
+
+    println( "Full NRG calculation with z=$(z)" )
 
     if (spectral && calculation=="CLEAN") 
         error( "Calculation must be IMP for computing the spectral function" )
         return nothing 
     end
-    @show z 
+
     # orbital irreps present in the atom
     atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
 
