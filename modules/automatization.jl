@@ -4,6 +4,7 @@ using Printf
 include( "symmetry.jl" )
 include( "shell.jl" )
 include( "lanczos.jl" )
+include( "thermo.jl" )
 
 function get_cg_o_info( 
             cg_o_dir::String , 
@@ -754,7 +755,10 @@ function nrg_full(
     # defaults
     precompute_iaj = true
 
+    println( "********************************" )
     println( "Full NRG calculation with z=$(z)" )
+    println( "********************************" )
+    println()
 
     if (spectral && calculation=="CLEAN") 
         error( "Calculation must be IMP for computing the spectral function" )
@@ -1296,7 +1300,8 @@ function nrg_full(
 
         # thermo diff
         if calculation=="IMP"
-            if length(glob("thermodata/thermo_clean_$(label)_z$z.dat"))!==0 
+            thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+            if length(glob(thermo_clean_filename))!==0 
                 write_thermodiff( label , z )
             end
         end

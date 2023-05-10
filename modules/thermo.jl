@@ -12,12 +12,11 @@ function compute_temperature(N::Int64,
     betabar::Float64;
     z::Float64=0.0,
     discretization::String="standard",
-    ebar0::Float64=1.0)
+    first_asymptotic_hopping_amplitude::Float64=1.0)
 
     if discretization == "standard"
 
         return 0.5 * (1 + L^(-1)) * L^(z - (N - 2) / 2) / (betabar)
-
 
     elseif discretization == "co2005"
 
@@ -26,7 +25,7 @@ function compute_temperature(N::Int64,
 
     elseif discretization == "lanczos"
 
-        return ebar0 * L^(-(N - 2) / 2) / betabar
+        return first_asymptotic_hopping_amplitude * L^(-(N - 2) / 2) / betabar
 
     end
 end
@@ -40,21 +39,23 @@ function compute_partition_function(
     #     = Sum_G( D * ( Sum_i exp(-betabar*E_i) ))
     #
 
-    part::Float64 = 0.0
+    # Z
+    partition::Float64 = 0.0
     for (G, (E, U)) in irrEU
-        # orbital and spin
+
+        # irrep quantum numbers
         (I, S) = G[2:3]
 
         # degeneracy/dimensionality
         Do = oirreps2dimensions[I]
-        Ds = 2 * S + 1
+        Ds = S + 1
         D = Do * Ds
 
-
         # weighted sum over G 
-        part += D * sum(exp(-betabar * e) for e in E)
+        partition += D * sum(exp(-betabar * energy) for energy in E)
+
     end
-    return part
+    return partition
 end
 
 # int method
@@ -82,42 +83,6 @@ function compute_partition_function(
     return part
 end
 
-function compute_magnetic_susceptibility(
-            irrEU, 
-            betabar, 
-            oirreps2dimensions::Dict; 
-            verbose=false)
-
-    verbose && println("MAGNETIC SUSCEPTIBILITY CALCULATION")
-
-    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
-
-    mag = 0
-    for (G, (E, U)) in irrEU
-        # orbital and spin
-        (I, S) = G[2:3]
-
-        # degeneracy/dimensionality
-        Do = oirreps2dimensions[I]
-        Ds = 2 * S + 1
-        D = Do * Ds
-
-        # weighted sum over G 
-        # S^2 = S(S+1)
-        # Sz^2 = S^2/3
-        contrib = D * (S * (S + 1) / 3.0) * sum(exp(-betabar * e) for e in E)
-        mag += contrib
-
-        if verbose
-            println("G = $G, D = $D, E = $E")
-            println("contribution = $(contrib/part)")
-            println()
-        end
-    end
-    return mag / part
-end
-
-# int method
 function compute_magnetic_susceptibility(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
@@ -153,44 +118,19 @@ function compute_magnetic_susceptibility(
     return mag / part
 end
 
-# string method
-function compute_average_number_of_particles(
-        irrEU, 
-        betabar, 
-        oirreps2dimensions::Dict; 
-        verbose=false)
-
-    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
-
-    N = 0
-    for (G, (E, U)) in irrEU
-        # orbital and spin
-        (N, I, S) = G
-
-        # degeneracy/dimensionality
-        Do = oirreps2dimensions[I]
-        Ds = 2 * S + 1
-        D = Do * Ds
-
-        # weighted sum over G 
-        contrib = D * N * sum(exp(-betabar * e) for e in E)
-        N += contrib
-    end
-    return N / part
-end
-
-# int method 
 function compute_average_number_of_particles(
         irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
         betabar::Float64,
-        oindex2dimensions::Vector{Int64};
-        verbose=false)
+        oindex2dimensions::Vector{Int64} )
 
-    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
+    # partition function Z
+    partition::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
-    N::Float64 = 0.0
+    # <N>
+    average_number_of_particles::Float64 = 0.0
     for (G, (E, U)) in irrEU
-        # orbital and spin
+
+        # irrep quantum numbers
         (N, I, S) = G
 
         # degeneracy/dimensionality
@@ -199,46 +139,26 @@ function compute_average_number_of_particles(
         D = Do * Ds
 
         # weighted sum over G 
-        contrib = D * N * sum(exp(-betabar * e) for e in E)
-        N += contrib
+        average_number_of_particles += D * N * sum(exp(-betabar * energy) for energy in E)
     end
-    return N / part
-end
 
-# string method
-function compute_energy(irrEU, betabar, oirreps2dimensions::Dict; verbose=false)
-
-    part = compute_partition_function(irrEU, betabar, oirreps2dimensions)
-
-    energy = 0
-    for (G, (E, U)) in irrEU
-        # orbital and spin
-        (N, I, S) = G
-
-        # degeneracy/dimensionality
-        Do = oirreps2dimensions[I]
-        Ds = 2 * S + 1
-        D = Do * Ds
-
-        # weighted sum over G 
-        contrib = D * sum((e * exp(-betabar * e)) for e in E)
-        energy += contrib
-    end
-    return energy / part
+    return average_number_of_particles / partition
 end
 
 # int method
 function compute_energy(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    betabar::Float64,
-    oindex2dimensions::Vector{Int64};
-    verbose=false)
+    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}} ,
+    betabar::Float64 ,
+    oindex2dimensions::Vector{Int64} )
 
-    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
+    # partition function Z
+    partition::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
-    energy::Float64 = 0
+    # <H>
+    average_energy::Float64 = 0
     for (G, (E, U)) in irrEU
-        # orbital and spin
+        #
+        # irrep quantum numbers
         (N, I, S) = G
 
         # degeneracy/dimensionality
@@ -247,23 +167,24 @@ function compute_energy(
         D = Do * Ds
 
         # weighted sum over G 
-        contrib = D * sum((e * exp(-betabar * e)) for e in E)
-        energy += contrib
+        average_energy += D * sum((energy * exp(-betabar * energy)) for energy in E)
     end
-    return energy / part
+
+    return average_energy / partition
 end
 # int method
-function energy2(
+function compute_energy_squared(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
     oindex2dimensions::Vector{Int64};
     verbose=false)
 
-    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
+    partition::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     energy::Float64 = 0
     for (G, (E, U)) in irrEU
-        # orbital and spin
+
+        # irrep quantum numbers
         (N, I, S) = G
 
         # degeneracy/dimensionality
@@ -272,35 +193,40 @@ function energy2(
         D = Do * Ds
 
         # weighted sum over G 
-        contrib = D * sum((e * e * exp(-betabar * e)) for e in E)
-        energy += contrib
+        energy += D * sum(( energy^2 * exp(-betabar * energy) ) for energy in E)
     end
-    return energy / part
+
+    return energy / partition
 end
 
 # int method 
 function compute_entropy(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    betabar::Float64,
-    oindex2dimensions::Vector{Int64};
-    verbose=false)
+        irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+        betabar::Float64,
+        oindex2dimensions::Vector{Int64} )
 
-    part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
-    e::Float64 = compute_energy(irrEU, betabar, oindex2dimensions)
-    return log(part) + betabar * e
+    # S = log Z + betabar * E
+
+    partition::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
+    energy::Float64 = compute_energy(irrEU, betabar, oindex2dimensions)
+
+    return log(partition) + betabar * energy
 
 end
 
 # int method 
 function compute_heat_capacity(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    betabar::Float64,
-    oindex2dimensions::Vector{Int64};
-    verbose=false)
+        irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+        betabar::Float64,
+        oindex2dimensions::Vector{Int64};
+        verbose=false)
+
+    # C = betabar^2 * ( <H^2> - <H>^2 )
 
     e = compute_energy(irrEU, betabar, oindex2dimensions)
-    e2 = energy2(irrEU, betabar, oindex2dimensions)
-    return betabar * betabar * (e2 - e * e)
+    e2 = compute_energy_squared(irrEU, betabar, oindex2dimensions)
+
+    return betabar^2 * ( e2 - e^2 )
 
 end
 
@@ -308,10 +234,11 @@ end
 function compute_free_energy(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
     betabar::Float64,
-    oindex2dimensions::Vector{Int64};
-    verbose=false)
+    oindex2dimensions::Vector{Int64})
+    
+    # F/k_B T = - log Z
 
-    return log(compute_partition_function(irrEU, betabar, oindex2dimensions))
+    return - log(compute_partition_function(irrEU, betabar, oindex2dimensions))
 
 end
 
@@ -525,6 +452,38 @@ end
 # WRITING TO FILE #
 # ~~~~~~~~~~~~~~~ #
 
+# header for data files
+const thermoheader = "# 1 temperature | 2 magnetic susceptibility | 3 entropy | 4 heat capacity | 5 free energy | 6 number of particles | 7 energy | 8 partition function\n"
+
+# file naming conventions 
+function thermo_filename_one_z( 
+            label::String ,
+            imp_clean_diff::String ,
+            z::Float64 )
+
+    return "thermodata/thermo_$(label)_$(imp_clean_diff)_z$(z).dat"
+
+end
+function thermo_filename_zavg(
+            label::String ,
+            imp_clean_diff::String )
+
+    return "thermodata/thermo_$(label)_$(imp_clean_diff)_zavg.dat"
+end
+
+# generic thermodynamic data writer
+function write_thermo_data( 
+            filename::String ,
+            data ;
+            header::String=thermoheader )
+
+    open( filename , write=true ) do f
+        write( f , header )
+        writedlm( f , data )
+    end
+
+end
+
 function write_impurity_info(
         nrg,
         omults,
@@ -546,15 +505,19 @@ end
 function write_thermodata_onez(
         nrg,
         calculation,
-        orbital,
+        label,
         z)
 
-    filename = "thermodata/thermo_$(lowercase(calculation))_$(orbital)_z$z.dat"
+    filename = thermo_filename_one_z(
+        label ,
+        lowercase(calculation) ,
+        z
+    )
 
     println("Saving thermodynamic data to $filename...\n\n" )
 
     open( filename , write=true ) do f
-        write( f , "# 1 temperature | 2 magnetic susceptibility | 3 entropy | 4 heat capacity | 5 free energy | 6 number of particles | 7 energy | 8 partition function\n" )
+        write( f , thermoheader )
         writedlm(
             f ,
             [nrg.t nrg.m nrg.entr nrg.c nrg.f nrg.n nrg.e nrg.p]
@@ -562,23 +525,30 @@ function write_thermodata_onez(
     end
 end
 
-function write_thermodiff(orbital, z)
+function write_thermodiff(label, z)
 
-    th_clean = readdlm( "thermodata/thermo_clean_$(orbital)_z$z.dat" , skipstart=1 )
+    # clean data
+    th_clean_filename = thermo_filename_one_z( label , "clean" , z )
+    th_clean = readdlm( th_clean_filename , skipstart=1 )
     t = th_clean[:, 1]
 
-    th_imp = readdlm( "thermodata/thermo_imp_$(orbital)_z$z.dat" , skipstart=1 )
+    # imp data
+    th_imp_filename = thermo_filename_one_z( label , "imp" , z )
+    th_imp = readdlm( th_imp_filename , skipstart=1 )
 
+    # check whether impurity and clean calculation have the same number of iterations
     if size(th_clean) !== size(th_imp)
         println( "Different number of iterations with respect to clean calculation. Thermodiff will not be computed." ) 
         return nothing
     end
 
+    # impurity contribution
     th_diff = th_imp .- th_clean
     th_diff[:, 4] .= th_imp[:, 4] ./ th_clean[:, 4]
     th_diff[:, 1] .= th_imp[:, 1]
 
-    mfile = "thermodata/th_diff_$(orbital)_z$z.dat"
-    writedlm(mfile, th_diff)
+    # write impurity contribution
+    th_diff_filename = thermo_filename_one_z( label , "diff" , z )
+    write_thermo_data( th_diff_filename , th_diff )
 
 end

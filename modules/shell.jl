@@ -1095,16 +1095,16 @@ function NRG( iterations::Int64,
             if discretization!=="lanczos" 
                 temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization )
             elseif discretization=="lanczos" 
-                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization , ebar0=ebar[1] )
+                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
             end
 
-            partition_function = compute_partition_function( irrEU , betabar*fac , oindex2dimensions )
-            entropy = compute_entropy( irrEU , betabar*fac , oindex2dimensions )
             magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar*fac , oindex2dimensions )
-            number_particles = compute_average_number_of_particles( irrEU , betabar*fac , oindex2dimensions )
-            energy = compute_energy( irrEU , betabar*fac , oindex2dimensions )
+            entropy = compute_entropy( irrEU , betabar*fac , oindex2dimensions )
             heat_capacity = compute_heat_capacity( irrEU , betabar*fac , oindex2dimensions )
             free_energy = compute_free_energy( irrEU , betabar*fac , oindex2dimensions )
+            number_particles = compute_average_number_of_particles( irrEU , betabar*fac , oindex2dimensions )
+            energy = compute_energy( irrEU , betabar*fac , oindex2dimensions )
+            partition_function = compute_partition_function( irrEU , betabar*fac , oindex2dimensions )
             @printf "%s = %.3e\n" "temperature" temperature
             @printf "%s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
             @printf "%s = %.3f\n" "entropy" entropy

@@ -1,45 +1,71 @@
+include( "thermo.jl" )
+
+# generate Nz values of Z
 function generate_Z( Nz::Int64 )
     return Float64[ i/Nz for i in 0:(Nz-1) ]
 end
 
+# average thermodynamic calculations over values of z
 function zavg_thermo( label::String , Z::Vector{Float64} )
 
+    # number of z values
     Nz = length( Z )
 
     println( "Averaging thermodynamic functions over values of z..." )
-    th_tot  = Dict()
+    thdiff_tot  = Dict()
     thclean_tot = Dict()
     thimp_tot = Dict()
 
     for z in Z
-        th_z      = readdlm( "thermodata/th_diff_$(label)_z$z.dat" , skipstart=1 )
-        thclean_z = readdlm( "thermodata/thermo_clean_$(label)_z$z.dat" , skipstart=1 ) 
-        thimp_z   = readdlm( "thermodata/thermo_imp_$(label)_z$z.dat" , skipstart=1 ) 
-        t = th_z[:,1] 
-        th_tot[z] = Dict( round(t[i],sigdigits=2)=>th_z[i,:] for i in 1:length(t) )
+
+        # read clean data
+        thclean_z_filename = thermo_filename_one_z( label , "clean" , z )
+        thclean_z = readdlm( thclean_z_filename , skipstart=1 ) 
+
+        # read imp data
+        thimp_z_filename = thermo_filename_one_z( label , "imp" , z )
+        thimp_z   = readdlm( thimp_z_filename , skipstart=1 ) 
+
+        # read diff data
+        thdiff_z_filename = thermo_filename_one_z( label , "diff" , z )
+        thdiff_z = readdlm( thdiff_z_filename , skipstart=1 )
+
+        # temperatures
+        t = thdiff_z[:,1] 
+
+        # store data in dictionary
+        thdiff_tot[z] = Dict( round(t[i],sigdigits=2)=>thdiff_z[i,:] for i in 1:length(t) )
         thclean_tot[z] = Dict( round(t[i],sigdigits=2)=>thclean_z[i,:] for i in 1:length(t) ) 
         thimp_tot[z] = Dict( round(t[i],sigdigits=2)=>thimp_z[i,:] for i in 1:length(t) ) 
     end
 
-    th_zavg = Dict()
+    # average over z
+    thdiff_zavg = Dict()
     thclean_zavg = Dict()
     thimp_zavg = Dict()
-    T = sort(collect(keys(th_tot[Z[end]])))
+    T = sort(collect(keys(thdiff_tot[Z[end]])))
     T = T[Nz:(end-Nz)]
     for t in T
-        th_zavg[t]  = sum( th_tot[z][t] for z in Z )/Nz
+        thdiff_zavg[t]  = sum( thdiff_tot[z][t] for z in Z )/Nz
         thclean_zavg[t] = sum( thclean_tot[z][t] for z in Z )/Nz 
         thimp_zavg[t] = sum( thimp_tot[z][t] for z in Z )/Nz 
     end
 
-    println()
-    
-    th_zavg_vec = [th_zavg[t] for t in T]
+    # z-averaged clean data
     thclean_zavg_vec = [thclean_zavg[t] for t in T]
+    zavg_clean_filename = thermo_filename_zavg( label , "clean" )
+    write_thermo_data( zavg_clean_filename , thclean_zavg_vec )
+
+    # z-averaged imp data
     thimp_zavg_vec = [thimp_zavg[t] for t in T]
-    writedlm( "thermodata/th_zavg_$(label).dat" , th_zavg_vec )
-    writedlm( "thermodata/th_cleanavg_$(label).dat" , thclean_zavg_vec )
-    writedlm( "thermodata/th_impavg_$(label).dat" , thimp_zavg_vec )
+    zavg_imp_filename = thermo_filename_zavg( label , "imp" )
+    write_thermo_data( zavg_imp_filename , thimp_zavg_vec )
+    
+    # z-averaged impurity contribution
+    thdiff_zavg_vec = [thdiff_zavg[t] for t in T]
+    zavg_diff_filename = thermo_filename_zavg( label , "diff" )
+    write_thermo_data( zavg_diff_filename , thdiff_zavg_vec )
+
 end
 
 
