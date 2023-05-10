@@ -1321,9 +1321,9 @@ function nrg_full(
 
         else
 
-            open( "spectral/spectral_$(label)_z$(z).dat" , write=true ) do f
-                writedlm( f , nrg.specfunc )
-            end
+            #open( "spectral/spectral_$(label)_z$(z).dat" , write=true ) do f
+            #    writedlm( f , nrg.specfunc )
+            #end
 
         end
 

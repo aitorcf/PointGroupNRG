@@ -1203,12 +1203,15 @@ function NRG( iterations::Int64,
     if spectral 
 
         if orbitalresolved
+
             spec = compute_spectral_function_orbitalresolved(
                 AA ,
                 L ,
                 iterations ,
                 alpha ,
-                spectral_broadening )
+                spectral_broadening 
+            )
+
         else
 
             spec = compute_spectral_function(
