@@ -947,7 +947,6 @@ function NRG( iterations::Int64,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
               alpha::Float64=1.0 ,
               eta::Function=x->1.0 ,
-              Nz::Int64=1 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
               mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
@@ -992,9 +991,7 @@ function NRG( iterations::Int64,
     # create spectral directory
     isdir("spectral") || mkdir("spectral")
 
-    # NEW 
-    Nt = Nz==1 ? 1 : Int64(Nz/2)
-
+    # NRG iterations
     for n=2:iterations
 
         println( "ITERATION n=$n" )

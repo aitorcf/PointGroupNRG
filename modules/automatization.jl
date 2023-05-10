@@ -749,7 +749,6 @@ function nrg_full(
             spectral_method::String="sakai1989",
             spectral_broadening::Float64=1.0 ,
             orbitalresolved::Bool=false,
-            Nz::Int64=1 ,
             compute_impmults::Bool=false ) where {R<:Real}
 
     # defaults
@@ -1221,7 +1220,6 @@ function nrg_full(
                    z=z ,
                    discretization=discretization ,
                    verbose=false ,
-                   Nz=Nz ,
                    precompute_iaj=precompute_iaj ,
                    compute_impmults=compute_impmults ,
                    mm_i=mm_i )
@@ -1301,6 +1299,8 @@ function nrg_full(
         # thermo diff
         if calculation=="IMP"
             thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+            println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
+            println()
             if length(glob(thermo_clean_filename))!==0 
                 write_thermodiff( label , z )
             end
