@@ -936,7 +936,7 @@ function NRG( iterations::Int64,
               discretization::String="standard" ,
               spectral::Bool=false ,
               spectral_method::String="sakai1989",
-              etafac::Float64=1.0 ,
+              spectral_broadening::Float64=1.0 ,
               orbitalresolved::Bool=false ,
               M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
               AA::Vector{T}=[] ,
@@ -1192,7 +1192,7 @@ function NRG( iterations::Int64,
                 L ,
                 iterations ,
                 alpha ,
-                etafac )
+                spectral_broadening )
         else
 
             spec = compute_spectral_function(
@@ -1200,7 +1200,7 @@ function NRG( iterations::Int64,
                 L ,
                 iterations ,
                 alpha ;
-                etafac=etafac,
+                spectral_broadening=spectral_broadening,
                 method=spectral_method,
                 label=label ,
                 z=z

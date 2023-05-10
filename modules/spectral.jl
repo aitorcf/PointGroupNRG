@@ -1077,7 +1077,7 @@ function compute_spectral_function(
             L ,
             iterations ,
             first_hopping_amplitude ;
-            etafac=1.0 ,
+            spectral_broadening=1.0 ,
             method="sakai1989" ,
             label="" ,
             z=0.0 )
@@ -1089,7 +1089,7 @@ function compute_spectral_function(
                 L ,
                 iterations ,
                 first_hopping_amplitude ,
-                etafac 
+                spectral_broadening 
         )
     elseif method=="sakai1989"
         return compute_spectral_function_Sakai1989(
@@ -1097,7 +1097,7 @@ function compute_spectral_function(
                 L ,
                 iterations ,
                 first_hopping_amplitude ,
-                etafac ,
+                spectral_broadening ,
                 label ,
                 z
         )
@@ -1118,7 +1118,7 @@ function compute_spectral_function_FullRange(
             L ,
             iterations ,
             alpha ,
-            etafac ;
+            spectral_broadening ;
             z::Float64=0.0 )
     
     # combine energies in linear and logarithmic scales 
@@ -1153,7 +1153,7 @@ function compute_spectral_function_FullRange(
             emax    = omegaN*widthfac
 
             # broadening factor for the step
-            eta     = etafac*omegaN
+            eta     = spectral_broadening*omegaN
             
             # negative interval 
             if is_in_interval( o , -emax , -emin )
@@ -1207,7 +1207,7 @@ function compute_spectral_function_Sakai1989(
             L ,
             iterations ,
             first_hopping_amplitude ,
-            etafac ,
+            spectral_broadening ,
             label ,
             z )
 
@@ -1250,7 +1250,7 @@ function compute_spectral_function_Sakai1989(
         A = AA[N+1]
 
         # rescaled broadening
-        eta = etafac*omegaN
+        eta = spectral_broadening*omegaN
 
         for (m,(eigenenergy,coeffs)) in A
 
@@ -1278,7 +1278,7 @@ function compute_spectral_function_Sakai1989(
         A = AA[N+1]
 
         # rescaled broadening
-        eta = etafac*omegaN
+        eta = spectral_broadening*omegaN
 
         for (m,(eigenenergy,coeffs)) in A
 
@@ -1377,7 +1377,7 @@ function compute_spectral_function_orbitalresolved(
              L ,
              iterations ,
              alpha ,
-             etafac ;
+             spectral_broadening ;
              widthfac::Float64=2.0 )
 
      omegas_log = [ sign*L^(-(x-2)/2.0) for sign in [-1.0,1.0]
@@ -1399,7 +1399,7 @@ function compute_spectral_function_orbitalresolved(
              emin    = omegaN/sqrt(L)
              emax    = omegaN*sqrt(L) #widthfac
              local A = AA[N+1]
-             eta     = etafac*omegaN
+             eta     = spectral_broadening*omegaN
 
              # negative interval
              if is_in_interval( o , -emax , -emin )
