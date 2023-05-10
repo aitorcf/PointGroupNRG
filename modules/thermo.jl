@@ -516,13 +516,8 @@ function write_thermodata_onez(
 
     println("Saving thermodynamic data to $filename...\n\n" )
 
-    open( filename , write=true ) do f
-        write( f , thermoheader )
-        writedlm(
-            f ,
-            [nrg.t nrg.m nrg.entr nrg.c nrg.f nrg.n nrg.e nrg.p]
-        )
-    end
+    write_thermo_data( filename , nrg.thermo )
+
 end
 
 function write_thermodiff(label, z)
@@ -551,4 +546,33 @@ function write_thermodiff(label, z)
     th_diff_filename = thermo_filename_one_z( label , "diff" , z )
     write_thermo_data( th_diff_filename , th_diff )
 
+end
+
+# ===================================== #
+# INTERPOLATION OF THERMODYNAMIC MATRIX #
+# ===================================== #
+
+function interpolate_thermo_matrix( 
+            old_matrix::Matrix{Float64} ,
+            new_temperatures::Vector{Float64} )
+
+    old_temperatures = old_matrix[:,1]
+
+    new_matrix = Float64[new_temperatures ;;]
+
+    for column_index in 2:size(old_matrix,2)
+
+        # data column
+        column = old_matrix[:,column_index]
+
+        # interpolate column
+        interpolator = linear_interpolation( old_temperatures , column , extrapolation_bc=Line() )
+        column_interpolated = [interpolator(t) for t in new_temperatures]
+
+        # store interpolation in new matrix
+        new_matrix = hcat( new_matrix , column_interpolated )
+
+    end
+
+    return new_matrix
 end

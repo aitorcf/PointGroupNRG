@@ -4,8 +4,10 @@ include( "symmetry.jl" )
 #include( "spectral.jl")
 include( "discretization.jl" )
 include( "lanczos.jl" )
+include( "thermo.jl" )
 
 using Printf
+using Interpolations
 
 # ###########################################
 # SHELL CREATION OPERATORS
@@ -948,21 +950,25 @@ function NRG( iterations::Int64,
               Nz::Int64=1 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
-              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ) where {T}
+              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
+              write_spectrum::Bool=false ) where {T}
 
     println( "=============" )
     println( "NRG PROCEDURE" )
     println( "=============" )
     println()
 
-    temperatures   = []
-    magnetizations = []
-    energies       = []
-    numbers        = []
-    partitions     = []
-    entropies      = []
-    heatcaps       = []
-    free_energies  = []
+    #temperatures   = []
+    #magnetizations = []
+    #energies       = []
+    #numbers        = []
+    #partitions     = []
+    #entropies      = []
+    #heatcaps       = []
+    #free_energies  = []
+    thermo_even = zeros( Float64 , 0 , 8 )
+    thermo_odd  = zeros( Float64 , 0 , 8 )
+
     impspins       = []
     impnums        = []
     impmults       = []
@@ -1087,41 +1093,36 @@ function NRG( iterations::Int64,
 
         # thermodynamics 
         println( "THERMODYNAMICS" )
-        @show Nt
-        for m in 1:Nt 
 
-            fac = L^((m-1)/Nz)
+        if discretization!=="lanczos" 
+            temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization )
+        elseif discretization=="lanczos" 
+            temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
+        end
 
-            if discretization!=="lanczos" 
-                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization )
-            elseif discretization=="lanczos" 
-                temperature = compute_temperature( n , L , betabar*fac ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
-            end
+        magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar , oindex2dimensions )
+        entropy = compute_entropy( irrEU , betabar , oindex2dimensions )
+        heat_capacity = compute_heat_capacity( irrEU , betabar , oindex2dimensions )
+        free_energy = compute_free_energy( irrEU , betabar , oindex2dimensions )
+        number_particles = compute_average_number_of_particles( irrEU , betabar , oindex2dimensions )
+        energy = compute_energy( irrEU , betabar , oindex2dimensions )
+        partition_function = compute_partition_function( irrEU , betabar , oindex2dimensions )
+        @printf "%s = %.3e\n" "temperature" temperature
+        @printf "%s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
+        @printf "%s = %.3f\n" "entropy" entropy
+        @printf "%s = %.3f\n" "heat capacity" heat_capacity
+        @printf "%s = %.3f\n" "free energy" free_energy
+        @printf "%s = %i\n"   "average number of particles" number_particles
+        @printf "%s = %.3f\n" "energy" energy
+        @printf "%s = %.3e\n" "Z" partition_function
+        println()
+        thermodynamic_matrix = [temperature magnetic_susceptibility entropy heat_capacity free_energy number_particles energy partition_function]
 
-            magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar*fac , oindex2dimensions )
-            entropy = compute_entropy( irrEU , betabar*fac , oindex2dimensions )
-            heat_capacity = compute_heat_capacity( irrEU , betabar*fac , oindex2dimensions )
-            free_energy = compute_free_energy( irrEU , betabar*fac , oindex2dimensions )
-            number_particles = compute_average_number_of_particles( irrEU , betabar*fac , oindex2dimensions )
-            energy = compute_energy( irrEU , betabar*fac , oindex2dimensions )
-            partition_function = compute_partition_function( irrEU , betabar*fac , oindex2dimensions )
-            @printf "%s = %.3e\n" "temperature" temperature
-            @printf "%s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
-            @printf "%s = %.3f\n" "entropy" entropy
-            @printf "%s = %.3f\n" "heat capacity" heat_capacity
-            @printf "%s = %.3f\n" "free energy" free_energy
-            @printf "%s = %i\n" "number of particles" number_particles
-            @printf "%s = %.3f\n" "energy" energy
-            @printf "%s = %.3e\n" "Z" partition_function
-            println()
-            push!( temperatures , temperature )
-            push!( magnetizations , magnetic_susceptibility )
-            push!( entropies , entropy )
-            push!( heatcaps , heat_capacity )
-            push!( free_energies , free_energy )
-            push!( numbers , number_particles )
-            push!( energies , energy )
-            push!( partitions , partition_function )
+        # store even and odd therodynamic results
+        if n%2==0
+            thermo_even = vcat( thermo_even , thermodynamic_matrix )
+        else
+            thermo_odd  = vcat( thermo_odd , thermodynamic_matrix )
         end
 
         if spectral 
@@ -1181,8 +1182,26 @@ function NRG( iterations::Int64,
     @show maxe_avg
     println( "Maximum irrep qnums: N=$maxn_tot , 2S=$maxs_tot\n" )
 
-    # dump spectra
-    write_nrg_spectra( spectrum_even , spectrum_odd )
+    # write spectra
+    if write_spectrum
+        write_nrg_spectra( spectrum_even , spectrum_odd )
+    end
+
+    # average even and odd thermodynamic results
+    #
+    # reverse thermodynamic matrices for interpolation
+    reverse!( thermo_even , dims=1 )
+    reverse!( thermo_odd  , dims=1 )
+    # collect temperatures from even and odd
+    temperatures_even = thermo_even[:,1]
+    temperatures_odd  = thermo_odd[:,1]
+    temperatures_evenodd = sort(vcat(temperatures_even,temperatures_odd))
+    # interpolate even and odd data to new temperatures
+    thermo_even_interpolated = interpolate_thermo_matrix( thermo_even , temperatures_evenodd )
+    thermo_odd_interpolated  = interpolate_thermo_matrix( thermo_odd  , temperatures_evenodd )
+    # average even and odd
+    thermo_average = copy(thermo_even_interpolated)
+    thermo_average[:,2:end] = 0.5*( thermo_even_interpolated[:,2:end] + thermo_odd_interpolated[:,2:end] )
 
     if spectral 
 
@@ -1210,14 +1229,7 @@ function NRG( iterations::Int64,
 
     end
 
-    return ( t=temperatures , 
-             m=magnetizations , 
-             e=energies , 
-             p=partitions ,
-             n=numbers , 
-             c=heatcaps ,
-             f=free_energies ,
-             entr=entropies,
+    return ( thermo=thermo_average ,
              perf=performance ,
              impmults=impmults ,
              specfunc= spectral ? spec : nothing )
