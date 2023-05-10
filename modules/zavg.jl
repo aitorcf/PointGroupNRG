@@ -1,4 +1,5 @@
 include( "thermo.jl" )
+include( "spectral.jl" )
 
 # generate Nz values of Z
 function generate_Z( Nz::Int64 )
@@ -96,170 +97,56 @@ function zavg_thermo( label::String , Z::Vector{Float64} )
 
 end
 
+function zavg_spectral( 
+            label::String ,
+            Z::Vector{Float64} )
 
-function zavg_spectral( label::String , 
-                        Z::Vector{Float64} ; 
-                        orbitalresolved::Bool=false ,
-                        No::Int64=0 )
+    # data from all z
+    data_all_z = Matrix{Float64}[]
 
-    println( "Averaging over values of z..." )
+    # gather spectral data
+    for z in Z
 
-    Nz = length(Z)
+        # read data
+        filename = spectral_filename( label , z=z )
+        data = readdlm( filename , skipstart=1 )
 
-    if orbitalresolved
-
-        for i in 1:No
-
-            data = Dict()
-            for z in Z 
-                filename = "spectral/spectral_$(label)_o$(i)_z$(z).dat"
-                data[z] = readdlm( filename )
-            end
-
-            omegas = data[Z[1]][:,1]
-            data_zavg = [0.0 for _=1:length(omegas)]
-            for z in Z
-                data_zavg .+= data[z][:,2]./Nz
-            end
-
-            zavgfile = "spectral/spectral_$(label)_o$(i)_zavg.dat"
-            open( zavgfile , write=true ) do f
-                writedlm( f , [omegas data_zavg] )
-            end
-
-        end
-
-    else 
-
-        data = Dict()
-        for z in Z 
-            data[z] = readdlm( "spectral/spectral_$(label)_z$(z).dat" )
-        end
-
-        omegas = data[Z[1]][:,1]
-
-        data_zavg = [0.0 for _=1:length(omegas)]
-        for z in Z
-            data_zavg .+= data[z][:,2]./Nz
-        end
-
-        zavgfile = "spectral/spectral_$(label)_zavg.dat"
-        open( zavgfile , write=true ) do f
-            writedlm( f , [omegas data_zavg] )
-        end
+        # store data
+        push!( data_all_z , data )
 
     end
 
-end
+    # linearly interpolate data for all z
+    #
+    # storage variable
+    data_all_z_interpolated = Matrix{Float64}[]
+    # collect energy values
+    omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
+    filter!( x->(abs(x)<=1.0) , omegas_average )
+    min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
+    filter!( x->(abs(x)>=min_omega) , omegas_average )
+    # interpolate
+    for data in data_all_z 
 
-using Interpolations
+        # interpolating function
+        interpolator = linear_interpolation( data[:,1] , data[:,2] , extrapolation_bc=Line() )
 
+        # interpolation
+        data_interpolated = [ omegas_average Float64[ interpolator(omega) for omega in omegas_average ]]
 
-#function interpolate_spectral_function( 
-#        xx::Vector{Float64} , 
-#        yy::Vector{Float64} ;
-#        step_reductor::Int64=100 )
-#
-#    # integer range for interpolation 
-#    range_input = 1:length(yy)
-#    range_output = 1:(1.0/(step_reductor-1)):length(yy)
-#
-#    # interpolate y
-#    interpolator_y = cubic_spline_interpolation( range_input , yy )
-#    interpolator_x = cubic_spline_interpolation( range_input , xx )
-#    yy_dense = map( interpolator_y , range_output )
-#    xx_dense = map( interpolator_x , range_output )
-#
-#    return xx_dense,yy_dense
-#
-#end
-function zavg_spectral_new( label::String , 
-                        Z::Vector{Float64} ; 
-                        orbitalresolved::Bool=false ,
-                        No::Int64=0 )
-
-    println( "Averaging over values of z..." )
-
-    Nz = length(Z)
-
-    if orbitalresolved
-
-        for i in 1:No
-
-            data = Dict()
-            for z in Z 
-                filename = "spectral/spectral_$(label)_o$(i)_z$(z).dat"
-                data[z] = readdlm( filename )
-            end
-
-            omegas = data[Z[1]][:,1]
-            data_zavg = [0.0 for _=1:length(omegas)]
-            for z in Z
-                data_zavg .+= data[z][:,2]./Nz
-            end
-
-            zavgfile = "spectral/spectral_$(label)_o$(i)_zavg.dat"
-            open( zavgfile , write=true ) do f
-                writedlm( f , [omegas data_zavg] )
-            end
-
-        end
-
-    else 
-
-        data = Dict()
-        omegas_lin_neg = collect(-1:0.001:-0.001)
-        omegas_lin_pos = sort(-omegas_lin_neg)
-        min_omega = maximum([minimum(abs.(readdlm( "spectral/spectral_$(label)_z$(z).dat" )[:,1])) for z in Z])
-        omegas_log = collect( (sign*1.5^-i) for sign in [-1,1] for i in 1:100 )
-        omegas_log = filter( x->abs(x)>min_omega , omegas_log )
-        omegas = sort(vcat(omegas_lin_neg,omegas_lin_pos,omegas_log))
-        @show omegas
-        for z in Z 
-            zmatrix_sparse = readdlm( "spectral/spectral_$(label)_z$(z).dat" )
-            zmatrix_dense = hcat(interpolate_spectral_function( zmatrix_sparse[:,1] , zmatrix_sparse[:,2] )...)
-            println( "***********************" )
-            println()
-            @show zmatrix_sparse[:,2]
-            open( "spectral/test_z$(z).dat" , write=true ) do f
-                writedlm( f , zmatrix_dense )
-            end
-            println()
-            println( "***********************" )
-            println()
-            @show zmatrix_dense[:,2]
-            println()
-            println( "***********************" )
-            println()
-            data_interpolator = linear_interpolation( zmatrix_dense[:,1] , zmatrix_dense[:,2] , extrapolation_bc=Line() )
-            data_interpolated = vcat(collect([o data_interpolator(o)] for o in omegas)...)
-            @show data_interpolated
-            println()
-            println( "***********************" )
-            data[z] = data_interpolated
-            #data[z] = readdlm( "spectral/spectral_$(label)_z$(z).dat" )
-        end
-
-        #omegas = data[Z[1]][:,1]
-
-        data_zavg = [0.0 for _=1:length(omegas)]
-        for z in Z
-            data_zavg .+= data[z][:,2]./Nz
-        end
-        
-        #data_zavg = vcat(collect(values(data))...)
-        #data_zavg = [ [data_zavg[i,1], data_zavg[i,2]] for i in 1:size(data_zavg,1) ]
-        #@show data_zavg
-        #println(); println()
-        #sort!( data_zavg , by=x->x[1] )
-        #data_zavg = hcat( data_zavg... )'
-
-        zavgfile = "spectral/spectral_$(label)_zavg.dat"
-        open( zavgfile , write=true ) do f
-            #writedlm( f , [omegas data_zavg] )
-            writedlm( f , [omegas data_zavg] )
-        end
+        # store interpolated data
+        push!( data_all_z_interpolated , data_interpolated )
 
     end
+
+    # average results 
+    spectral_zavg = copy(data_all_z_interpolated[1])
+    spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
+
+    # write results
+    write_spectral_function(
+        spectral_filename(label,zavg=true),
+        spectral_zavg 
+    )
 
 end

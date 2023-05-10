@@ -11,16 +11,16 @@ const spectralheader = "# 1 energy | 2 spectral function\n"
 
 # Naming convention
 function spectral_filename( 
-            label::String ,
-            z::Float64 ;
+            label::String ;
+            z::Float64=0.0 ,
+            zavg::Bool=false ,
             orbital::Int64=0 ,
             tail::String="" )
 
-    if orbital==0
-        return "spectral/spectral_$(label)_z$(z)$(tail).dat"
-    else 
-        return "spectral/spectral_$(label)_o$(orbital)_z$(z)$(tail).dat"
-    end
+    z_string = zavg ? "_zavg" : "_z$(z)"
+    o_string = orbital==0 ? "" : "_o$(o)"
+    return "spectral/spectral_$(label)$(z_string)$(o_string)$(tail).dat"
+
 end
 
 # Writing to file
@@ -38,7 +38,7 @@ end
 
 # Reading from file
 function read_spectral_data( filename::String )
-    return readdlm( filename , skipline=1 )
+    return readdlm( filename , skipstart=1 )
 end
 
 ###############
@@ -1274,6 +1274,7 @@ function compute_spectral_function_Sakai1989(
     maximum_energies = collect( maximum(collect( v[1] for v in values(A) )) for A in AA )
     average_energymax = sum(maximum_energies)/length(maximum_energies)
     K_factor = average_energymax/4.0
+    #K_factor = 2.0
 
     # chosen energies
     omegas_odd = sort([ 
@@ -1356,18 +1357,8 @@ function compute_spectral_function_Sakai1989(
     # interpolate even and odd spectral functions to new omegas
     spectral_even_interpolated = linear_interpolate_spectral_function( omegas_even  , spectral_even , omegas_evenodd )
     spectral_odd_interpolated  = linear_interpolate_spectral_function( omegas_odd   , spectral_odd  , omegas_evenodd )
-    println( "***************************" )
-    @show omegas_even
-    @show spectral_even_interpolated 
-    println( "***************************" )
-    @show omegas_odd
-    @show spectral_odd_interpolated
-    println( "***************************" )
     # compute average 
     spectral_evenodd = 0.5*( spectral_even_interpolated + spectral_odd_interpolated )
-    @show omegas_evenodd
-    @show spectral_evenodd
-    println( "***************************" )
 
     # compute spline-interpolated smooth spectral function
     omegas_evenodd_spline,spectral_evenodd_spline = spline_interpolate_spectral_function( 
@@ -1377,19 +1368,19 @@ function compute_spectral_function_Sakai1989(
 
     # write even, odd, average and spline-interpolated spectral data
     write_spectral_function( 
-        spectral_filename(label,z,tail="_even") ,
+        spectral_filename(label,z=z,tail="_even") ,
         [omegas_even spectral_even]
     )
     write_spectral_function(
-        spectral_filename(label,z,tail="_odd") ,
+        spectral_filename(label,z=z,tail="_odd") ,
         [omegas_odd spectral_odd]
     )
     write_spectral_function(
-        spectral_filename(label,z) ,
+        spectral_filename(label,z=z) ,
         [omegas_evenodd spectral_evenodd]
     )
     write_spectral_function(
-        spectral_filename(label,z,tail="_interpolated") ,
+        spectral_filename(label,z=z,tail="_interpolated") ,
         [omegas_evenodd_spline spectral_evenodd_spline]
     )
 
