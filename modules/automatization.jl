@@ -734,7 +734,7 @@ function nrg_full(
             shell_config::Dict{String,Int64} ,
             identityrep::String ,
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
-            u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ,
+            u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
             hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
             distributed::Bool=false,
             z::Float64=0.0 ,
