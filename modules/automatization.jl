@@ -1250,7 +1250,6 @@ function nrg_full(
                    discretization=discretization ,
                    verbose=false ,
                    spectral=true ,
-                   spectral_method=spectral_method,
                    spectral_broadening=spectral_broadening ,
                    orbitalresolved=orbitalresolved ,
                    M=M,

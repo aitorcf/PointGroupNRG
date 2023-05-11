@@ -1228,30 +1228,17 @@ function NRG( iterations::Int64,
 
     if spectral 
 
-        if orbitalresolved
-
-            spectral_function = compute_spectral_function_orbitalresolved(
-                AA ,
-                L ,
-                iterations ,
-                alpha ,
-                spectral_broadening 
-            )
-
-        else
-
-            spectral_function = compute_spectral_function(
-                AA ,
-                L ,
-                iterations ,
-                alpha ;
-                spectral_broadening=spectral_broadening,
-                method=spectral_method,
-                label=label ,
-                z=z
-            )
-
-        end
+        compute_spectral_function(
+            AA ,
+            L ,
+            iterations ,
+            alpha ;
+            spectral_broadening=spectral_broadening,
+            method=spectral_method,
+            label=label ,
+            z=z ,
+            orbitalresolved=orbitalresolved
+        )
 
     end
 
@@ -1315,7 +1302,6 @@ function NRG( iterations::Int64,
         thermo = thermo_average ,
         diagonalization_performances = diagonalization_performances ,
         impmults = compute_impmults ? impmults : nothing ,
-        spectral_function = spectral ? spectral_function : nothing ,
         spectral_performances = spectral ? spectral_performances : nothing
     )
 end

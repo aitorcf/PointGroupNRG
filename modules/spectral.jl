@@ -18,7 +18,7 @@ function spectral_filename(
             tail::String="" )
 
     z_string = zavg ? "_zavg" : "_z$(z)"
-    o_string = orbital==0 ? "" : "_o$(o)"
+    o_string = orbital==0 ? "" : "_o$(orbital)"
     return "spectral/spectral_$(label)$(z_string)$(o_string)$(tail).dat"
 
 end
@@ -1122,12 +1122,13 @@ function compute_spectral_function(
             method::String="sakai1989" ,
             label::String="" ,
             z::Float64=0.0 ,
-            orbitals::Int64=0 )
+            K_factor::Float64=2.0 ,
+            orbitalresolved::Bool=false )
 
 
     # currently working
     if method=="sakai1989"
-        return compute_spectral_function_Sakai1989(
+        compute_spectral_function_Sakai1989(
                 AA ,
                 L ,
                 iterations ,
@@ -1135,7 +1136,8 @@ function compute_spectral_function(
                 spectral_broadening ,
                 label ,
                 z ,
-                orbitals=orbitals
+                K_factor=K_factor ,
+                orbitalresolved=orbitalresolved
         )
     # probably remove?
     elseif method=="fullrange"
@@ -1244,18 +1246,31 @@ function linear_interpolate_spectral_function(
 end
 function spline_interpolate_spectral_function( 
         xx::Vector{Float64} , 
-        yy::Vector{Float64} ;
-        step_reductor::Int64=100 )
+        yy::ST ;
+        step_reductor::Int64=100 ,
+        orbitalresolved::Bool=false ) where {ST<:Union{ Vector{Float64} , Dict{IntMultiplet,Vector{Float64}} }}
 
     # integer range for interpolation 
-    range_input = 1:length(yy)
-    range_output = 1:(1.0/(step_reductor-1)):length(yy)
+    number_of_energies = orbitalresolved ? length(yy[collect(keys(yy))[1]]) : length(yy)
+    range_input = 1:number_of_energies
+    range_output = 1:(1.0/(step_reductor-1)):number_of_energies
 
-    # interpolate y
-    interpolator_y = cubic_spline_interpolation( range_input , yy )
+    # interpolate x and y
     interpolator_x = cubic_spline_interpolation( range_input , xx )
-    yy_dense = map( interpolator_y , range_output )
     xx_dense = map( interpolator_x , range_output )
+    if !orbitalresolved
+        interpolator_y = cubic_spline_interpolation( range_input , yy )
+        yy_dense = map( interpolator_y , range_output )
+    elseif orbitalresolved
+        yy_dense = Dict()
+        for (multiplet,spectral_function) in yy
+            interpolator_y = cubic_spline_interpolation( range_input , spectral_function )
+            push!(
+                yy_dense ,
+                multiplet => map( interpolator_y , range_output )
+            )
+        end
+    end
 
     return xx_dense,yy_dense
 
@@ -1265,23 +1280,16 @@ function compute_spectral_function_Sakai1989(
             L ,
             iterations ,
             first_asymptotic_hopping_amplitude ,
-            spectral_broadening ,
-            label ,
-            z ;
-            orbitals::Int64=0 )
+            spectral_broadening::Float64 ,
+            label::String ,
+            z::Float64 ;
+            K_factor::Float64=2.0 ,
+            orbitalresolved::Bool=false )
 
     # the chosen energies are 
     #
     #   e = K_factor * omega_N
     #
-    # K_factor is chosen so that the energy
-    # is well within the reliable range.
-    maximum_energies = collect( maximum(collect( v[1] for v in values(A) )) for A in AA )
-    average_energymax = sum(maximum_energies)/length(maximum_energies)
-    K_factor = average_energymax/4.0
-    #K_factor = 2.0
-
-    # chosen energies
     omegas_odd = sort([ 
         ( K_factor * sign * first_asymptotic_hopping_amplitude * L^(-(N-2)/2.0) )
         for sign in [-1.0,1.0]
@@ -1294,8 +1302,20 @@ function compute_spectral_function_Sakai1989(
     ])
 
     # spectral function
+    #
+    # standard
     spectral_odd  = [0.0 for _ in omegas_odd]
     spectral_even = [0.0 for _ in omegas_even]
+    # orbital-resolved
+    if orbitalresolved
+        excitation_multiplets = Set( multiplet for (_,multiplet) in keys(AA[1]) )
+        spectral_odd  = Dict{IntMultiplet,Vector{Float64}}( 
+            multiplet=>spectral_odd for multiplet in excitation_multiplets
+        )
+        spectral_even  = Dict{IntMultiplet,Vector{Float64}}( 
+            multiplet=>spectral_even for multiplet in excitation_multiplets
+        )
+    end
 
     for (i,N) in enumerate(3:2:iterations)
 
@@ -1312,16 +1332,30 @@ function compute_spectral_function_Sakai1989(
         # rescaled broadening
         eta = spectral_broadening*omegaN
 
-        for (m,(eigenenergy,coeffs)) in A
+        if !orbitalresolved
+            for (m,(eigenenergy,coeffs)) in A
 
-            # positive energy range
-            Delta_positive = omega_positive - eigenenergy*omegaN
-            spectral_odd[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+                # positive energy range
+                Delta_positive = omega_positive - eigenenergy*omegaN
+                spectral_odd[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
 
-            # negative energy range
-            Delta_negative = omega_negative + eigenenergy*omegaN
-            spectral_odd[i] += coeffs[2]*P(Delta_negative,eta)
+                # negative energy range
+                Delta_negative = omega_negative + eigenenergy*omegaN
+                spectral_odd[i] += coeffs[2]*P(Delta_negative,eta)
 
+            end
+        elseif orbitalresolved
+            for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
+                
+                # positive energy range
+                Delta_positive = omega_positive - eigenenergy*omegaN
+                spectral_odd[excitation_multiplet][end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+
+                # negative energy range
+                Delta_negative = omega_negative + eigenenergy*omegaN
+                spectral_odd[excitation_multiplet][i] += coeffs[2]*P(Delta_negative,eta)
+
+            end
         end
 
     end
@@ -1340,56 +1374,111 @@ function compute_spectral_function_Sakai1989(
         # rescaled broadening
         eta = spectral_broadening*omegaN
 
-        for (m,(eigenenergy,coeffs)) in A
+        if !orbitalresolved
+            for (m,(eigenenergy,coeffs)) in A
 
-            # positive energy range
-            Delta_positive = omega_positive - eigenenergy*omegaN
-            spectral_even[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+                # positive energy range
+                Delta_positive = omega_positive - eigenenergy*omegaN
+                spectral_even[end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
 
-            # negative energy range
-            Delta_negative = omega_negative + eigenenergy*omegaN
-            spectral_even[i] += coeffs[2]*P(Delta_negative,eta)
+                # negative energy range
+                Delta_negative = omega_negative + eigenenergy*omegaN
+                spectral_even[i] += coeffs[2]*P(Delta_negative,eta)
 
+            end
+        elseif orbitalresolved
+            for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
+                
+                # positive energy range
+                Delta_positive = omega_positive - eigenenergy*omegaN
+                spectral_even[excitation_multiplet][end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
+
+                # negative energy range
+                Delta_negative = omega_negative + eigenenergy*omegaN
+                spectral_even[excitation_multiplet][i] += coeffs[2]*P(Delta_negative,eta)
+
+            end
         end
 
     end
-
 
     # average even and odd calculations with linear interpolation
     #
     # collect energy (omega) values
     omegas_evenodd = sort(vcat(omegas_even,omegas_odd))
+    filter!( x->(abs(x)<=1.0) , omegas_evenodd )
+    omegas_evenodd[1]!==-1.0  && insert!( omegas_evenodd , 1 , -1.0 )
+    omegas_evenodd[end]!==1.0 && push!( omegas_evenodd , 1.0 )
     # interpolate even and odd spectral functions to new omegas
-    spectral_even_interpolated = linear_interpolate_spectral_function( omegas_even  , spectral_even , omegas_evenodd )
-    spectral_odd_interpolated  = linear_interpolate_spectral_function( omegas_odd   , spectral_odd  , omegas_evenodd )
+    if !orbitalresolved
+        spectral_even_interpolated = linear_interpolate_spectral_function( omegas_even  , spectral_even , omegas_evenodd )
+        spectral_odd_interpolated  = linear_interpolate_spectral_function( omegas_odd   , spectral_odd  , omegas_evenodd )
+    elseif orbitalresolved
+        spectral_even_interpolated = Dict(
+            excitation_multiplet => linear_interpolate_spectral_function( omegas_even  , spectral_even_orbital , omegas_evenodd )
+            for (excitation_multiplet,spectral_even_orbital) in spectral_even
+        )
+        spectral_odd_interpolated = Dict(
+            excitation_multiplet => linear_interpolate_spectral_function( omegas_odd  , spectral_odd_orbital , omegas_evenodd )
+            for (excitation_multiplet,spectral_odd_orbital) in spectral_odd
+        )
+    end
     # compute average 
-    spectral_evenodd = 0.5*( spectral_even_interpolated + spectral_odd_interpolated )
+    if !orbitalresolved
+        spectral_evenodd = 0.5*( spectral_even_interpolated + spectral_odd_interpolated )
+    elseif orbitalresolved
+        spectral_evenodd = Dict(
+            excitation_multiplet => 0.5*( spectral_even_interpolated[excitation_multiplet] + 
+                                          spectral_odd_interpolated[excitation_multiplet]   )
+            for excitation_multiplet in keys(spectral_even_interpolated)
+        )
+    end
 
     # compute spline-interpolated smooth spectral function
     omegas_evenodd_spline,spectral_evenodd_spline = spline_interpolate_spectral_function( 
         omegas_evenodd ,
-        spectral_evenodd 
+        spectral_evenodd ,
+        orbitalresolved=orbitalresolved
    )
 
     # write even, odd, average and spline-interpolated spectral data
-    write_spectral_function( 
-        spectral_filename(label,z=z,tail="_even") ,
-        [omegas_even spectral_even]
-    )
-    write_spectral_function(
-        spectral_filename(label,z=z,tail="_odd") ,
-        [omegas_odd spectral_odd]
-    )
-    write_spectral_function(
-        spectral_filename(label,z=z) ,
-        [omegas_evenodd spectral_evenodd]
-    )
-    write_spectral_function(
-        spectral_filename(label,z=z,tail="_interpolated") ,
-        [omegas_evenodd_spline spectral_evenodd_spline]
-    )
-
-   return ( [omegas_evenodd spectral_evenodd] , [omegas_evenodd_spline spectral_evenodd_spline] )
+    if !orbitalresolved
+        write_spectral_function( 
+            spectral_filename(label,z=z,tail="_even") ,
+            [omegas_even spectral_even]
+        )
+        write_spectral_function(
+            spectral_filename(label,z=z,tail="_odd") ,
+            [omegas_odd spectral_odd]
+        )
+        write_spectral_function(
+            spectral_filename(label,z=z) ,
+            [omegas_evenodd spectral_evenodd]
+        )
+        write_spectral_function(
+            spectral_filename(label,z=z,tail="_splined") ,
+            [omegas_evenodd_spline spectral_evenodd_spline]
+        )
+    elseif orbitalresolved
+        for (orbital_idx,multiplet) in enumerate(collect(excitation_multiplets))
+            write_spectral_function( 
+                spectral_filename(label,z=z,tail="_even",orbital=orbital_idx) ,
+                [omegas_even spectral_even[multiplet]]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_odd",orbital=orbital_idx) ,
+                [omegas_odd spectral_odd[multiplet]]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,orbital=orbital_idx) ,
+                [omegas_evenodd spectral_evenodd[multiplet]]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_splined",orbital=orbital_idx) ,
+                [omegas_evenodd_spline spectral_evenodd_spline[multiplet]]
+            )
+        end
+    end
 
 end
 
