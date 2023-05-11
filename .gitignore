@@ -17,12 +17,10 @@ modules/templates.jl
 
 # butterfly modules
 modules_butterfly/
+butterfly/*
 
 # examples
-examples/Butterfly/
-examples/Lanczos/
-examples/RKKY/
-examples/SSK1989/
-examples/T2g/
-examples/Eg/**/*
-!examples/Eg/nrg_Eg.jl
+my_examples/*
+
+# doc files 
+!doc/Tutorial.md
