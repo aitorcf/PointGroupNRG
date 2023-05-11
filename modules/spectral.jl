@@ -27,9 +27,13 @@ end
 function write_spectral_function(
             filename::String ,
             spectral_data::Matrix{Float64} ;
-            header::String=spectralheader )
+            header::String=spectralheader ,
+            orbitalresolved_header::String="" )
     
     open( filename , write=true ) do f 
+        if orbitalresolved_header!==""
+            write( f , orbitalresolved_header )
+        end
         write( f , spectralheader )
         writedlm( f , spectral_data )
     end
@@ -38,7 +42,7 @@ end
 
 # Reading from file
 function read_spectral_data( filename::String )
-    return readdlm( filename , skipstart=1 )
+    return readdlm( filename , comments=true , comment_char='#' )
 end
 
 ###############
@@ -1461,21 +1465,26 @@ function compute_spectral_function_Sakai1989(
         )
     elseif orbitalresolved
         for (orbital_idx,multiplet) in enumerate(collect(excitation_multiplets))
+            orbital_header = "# Excitation multiplet: $multiplet , index=$orbital_idx\n"
             write_spectral_function( 
                 spectral_filename(label,z=z,tail="_even",orbital=orbital_idx) ,
-                [omegas_even spectral_even[multiplet]]
+                [omegas_even spectral_even[multiplet]] ,
+                orbitalresolved_header=orbital_header
             )
             write_spectral_function(
                 spectral_filename(label,z=z,tail="_odd",orbital=orbital_idx) ,
-                [omegas_odd spectral_odd[multiplet]]
+                [omegas_odd spectral_odd[multiplet]] ,
+                orbitalresolved_header=orbital_header
             )
             write_spectral_function(
                 spectral_filename(label,z=z,orbital=orbital_idx) ,
-                [omegas_evenodd spectral_evenodd[multiplet]]
+                [omegas_evenodd spectral_evenodd[multiplet]] ,
+                orbitalresolved_header=orbital_header
             )
             write_spectral_function(
                 spectral_filename(label,z=z,tail="_splined",orbital=orbital_idx) ,
-                [omegas_evenodd_spline spectral_evenodd_spline[multiplet]]
+                [omegas_evenodd_spline spectral_evenodd_spline[multiplet]] ,
+                orbitalresolved_header=orbital_header
             )
         end
     end

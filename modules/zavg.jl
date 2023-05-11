@@ -99,54 +99,124 @@ end
 
 function zavg_spectral( 
             label::String ,
-            Z::Vector{Float64} )
+            Z::Vector{Float64} ;
+            orbitalresolved_number::Int64=0 )
 
-    # data from all z
-    data_all_z = Matrix{Float64}[]
+    orbitalresolved = orbitalresolved_number>0
 
-    # gather spectral data
-    for z in Z
+    # standard
+    if !orbitalresolved
 
-        # read data
-        filename = spectral_filename( label , z=z )
-        data = readdlm( filename , skipstart=1 )
+        data_all_z = Vector{Matrix{Float64}}()
+        
+        # gather spectral data
+        for z in Z
 
-        # store data
-        push!( data_all_z , data )
+            # read data
+            filename = spectral_filename( label , z=z )
+            data = readdlm( filename , skipstart=1 )
+
+            # store data
+            push!( data_all_z , data )
+
+        end
+
+        # linearly interpolate data for all z
+        #
+        # storage variable
+        data_all_z_interpolated = Matrix{Float64}[]
+        # collect energy values
+        omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
+        filter!( x->(abs(x)<=1.0) , omegas_average )
+        min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
+        filter!( x->(abs(x)>=min_omega) , omegas_average )
+        # interpolate
+        for data in data_all_z 
+
+            # interpolating function
+            interpolator = linear_interpolation( data[:,1] , data[:,2] , extrapolation_bc=Line() )
+
+            # interpolation
+            data_interpolated = [ omegas_average Float64[ interpolator(omega) for omega in omegas_average ]]
+
+            # store interpolated data
+            push!( data_all_z_interpolated , data_interpolated )
+
+        end
+
+        # average results 
+        spectral_zavg = copy(data_all_z_interpolated[1])
+        spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
+
+        # write results
+        write_spectral_function(
+            spectral_filename(label,zavg=true),
+            spectral_zavg 
+        )
+
+    elseif orbitalresolved 
+
+        # same procedure for every orbital
+        for orbital in 1:orbitalresolved_number
+
+            # all z data for this orbital
+            data_all_z = Vector{Matrix{Float64}}()
+
+            # read header for orbital
+            orbital_headervec = [""]
+            open( spectral_filename(label,z=0.0,orbital=1) ) do f
+                orbital_headervec[1] = readline(f)*"\n"
+            end
+            orbital_header = orbital_headervec[1]
+            
+            # gather spectral data
+            for z in Z
+
+                # read data
+                filename = spectral_filename( label , z=z , orbital=orbital )
+                data = read_spectral_data(filename)
+
+                # store data
+                push!( data_all_z , data )
+
+            end
+
+            # linearly interpolate data for all z
+            #
+            # storage variable
+            data_all_z_interpolated = Matrix{Float64}[]
+            # collect energy values
+            omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
+            filter!( x->(abs(x)<=1.0) , omegas_average )
+            min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
+            filter!( x->(abs(x)>=min_omega) , omegas_average )
+            # interpolate
+            for data in data_all_z 
+
+                # interpolating function
+                interpolator = linear_interpolation( data[:,1] , data[:,2] , extrapolation_bc=Line() )
+
+                # interpolation
+                data_interpolated = [ omegas_average Float64[ interpolator(omega) for omega in omegas_average ]]
+
+                # store interpolated data
+                push!( data_all_z_interpolated , data_interpolated )
+
+            end
+
+            # average results 
+            spectral_zavg = copy(data_all_z_interpolated[1])
+            spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
+
+            # write results
+            write_spectral_function(
+                spectral_filename(label,zavg=true,orbital=orbital),
+                spectral_zavg,
+                orbitalresolved_header=orbital_header
+            )
+        end
+
 
     end
-
-    # linearly interpolate data for all z
-    #
-    # storage variable
-    data_all_z_interpolated = Matrix{Float64}[]
-    # collect energy values
-    omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
-    filter!( x->(abs(x)<=1.0) , omegas_average )
-    min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
-    filter!( x->(abs(x)>=min_omega) , omegas_average )
-    # interpolate
-    for data in data_all_z 
-
-        # interpolating function
-        interpolator = linear_interpolation( data[:,1] , data[:,2] , extrapolation_bc=Line() )
-
-        # interpolation
-        data_interpolated = [ omegas_average Float64[ interpolator(omega) for omega in omegas_average ]]
-
-        # store interpolated data
-        push!( data_all_z_interpolated , data_interpolated )
-
-    end
-
-    # average results 
-    spectral_zavg = copy(data_all_z_interpolated[1])
-    spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
-
-    # write results
-    write_spectral_function(
-        spectral_filename(label,zavg=true),
-        spectral_zavg 
-    )
 
 end
