@@ -1118,21 +1118,15 @@ function compute_spectral_function(
             L ,
             iterations ,
             first_asymptotic_hopping_amplitude ;
-            spectral_broadening=1.0 ,
-            method="sakai1989" ,
-            label="" ,
-            z=0.0 )
+            spectral_broadening::Float64=1.0 ,
+            method::String="sakai1989" ,
+            label::String="" ,
+            z::Float64=0.0 ,
+            orbitals::Int64=0 )
 
 
-    if method=="fullrange"
-        return compute_spectral_function_FullRange(
-                AA ,
-                L ,
-                iterations ,
-                first_asymptotic_hopping_amplitude ,
-                spectral_broadening 
-        )
-    elseif method=="sakai1989"
+    # currently working
+    if method=="sakai1989"
         return compute_spectral_function_Sakai1989(
                 AA ,
                 L ,
@@ -1140,7 +1134,17 @@ function compute_spectral_function(
                 first_asymptotic_hopping_amplitude ,
                 spectral_broadening ,
                 label ,
-                z
+                z ,
+                orbitals=orbitals
+        )
+    # probably remove?
+    elseif method=="fullrange"
+        return compute_spectral_function_FullRange(
+                AA ,
+                L ,
+                iterations ,
+                first_asymptotic_hopping_amplitude ,
+                spectral_broadening 
         )
     elseif method=="frota1986"
         return compute_spectral_function_Frota1986(
@@ -1263,7 +1267,8 @@ function compute_spectral_function_Sakai1989(
             first_asymptotic_hopping_amplitude ,
             spectral_broadening ,
             label ,
-            z )
+            z ;
+            orbitals::Int64=0 )
 
     # the chosen energies are 
     #
