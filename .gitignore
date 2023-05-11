@@ -14,6 +14,7 @@
 modules/twostepdiag.jl
 modules/dmnrg.jl
 modules/templates.jl
+modules/butterfly.jl
 
 # butterfly modules
 modules_butterfly/
