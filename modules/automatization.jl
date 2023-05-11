@@ -746,13 +746,13 @@ function nrg_full(
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
-            spectral_method::String="sakai1989",
             spectral_broadening::Float64=1.0 ,
             orbitalresolved::Bool=false,
             compute_impmults::Bool=false ) where {R<:Real}
 
     # defaults
     precompute_iaj = true
+    spectral_method = "sakai1989"
 
     println( "********************************" )
     println( "Full NRG calculation with z=$(z)" )
@@ -1265,70 +1265,7 @@ function nrg_full(
     end
 
     println()
-
-    #   ===========   #
-    #%% PERFORMANCE %%#
-    #   ===========   #
-
-    println( "===========================" )
-    println( "DIAGONALIZATION PERFORMANCE" )
-    println( "===========================" )
-    print_performance_onestep(nrg)
-    println()
-
-    #   ==============   #
-    #%% SAVING TO FILE %%#
-    #   ==============   #
-    
-    # thermo dir 
-    isdir("thermodata") || mkdir("thermodata")
-
-    # impurity properties 
-    if compute_impmults
-        if calculation=="IMP" 
-            write_impurity_info( nrg , omults , mult2index , label , z )
-        end
-    end
-
-    #thermodata 
-    if !spectral
-
-        # thermodata for this given value of z
-        write_thermodata_onez( nrg , calculation , label , z )
-
-        # thermo diff
-        if calculation=="IMP"
-            thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
-            println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
-            println()
-            if length(glob(thermo_clean_filename))!==0 
-                write_thermodiff( label , z )
-            end
-        end
-
-    # spectral
-    elseif spectral
-
-        isdir("spectral") || mkdir("spectral")
-
-        if orbitalresolved
-
-            for (i,m) in enumerate(multiplets_a_atom)
-                open( "spectral/spectral_$(label)_o$(i)_z$(z).dat" , write=true ) do f
-                    writedlm( f , nrg.specfunc )
-                end
-            end
-
-        else
-
-            #open( "spectral/spectral_$(label)_z$(z).dat" , write=true ) do f
-            #    writedlm( f , nrg.specfunc )
-            #end
-
-        end
-
-    end
-
+    println( "END OF FULL NRG CALCULATION" )
 end
 
 function multiplets_2part( 

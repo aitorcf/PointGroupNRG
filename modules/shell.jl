@@ -957,14 +957,7 @@ function NRG( iterations::Int64,
     println( "=============" )
     println()
 
-    #temperatures   = []
-    #magnetizations = []
-    #energies       = []
-    #numbers        = []
-    #partitions     = []
-    #entropies      = []
-    #heatcaps       = []
-    #free_energies  = []
+    # thermodynamic information from even and odd iterations
     thermo_even = zeros( Float64 , 0 , 8 )
     thermo_odd  = zeros( Float64 , 0 , 8 )
 
@@ -972,14 +965,24 @@ function NRG( iterations::Int64,
     impnums        = []
     impmults       = []
 
+    # spectrum after diagonalization in each step
     spectrum_even = Vector{Dict{IntIrrep,Vector{Float64}}}()
     spectrum_odd  = Vector{Dict{IntIrrep,Vector{Float64}}}()
 
-    performance = []
-    maxes = []
-    maxe_tot = 0.0
-    maxn_tot = 0
-    maxs_tot = 0
+    # performance at each step
+    diagonalization_performances = []
+    if spectral
+        spectral_performances = []
+    end
+
+    # maximum energies and 2S (twice total spin)
+    cutoff_eigenenergies = Float64[]
+    cutoff_eigenenergy_all_iterations = 0.0
+    maximum_spin2s = Int64[]
+    maximum_spin2_all_iterations = 0
+    
+    # kept state ratios
+    kept_discarded_ratios = Float64[]
 
     xi::Vector{Float64} = []
     if discretization=="lanczos" 
@@ -992,36 +995,41 @@ function NRG( iterations::Int64,
     isdir("spectral") || mkdir("spectral")
 
     # NRG iterations
-    for n=2:iterations
+    nrg_performance = @timed for n in 2:iterations
 
-        println( "ITERATION n=$n" )
+        println( "-"^17 )
+        @printf "ITERATION n = %3i\n" n
+        println( "-"^17 )
 
-        # cut off and block block multiplets
-        print( "Applying cutoff to obtain block multiplets... " )
-        @time (multiplets_block, discarded) = cut_off!( irrEU ; 
-                                                        type=cutoff_type , 
-                                                        cutoff=cutoff_magnitude , 
-                                                        safeguard=true ,
-                                                        minmult=minmult ,
-                                                        mine=mine ,
-                                                        verbose=false ,
-                                                        M=M )
+        # cutoff
+        #
+        # apply cutoff
+        (multiplets_block, discarded) = cut_off!( irrEU ; 
+                                                  type=cutoff_type , 
+                                                  cutoff=cutoff_magnitude , 
+                                                  safeguard=true ,
+                                                  minmult=minmult ,
+                                                  mine=mine ,
+                                                  verbose=false ,
+                                                  M=M )
+        # print info
+        number_kept_multiplets = length(multiplets_block)
+        number_kept_states = sum( (oindex2dimensions[m[2]]*(m[3]+1)) for m in multiplets_block )
+        number_discarded_multiplets = length(discarded)
+        number_total_multiplets = number_kept_multiplets+number_discarded_multiplets
+        kept_discarded_ratio = number_kept_multiplets/number_total_multiplets
+        cutoff_eigenenergy = maximum(collect( e for (G,(E,U)) in irrEU for e in E ))
+        cutoff_eigenenergy_all_iterations = maximum([ cutoff_eigenenergy , cutoff_eigenenergy_all_iterations ])
+        push!( cutoff_eigenenergies , cutoff_eigenenergy )
+        println( "CUTOFF" )
+        println( "  kept:      $number_kept_multiplets multiplets ($number_kept_states states)" )
+        println( "  discarded: $number_discarded_multiplets multiplets" )
+        println( "  ratio kept/total: $kept_discarded_ratio, $(number_kept_multiplets)/$(number_total_multiplets) " )
+        println( "  cutoff eigenenergy: $cutoff_eigenenergy" )
+        push!( kept_discarded_ratios , kept_discarded_ratio )
 
-
-        # cutoff info
-        equivstates = Int64( sum( (m[3]+1) for m in multiplets_block ) )
-        println( "$(length(multiplets_block)) multiplets kept ($equivstates states), $(length(discarded)) multiplets discarded" )
-        proportion = length(multiplets_block)/Float64( length(multiplets_block) + length(discarded) ) * 100
-        # maximum energy after cutoff
-        # energy
-        maxe = maximum(collect( e for (G,(E,U)) in irrEU for e in E ))
-        maxe_tot = maximum([ maxe , maxe_tot ])
-        push!( maxes , maxe )
-
-        println( "proportion: $(proportion)%. max energy: $maxe." )
 
         # renormalize by √Λ
-        println( "Renormalizing eigenvalues...")
         for (G,(E,U)) in irrEU 
             irrEU[G] = ( E.*sqrt(L) , U )
         end
@@ -1035,11 +1043,22 @@ function NRG( iterations::Int64,
             hop_symparams = Dict( k=>ComplexF64.(xi[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
                                   for (k,v) in hop_symparams )
         end
-        @show hop_symparams
+        println( "HOPPING" )
+        @printf "  %-8s  %-10s  %-s\n" "orbital" "multiplets" "amplitude"
+        for (I,hop_matrix) in hop_symparams,
+            cartesian_index in CartesianIndices(hop_matrix)
 
+            i,j = Tuple(cartesian_index)
+            isapprox(hop_matrix[i,j],0.0) && continue
+
+            @printf "  %-8s  %-3i => %-3i  %-.3f\n" I i j hop_matrix[i,j]
+
+        end
+
+        # diagonalization
+        # 
         # construct and diagonalize ( m_u | H_1 | m_v )
-        print( "Diagonalizing Hamiltonian... " )
-        ppp = @timed (irrEU,combinations_uprima) = matdiag_redmat( 
+        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat( 
                 multiplets_block , 
                 multiplets_shell ,
                 irrEU , 
@@ -1059,20 +1078,25 @@ function NRG( iterations::Int64,
                 verbose=verbose ,
                 distributed=distributed ,
                 precompute_iaj=precompute_iaj );
-        println( "$(ppp.time)s, $(ppp.bytes*10^-9)Gb, $(ppp.gctime)s gc" )
-        push!( performance , ppp )
-        
-        # maximum values for symmetry quantum numbers
-        # spin
-        maxs = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
-        maxs_tot = maximum([ maxs , maxs_tot ])
-        # occupation 
-        maxn = maximum(collect( G[1] for (G,(E,U)) in irrEU ))
-        maxn_tot = maximum([ maxn , maxn_tot ])
+        # information
+        maximum_spin2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
+        maximum_spin2_all_iterations = maximum([ maximum_spin2 , maximum_spin2_all_iterations ])
+        maximum_eigenenergy_after_diagonalization = maximum([ maximum(E) for (_,(E,_)) in irrEU ])
+        println( "DIAGONALIZATION" )
+        println( "  time: $(diagonalization_performance.time)s" )
+        println( "  memory: $(diagonalization_performance.bytes*10^-6)Mb" )
+        println( "  garbage collection time: $(diagonalization_performance.gctime)s" )
+        println( "  maximum 2S needed: $maximum_spin2")
+        println( "  maximum eigenenergy obtained: $maximum_eigenenergy_after_diagonalization" )
+
+        # store performance
+        push!( diagonalization_performances , diagonalization_performance )
 
         # spectrum 
-        (n%2==0)  && save_spectrum!( spectrum_even , irrEU )
-        (n%2!==0) && save_spectrum!( spectrum_odd  , irrEU )
+        if write_spectrum
+            (n%2==0)  && save_spectrum!( spectrum_even , irrEU )
+            (n%2!==0) && save_spectrum!( spectrum_odd  , irrEU )
+        end
 
         # impurity info
         if compute_impmults
@@ -1089,14 +1113,14 @@ function NRG( iterations::Int64,
         end
 
         # thermodynamics 
-        println( "THERMODYNAMICS" )
-
+        #
+        # iteration temperature
         if discretization!=="lanczos" 
             temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization )
         elseif discretization=="lanczos" 
             temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
         end
-
+        # compute thermodynamic variables
         magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar , oindex2dimensions )
         entropy = compute_entropy( irrEU , betabar , oindex2dimensions )
         heat_capacity = compute_heat_capacity( irrEU , betabar , oindex2dimensions )
@@ -1104,31 +1128,30 @@ function NRG( iterations::Int64,
         number_particles = compute_average_number_of_particles( irrEU , betabar , oindex2dimensions )
         energy = compute_energy( irrEU , betabar , oindex2dimensions )
         partition_function = compute_partition_function( irrEU , betabar , oindex2dimensions )
-        @printf "%s = %.3e\n" "temperature" temperature
-        @printf "%s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
-        @printf "%s = %.3f\n" "entropy" entropy
-        @printf "%s = %.3f\n" "heat capacity" heat_capacity
-        @printf "%s = %.3f\n" "free energy" free_energy
-        @printf "%s = %i\n"   "average number of particles" number_particles
-        @printf "%s = %.3f\n" "energy" energy
-        @printf "%s = %.3e\n" "Z" partition_function
-        println()
         thermodynamic_matrix = [temperature magnetic_susceptibility entropy heat_capacity free_energy number_particles energy partition_function]
-
-        # store even and odd therodynamic results
+        # store even/odd therodynamic results
         if n%2==0
             thermo_even = vcat( thermo_even , thermodynamic_matrix )
         else
             thermo_odd  = vcat( thermo_odd , thermodynamic_matrix )
         end
+        # information
+        println( "THERMODYNAMICS" )
+        @printf "  %s = %.3e\n" "temperature" temperature
+        @printf "  %s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
+        @printf "  %s = %.3f\n" "entropy" entropy
+        @printf "  %s = %.3f\n" "heat capacity" heat_capacity
+        @printf "  %s = %.3f\n" "free energy" free_energy
+        @printf "  %s = %i\n"   "average number of particles" number_particles
+        @printf "  %s = %.3f\n" "energy" energy
+        @printf "  %s = %.3e\n" "Z" partition_function
 
+        # spectral function calculation
         if spectral 
-
-            print( "Updating M and AA... " )
 
             if orbitalresolved
 
-                sss = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
                             M ,
                             irrEU ,
                             combinations_uprima ,
@@ -1143,7 +1166,7 @@ function NRG( iterations::Int64,
 
             else 
 
-                sss = @timed M, AA = update_redmat_AA_CGsummethod(
+                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod(
                             M ,
                             irrEU ,
                             combinations_uprima ,
@@ -1157,6 +1180,7 @@ function NRG( iterations::Int64,
                             verbose=false )
             end
 
+            # security check while in development
             for matrix in values(M)
                 if any(isnan.(matrix))
                     error( "NaN in M")
@@ -1168,21 +1192,23 @@ function NRG( iterations::Int64,
                 end
             end
 
-            println( "$(sss.time)s, $(sss.bytes*10^-6)bytes, $(sss.gctime)s gc" )
-            println()
+            # information
+            maximum_irrep_spin2 = irreps -> maximum((irreps[1][3],irreps[2][3],irreps[3][3]))
+            maximum_spin2 = maximum([ maximum_irrep_spin2(irreps) for irreps in keys(M) ])
+            maximum_spin2_all_iterations = maximum([ maximum_spin2_all_iterations , maximum_spin2 ])
+            println( "EXCITATION MATRIX CALCULATION" )
+            println( "  time: $(spectral_performance.time)s" )
+            println( "  memory: $(spectral_performance.bytes*10^-6)Mb" )
+            println( "  garbage collection time: $(spectral_performance.gctime)s" )
+            println( "  maximum 2S needed: $maximum_spin2")
+            push!( spectral_performances , spectral_performance )
 
         end
 
-    end
+        println()
+    end # NRG iterations finished
+    println()
 
-    maxe_avg = sum(maxes)/length(maxes)
-    @show maxe_avg
-    println( "Maximum irrep qnums: N=$maxn_tot , 2S=$maxs_tot\n" )
-
-    # write spectra
-    if write_spectrum
-        write_nrg_spectra( spectrum_even , spectrum_odd )
-    end
 
     # average even and odd thermodynamic results
     #
@@ -1204,7 +1230,7 @@ function NRG( iterations::Int64,
 
         if orbitalresolved
 
-            spec = compute_spectral_function_orbitalresolved(
+            spectral_function = compute_spectral_function_orbitalresolved(
                 AA ,
                 L ,
                 iterations ,
@@ -1214,7 +1240,7 @@ function NRG( iterations::Int64,
 
         else
 
-            spec = compute_spectral_function(
+            spectral_function = compute_spectral_function(
                 AA ,
                 L ,
                 iterations ,
@@ -1229,10 +1255,69 @@ function NRG( iterations::Int64,
 
     end
 
-    return ( thermo=thermo_average ,
-             perf=performance ,
-             impmults=impmults ,
-             specfunc= spectral ? spec : nothing )
+    # print summary information
+    println( "=========================" )
+    println( "SUMMARY OF NRG ITERATIONS" )
+    println( "=========================" )
+    # energy, kept states and spin2
+    cutoff_eigenenergy_average = sum(cutoff_eigenenergies)/length(cutoff_eigenenergies)
+    kept_discarded_ratio_average = sum(kept_discarded_ratios)/length(kept_discarded_ratios)
+    println( "CHECK" )
+    println( "  maximum 2S needed: $maximum_spin2_all_iterations" )
+    println( "  average cutoff eigenenergy: $cutoff_eigenenergy_average" )
+    println( "  average kept/discarded ratio: $kept_discarded_ratio_average" )
+    println( "PERFORMANCE SUMMARY" )
+    println( "  Diagonalization" )
+    print_performance_summary( diagonalization_performances )
+    if spectral
+        println( "  Excitation matrix calculation" )
+        print_performance_summary( spectral_performances )
+    end
+    println( "  Global" )
+    println( "    time: $(nrg_performance.time)s" )
+    println( "    memory: $(nrg_performance.bytes*10^-6)Mb" )
+    println( "    garbage collection time: $(nrg_performance.gctime)s" )
+
+    # save data to file (spectral is saved from within the function)
+    #
+    # thermodynamics
+    if !spectral
+
+        # directory
+        isdir("thermodata") || mkdir("thermodata")
+
+        # thermodynamic data for this given value of z
+        write_thermodata_onez( nrg , calculation , label , z )
+
+        # impurity contribution (diff)
+        if calculation=="IMP"
+            thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+            println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
+            println()
+            if length(glob(thermo_clean_filename))!==0 
+                write_thermodiff( label , z )
+            end
+        end
+
+    end
+    # impurity properties 
+    if compute_impmults
+        if calculation=="IMP" 
+            write_impurity_info( nrg , omults , mult2index , label , z )
+        end
+    end
+    # spectra at each step
+    if write_spectrum
+        write_nrg_spectra( spectrum_even , spectrum_odd )
+    end
+
+    return ( 
+        thermo = thermo_average ,
+        diagonalization_performances = diagonalization_performances ,
+        impmults = compute_impmults ? impmults : nothing ,
+        spectral_function = spectral ? spectral_function : nothing ,
+        spectral_performances = spectral ? spectral_performances : nothing
+    )
 end
 
 
@@ -1240,37 +1325,35 @@ end
 # PERFORMANCE INFORMATION
 # .......................
 
-function print_performance_onestep( nrg )
-    performance = nrg.perf
+function print_performance_summary( diagonalization_performances )
 
-    times  = [ p.time for p in performance ]
+    times  = [ p.time for p in diagonalization_performances ]
     t_min  = minimum( times )
     t_max  = maximum( times )
-    t_mean = sum(times)/length(times)
-    println( "TIME (s)" )
-    println( "minimum time: $t_min" )
-    println( "maximum time: $t_max" )
-    println( "mean time:    $t_mean" )
+    t_average = sum(times)/length(times)
+    println( "    - time" )
+    println( "        minimum: $(t_min)s" )
+    println( "        maximum: $(t_max)s" )
+    println( "        average: $(t_average)s" )
 
-    println()
+    bytes  = [ p.bytes for p in diagonalization_performances]
+    b_min  = minimum( bytes )/1e6
+    b_max  = maximum( bytes )/1e6
+    b_average = sum(bytes)/length(bytes)/1e6
+    println( "    - memory")
+    println( "        minimum: $(b_min)Mb" )
+    println( "        maximum: $(b_max)Mb" )
+    println( "        average: $(b_average)Mb" )
 
-    bytes  = [ p.bytes for p in performance]
-    b_min  = minimum( bytes )/1e9
-    b_max  = maximum( bytes )/1e9
-    b_mean = sum(bytes)/length(bytes)/1e9
-    println( "minimum gigabytes: $b_min" )
-    println( "maximum gigabytes: $b_max" )
-    println( "mean gigabytes:    $b_mean" )
-
-    println()
-
-    gc = [ p.gctime for p in performance]
+    gc = [ p.gctime for p in diagonalization_performances]
     gc_min = minimum( gc )
     gc_max = maximum( gc )
-    gc_mean = sum(gc)/length(gc)
-    println( "minimum gc time: $gc_min" )
-    println( "maximum gc time: $gc_max" )
-    println( "mean gc time:    $gc_mean" )
+    gc_average = sum(gc)/length(gc)
+    println( "    - garbage collection time" )
+    println( "        minimum: $(gc_min)s" )
+    println( "        maximum: $(gc_max)s" )
+    println( "        average: $(gc_average)s" )
+
 end
 
 function print_performance_mat( nrg )
