@@ -1290,6 +1290,9 @@ function compute_spectral_function_Sakai1989(
             K_factor::Float64=2.0 ,
             orbitalresolved::Bool=false )
 
+    # even and odd iteration ranges
+    even_iterator = 2:2:iterations
+    odd_iterator  = 1:2:iterations
     # the chosen energies are 
     #
     #   e = K_factor * omega_N
@@ -1297,12 +1300,12 @@ function compute_spectral_function_Sakai1989(
     omegas_odd = sort([ 
         ( K_factor * sign * first_asymptotic_hopping_amplitude * L^(-(N-2)/2.0) )
         for sign in [-1.0,1.0]
-        for N in 3:2:iterations
+        for N in odd_iterator
     ])
     omegas_even = sort([ 
         ( K_factor * sign * first_asymptotic_hopping_amplitude * L^(-(N-2)/2.0) )
         for sign in [-1.0,1.0]
-        for N in 2:2:iterations
+        for N in even_iterator
     ])
 
     # spectral function
@@ -1321,7 +1324,7 @@ function compute_spectral_function_Sakai1989(
         )
     end
 
-    for (i,N) in enumerate(3:2:iterations)
+    for (i,N) in enumerate(odd_iterator)
 
         # energy at which to compute the spectral function
         omega_positive = -omegas_odd[i]
@@ -1363,7 +1366,7 @@ function compute_spectral_function_Sakai1989(
         end
 
     end
-    for (i,N) in enumerate(2:2:iterations)
+    for (i,N) in enumerate(even_iterator)
 
         # energy at which to compute the spectral function
         omega_positive = -omegas_even[i]
