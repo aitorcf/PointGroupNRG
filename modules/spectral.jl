@@ -1324,37 +1324,6 @@ function compute_spectral_function_Sakai1989(
         )
     end
 
-    # TEST
-    A = AA[1]
-    print_A( A , orbitalresolved=orbitalresolved )
-    println()
-    test = Dict( m=>[0.0,0.0] for m in excitation_multiplets )
-    for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
-
-        # positive energy range
-        Delta_positive = -omegas_odd[1] - eigenenergy
-        contribution_positive = coeffs[1]*P(Delta_positive,spectral_broadening)
-        test[excitation_multiplet][1] += coeffs[1]*P(Delta_positive,spectral_broadening)
-
-        # negative energy range
-        Delta_negative = omegas_odd[1] + eigenenergy
-        contribution_negative = coeffs[2]*P(Delta_negative,spectral_broadening)
-        test[excitation_multiplet][2] += coeffs[2]*P(Delta_negative,spectral_broadening)
-
-        println( "excited multiplet: $(m)" )
-        println( "atomic excitation: $(excitation_multiplet)" )
-        println( "eigenenergy: $(eigenenergy)" )
-        println( "coeffs: $(coeffs)" )
-        @show contribution_positive,test[excitation_multiplet][1]
-        @show contribution_negative,test[excitation_multiplet][2]
-        
-        println()
-
-    end
-    ea = collect(excitation_multiplets)
-    println( "$(ea[1]) ==> $(test[ea[1]])" )
-    println( "$(ea[2]) ==> $(test[ea[2]])" )
-
     for (i,N) in enumerate(odd_iterator)
 
         # energy at which to compute the spectral function
@@ -1394,12 +1363,6 @@ function compute_spectral_function_Sakai1989(
                 spectral_odd[excitation_multiplet][i] += coeffs[2]*P(Delta_negative,eta)
 
             end
-            println( "CONTRIBUTIONS TO SPECTRAL FUNCTION at N=$N" )
-            ea = collect(excitation_multiplets)
-            @show spectral_odd[ea[1]][end-(i-1)]
-            @show spectral_odd[ea[2]][end-(i-1)]
-            @show spectral_odd[ea[1]][i]
-            @show spectral_odd[ea[2]][i]
 
         end
 
