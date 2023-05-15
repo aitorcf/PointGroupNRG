@@ -910,7 +910,9 @@ end
 # ============== #
 
 # pcgred method
-function NRG( iterations::Int64, 
+function NRG( label::String ,
+              calculation::String ,
+              iterations::Int64, 
               cutoff_type::String, 
               cutoff_magnitude::Number,
               L::Float64,
@@ -937,6 +939,7 @@ function NRG( iterations::Int64,
               z::Float64=0.0 ,
               discretization::String="standard" ,
               spectral::Bool=false ,
+              K_factor::Float64=2.0 ,
               spectral_method::String="sakai1989",
               spectral_broadening::Float64=1.0 ,
               orbitalresolved::Bool=false ,
@@ -1237,6 +1240,7 @@ function NRG( iterations::Int64,
             method=spectral_method,
             label=label ,
             z=z ,
+            K_factor=K_factor ,
             orbitalresolved=orbitalresolved
         )
 
@@ -1274,14 +1278,14 @@ function NRG( iterations::Int64,
         isdir("thermodata") || mkdir("thermodata")
 
         # thermodynamic data for this given value of z
-        write_thermodata_onez( nrg , calculation , label , z )
+        write_thermodata_onez( thermo_average , calculation , label , z )
 
         # impurity contribution (diff)
         if calculation=="IMP"
             thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
-            println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
             println()
             if length(glob(thermo_clean_filename))!==0 
+                println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
                 write_thermodiff( label , z )
             end
         end
