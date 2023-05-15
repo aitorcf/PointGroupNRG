@@ -1283,7 +1283,7 @@ function compute_spectral_function_Sakai1989(
             AA ,
             L ,
             iterations ,
-            first_asymptotic_hopping_amplitude ,
+            first_asymptotic_hopping_amplitude::Float64 ,
             spectral_broadening::Float64 ,
             label::String ,
             z::Float64 ;
@@ -1317,12 +1317,43 @@ function compute_spectral_function_Sakai1989(
     if orbitalresolved
         excitation_multiplets = Set( multiplet for (_,multiplet) in keys(AA[1]) )
         spectral_odd  = Dict{IntMultiplet,Vector{Float64}}( 
-            multiplet=>spectral_odd for multiplet in excitation_multiplets
+            multiplet=>copy(spectral_odd) for multiplet in excitation_multiplets
         )
         spectral_even  = Dict{IntMultiplet,Vector{Float64}}( 
-            multiplet=>spectral_even for multiplet in excitation_multiplets
+            multiplet=>copy(spectral_even) for multiplet in excitation_multiplets
         )
     end
+
+    # TEST
+    A = AA[1]
+    print_A( A , orbitalresolved=orbitalresolved )
+    println()
+    test = Dict( m=>[0.0,0.0] for m in excitation_multiplets )
+    for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
+
+        # positive energy range
+        Delta_positive = -omegas_odd[1] - eigenenergy
+        contribution_positive = coeffs[1]*P(Delta_positive,spectral_broadening)
+        test[excitation_multiplet][1] += coeffs[1]*P(Delta_positive,spectral_broadening)
+
+        # negative energy range
+        Delta_negative = omegas_odd[1] + eigenenergy
+        contribution_negative = coeffs[2]*P(Delta_negative,spectral_broadening)
+        test[excitation_multiplet][2] += coeffs[2]*P(Delta_negative,spectral_broadening)
+
+        println( "excited multiplet: $(m)" )
+        println( "atomic excitation: $(excitation_multiplet)" )
+        println( "eigenenergy: $(eigenenergy)" )
+        println( "coeffs: $(coeffs)" )
+        @show contribution_positive,test[excitation_multiplet][1]
+        @show contribution_negative,test[excitation_multiplet][2]
+        
+        println()
+
+    end
+    ea = collect(excitation_multiplets)
+    println( "$(ea[1]) ==> $(test[ea[1]])" )
+    println( "$(ea[2]) ==> $(test[ea[2]])" )
 
     for (i,N) in enumerate(odd_iterator)
 
@@ -1353,7 +1384,7 @@ function compute_spectral_function_Sakai1989(
             end
         elseif orbitalresolved
             for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
-                
+
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
                 spectral_odd[excitation_multiplet][end-(i-1)] += coeffs[1]*P(Delta_positive,eta)
@@ -1363,6 +1394,13 @@ function compute_spectral_function_Sakai1989(
                 spectral_odd[excitation_multiplet][i] += coeffs[2]*P(Delta_negative,eta)
 
             end
+            println( "CONTRIBUTIONS TO SPECTRAL FUNCTION at N=$N" )
+            ea = collect(excitation_multiplets)
+            @show spectral_odd[ea[1]][end-(i-1)]
+            @show spectral_odd[ea[2]][end-(i-1)]
+            @show spectral_odd[ea[1]][i]
+            @show spectral_odd[ea[2]][i]
+
         end
 
     end
@@ -1382,7 +1420,7 @@ function compute_spectral_function_Sakai1989(
         eta = spectral_broadening*omegaN
 
         if !orbitalresolved
-            for (m,(eigenenergy,coeffs)) in A
+            for (_,(eigenenergy,coeffs)) in A
 
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
@@ -1394,7 +1432,7 @@ function compute_spectral_function_Sakai1989(
 
             end
         elseif orbitalresolved
-            for ((m,excitation_multiplet),(eigenenergy,coeffs)) in A
+            for ((_,excitation_multiplet),(eigenenergy,coeffs)) in A
                 
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
@@ -1418,15 +1456,31 @@ function compute_spectral_function_Sakai1989(
     omegas_evenodd[end]!==1.0 && push!( omegas_evenodd , 1.0 )
     # interpolate even and odd spectral functions to new omegas
     if !orbitalresolved
-        spectral_even_interpolated = linear_interpolate_spectral_function( omegas_even  , spectral_even , omegas_evenodd )
-        spectral_odd_interpolated  = linear_interpolate_spectral_function( omegas_odd   , spectral_odd  , omegas_evenodd )
+        spectral_even_interpolated = linear_interpolate_spectral_function( 
+            omegas_even  , 
+            spectral_even , 
+            omegas_evenodd 
+        )
+        spectral_odd_interpolated  = linear_interpolate_spectral_function( 
+            omegas_odd , 
+            spectral_odd , 
+            omegas_evenodd 
+        )
     elseif orbitalresolved
         spectral_even_interpolated = Dict(
-            excitation_multiplet => linear_interpolate_spectral_function( omegas_even  , spectral_even_orbital , omegas_evenodd )
+            excitation_multiplet => linear_interpolate_spectral_function( 
+                omegas_even , 
+                spectral_even_orbital , 
+                omegas_evenodd 
+            )
             for (excitation_multiplet,spectral_even_orbital) in spectral_even
         )
         spectral_odd_interpolated = Dict(
-            excitation_multiplet => linear_interpolate_spectral_function( omegas_odd  , spectral_odd_orbital , omegas_evenodd )
+            excitation_multiplet => linear_interpolate_spectral_function( 
+                omegas_odd  , 
+                spectral_odd_orbital , 
+                omegas_evenodd 
+            )
             for (excitation_multiplet,spectral_odd_orbital) in spectral_odd
         )
     end
@@ -1437,7 +1491,7 @@ function compute_spectral_function_Sakai1989(
         spectral_evenodd = Dict(
             excitation_multiplet => 0.5*( spectral_even_interpolated[excitation_multiplet] + 
                                           spectral_odd_interpolated[excitation_multiplet]   )
-            for excitation_multiplet in keys(spectral_even_interpolated)
+            for excitation_multiplet in excitation_multiplets
         )
     end
 
@@ -1663,7 +1717,8 @@ function setup_redmat_AA_orbitalresolved(
             multiplets_operator ,
             cg_o_fullmatint ,
             cg_s_fullmatint ,
-            irrEU ;
+            irrEU ,
+            oindex2dimensions ;
             verbose=false )
 
     # reduced matrix
@@ -1804,15 +1859,18 @@ function update_redmat_AA_CGsummethod(
     D0o = oindex2dimensions[I0]
     part0 = D0o*D0s
 
-    push!(AA,
-         redM2A(Mred,
-                collect(multiplets_a),
-                cg_o_fullmatint,
-                cg_s_fullmatint,
-                irrEU,
-                part0;
-                verbose=false) 
-         )
+    push!(
+        AA,
+        redM2A( 
+            Mred,
+            collect(multiplets_a),
+            cg_o_fullmatint,
+            cg_s_fullmatint,
+            irrEU,
+            part0;
+            verbose=false
+        ) 
+    )
 
     if verbose 
         println( "AA" )
@@ -2155,7 +2213,7 @@ function get_new_blockredmat_CGsummethod3(
     # iterate over irrep combinations G_u and G_v
     # in the new step
     for (G_u::NTuple{3,Int64},ucombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima,
-                  (G_v::NTuple{3,Int64},vcombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima
+        (G_v::NTuple{3,Int64},vcombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima
 
         # irrep quantum numbers
         (N_u,I_u,S_u) = G_u 
@@ -2214,26 +2272,28 @@ function get_new_blockredmat_CGsummethod3(
                 @inbounds Ks = Karray_spin[((S_u,S_v,S_a,S_mu,S_i,S_j).+1)...]
                 K::ComplexF64 = Ko * Ks
                 K==zero(K) && continue
-                isnan(K) && error( "NaN in K" )
+                #isnan(K) && error( "NaN in K" )
 
                 # sign factor
                 sign = ComplexF64((-1)^N_mu)
 
                 # reduced matrix sector
                 ijsector = @view ijredmat[(G_i,G_a,G_j)][r_i,:,r_j]
-                any(isnan.(ijsector)) && error( "NaN in ijsector" )
-                @. thisredmat[r_u,:,r_v] = sign*K*ijsector#[:]
+                #any(isnan.(ijsector)) && error( "NaN in ijsector" )
+                @inbounds @. thisredmat[r_u,:,r_v] = sign*K*ijsector[:]
             end
 
-            any(isnan.(thisredmat)) && error( "NaN in thisredmat" )
+            if any(isnan.(thisredmat)) 
+                error( "NaN in impurity excitation matrix. \
+                        This is probably because the calculation \
+                        requires a value of the optional parameter \
+                        max_spin2 higher than the one given as input \
+                        (2S=10 is the maximum by default). The maximum \
+                        value of 2S required is printed in the output." )
+            end
 
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
-            #for r_a in 1:R_a
-            #    @einsum transformedmat[r_u,r_a,r_v] = conj(U_u[r_up,r_u])*U_v[r_vp,r_v]*thisredmat[r_up,r_a,r_vp]
-            #end
             compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
-
-            any(isnan.(transformedmat)) && error( "NaN in transformedmat" )
 
             # insert result in final dict
             uvredmat[(G_u,G_a,G_v)] = transformedmat
@@ -2244,3 +2304,19 @@ function get_new_blockredmat_CGsummethod3(
 
 end
 
+function print_A( A ; orbitalresolved::Bool=false )
+
+    if orbitalresolved
+        excitation_multiplets = Set( m_a for (m,m_a) in keys(A) )
+
+        @printf "%-20s %-18s %-15s %-10s\n" "impurity excitation" "excited multiplet" "energy" "amplitudes"
+        for excitation_multiplet in excitation_multiplets
+            for ((m,m_a),(eigenenergy,coefficients)) in A
+                m_a==excitation_multiplet || continue
+                @printf "%-20s %-18s %-15.3f %-10.3e\n" m_a m eigenenergy coefficients[1]
+                @printf "%-20s %-18s %-15s %-10.3e\n" "" "" "" coefficients[2]
+            end
+        end
+    end
+
+end
