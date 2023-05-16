@@ -407,22 +407,22 @@ function get_redmat( dictmat ,
 end
 
 
-function compute_pcged_iaj_block(
-    G_i::IntIrrep ,
-    G_j::IntIrrep ,
-    G_a::IntIrrep ,
-    rr_i::Vector{Int64} ,
-    rr_j::Vector{Int64} ,
-    R_a::Int64 ,
-    Csum_o_array::Array{ComplexF64,6} ,
-    Csum_s_array::Array{ComplexF64,6} ,
-    pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
-    cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
-    cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
-    irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
-    combs_uvprima::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}} } ,
-    G2R_uv::Dict{NTuple{3,Int64},Int64} ,
-    G2R_a::Dict{NTuple{3,Int64},Int64} )
+function compute_pcgred_iaj_block(
+        G_i::IntIrrep ,
+        G_j::IntIrrep ,
+        G_a::IntIrrep ,
+        rr_i::Vector{Int64} ,
+        rr_j::Vector{Int64} ,
+        R_a::Int64 ,
+        Csum_o_array::Array{ComplexF64,6} ,
+        Csum_s_array::Array{ComplexF64,6} ,
+        pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
+        cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+        combs_uvprima::Dict{ NTuple{2,NTuple{3,Int64}} , Vector{NTuple{6,NTuple{4,Int64}}} } ,
+        G2R_uv::Dict{NTuple{3,Int64},Int64} ,
+        G2R_a::Dict{NTuple{3,Int64},Int64} )
 
     N_i,I_i,S_i = G_i
     N_j,I_j,S_j = G_j
@@ -554,7 +554,7 @@ function compute_pcgred_iaj_full(
 
             merge!( 
                 pcgred_iaj_full ,
-                compute_pcged_iaj_block(
+                compute_pcgred_iaj_block(
                     G_i,
                     G_j,
                     G_a,
