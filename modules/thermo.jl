@@ -503,7 +503,7 @@ function write_impurity_info(
 end
 
 function write_thermodata_onez(
-        nrg,
+        data,
         calculation,
         label,
         z)
@@ -516,7 +516,7 @@ function write_thermodata_onez(
 
     println("Saving thermodynamic data to $filename...\n\n" )
 
-    write_thermo_data( filename , nrg.thermo )
+    write_thermo_data( filename , data )
 
 end
 
