@@ -130,6 +130,7 @@ function zavg_spectral(
         filter!( x->(abs(x)<=1.0) , omegas_average )
         min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
         filter!( x->(abs(x)>=min_omega) , omegas_average )
+        sort!( omegas_average )
         # interpolate
         for data in data_all_z 
 
@@ -147,11 +148,39 @@ function zavg_spectral(
         # average results 
         spectral_zavg = copy(data_all_z_interpolated[1])
         spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
+            
+        # remove duplicates
+        spectral_zavg_noduplicates = [spectral_zavg[1,:]]
+        for i in 1:size(spectral_zavg,1)
+            row = spectral_zavg[i,:]
+            duplicate = false
+            for j in 1:length(spectral_zavg_noduplicates)
+                row_noduplicates = spectral_zavg_noduplicates[j]
+                if isapprox(row_noduplicates[1],row[1])
+                    duplicate = true
+                end
+            end
+            if !duplicate
+                push!( spectral_zavg_noduplicates , row )
+            end
+        end
+        spectral_zavg = Matrix(hcat(spectral_zavg_noduplicates...)')
+            
+        # smooth results 
+        omegas_splined,spectral_zavg_splined = spline_interpolate_spectral_function( 
+            spectral_zavg[:,1] ,
+            spectral_zavg[:,2] ,
+            orbitalresolved=orbitalresolved
+       )
 
         # write results
         write_spectral_function(
             spectral_filename(label,zavg=true),
             spectral_zavg 
+        )
+        write_spectral_function(
+            spectral_filename(label,zavg=true,tail="_splined") ,
+            [omegas_splined spectral_zavg_splined]
         )
 
     elseif orbitalresolved 
@@ -164,7 +193,7 @@ function zavg_spectral(
 
             # read header for orbital
             orbital_headervec = [""]
-            open( spectral_filename(label,z=0.0,orbital=1) ) do f
+            open( spectral_filename(label,z=0.0,orbital=orbital) ) do f
                 orbital_headervec[1] = readline(f)*"\n"
             end
             orbital_header = orbital_headervec[1]
@@ -204,15 +233,44 @@ function zavg_spectral(
 
             end
 
+
             # average results 
             spectral_zavg = copy(data_all_z_interpolated[1])
             spectral_zavg[:,2] = sum( data[:,2] for data in data_all_z_interpolated )/length(Z)
+
+            # remove duplicates
+            spectral_zavg_noduplicates = [spectral_zavg[1,:]]
+            for i in 1:size(spectral_zavg,1)
+                row = spectral_zavg[i,:]
+                duplicate = false
+                for j in 1:length(spectral_zavg_noduplicates)
+                    row_noduplicates = spectral_zavg_noduplicates[j]
+                    if isapprox(row_noduplicates[1],row[1])
+                        duplicate = true
+                    end
+                end
+                if !duplicate
+                    push!( spectral_zavg_noduplicates , row )
+                end
+            end
+            spectral_zavg = Matrix(hcat(spectral_zavg_noduplicates...)')
+
+            # smooth results 
+            omegas_splined,spectral_zavg_splined = spline_interpolate_spectral_function( 
+                spectral_zavg[:,1] ,
+                spectral_zavg[:,2] ,
+                orbitalresolved=orbitalresolved
+           )
 
             # write results
             write_spectral_function(
                 spectral_filename(label,zavg=true,orbital=orbital),
                 spectral_zavg,
                 orbitalresolved_header=orbital_header
+            )
+            write_spectral_function(
+                spectral_filename(label,zavg=true,orbital=orbital,tail="_splined") ,
+                [omegas_splined spectral_zavg_splined]
             )
         end
 
