@@ -624,17 +624,11 @@ function print_spectrum(
     ]
     sort!( spectrum , by=x->x[2] )
 
-    println( "="^31 )
-    println()
-    println( "SPECTRUM" )
-    println()
     @printf "%20s    %7s\n" "multiplet" "energy"
     println()
     for (multiplet,energy) in spectrum
         @printf "%20s    %.5f\n" multiplet energy
     end
-    println()
-    println( "="^31 )
 
     if savefile 
         open( "spectrum_$label.dat" , "w" ) do f
@@ -865,7 +859,6 @@ function nrg_full(
             oirreps2indices[k]=>[ComplexF64.(h[3].*factor_symparams[k][i]) for (i,h) in enumerate(s)] 
             for (k,s) in channel_symstructure
     )
-    @show xi_symparams;
     
     #   ------------------- #
     #%% rescaled parameters #
@@ -969,7 +962,13 @@ function nrg_full(
         irrEU_clear = 
             get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
     end
+    println( "------------------------------------" )
+    println( "ATOMIC SPECTRUM" )
+    println()
     print_spectrum( irrEU_clear )
+    println()
+    println( "------------------------------------" )
+    println()
     irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
         irrEU2int( irrEU_clear , oirreps2indices ) 
 
@@ -1137,8 +1136,13 @@ function nrg_full(
                     verbose=false ,
                     distributed=distributed ,
                     precompute_iaj=precompute_iaj );
-    print( "AFTER ADDING INNERMOST SHELL, " )
+    println( "----------------------------------------------" )
+    println( "SPECTRUM OF ATOM + INNERMOST SHELL" )
+    println()
     print_spectrum( irrEU )
+    println()
+    println( "----------------------------------------------" )
+    println()
 
     #   --------------------------- #
     #%% update impurity information # 
@@ -1195,7 +1199,9 @@ function nrg_full(
     println( ":::::::::::::::::::::" )
     println()
     if !spectral
-        nrg = NRG( iterations,
+        nrg = NRG( label ,
+                   calculation ,
+                   iterations,
                    cutoff_type,
                    cutoff_magnitude,
                    L,
@@ -1224,7 +1230,9 @@ function nrg_full(
                    compute_impmults=compute_impmults ,
                    mm_i=mm_i )
     else 
-        nrg = NRG( iterations,
+        nrg = NRG( label ,
+                   calculation ,
+                   iterations,
                    cutoff_type,
                    cutoff_magnitude,
                    L,
@@ -1264,7 +1272,7 @@ function nrg_full(
     end
 
     println()
-    println( "END OF FULL NRG CALCULATION" )
+    println( "END OF FULL NRG CALCULATION WITH z=$(z)" )
 end
 
 function multiplets_2part( 
