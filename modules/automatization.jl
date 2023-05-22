@@ -324,15 +324,15 @@ function setup_impmultinfo(
             betabar ,
             oindex2dimensions )::Tuple{Dict{IntMultiplet,Vector{Float64}},Vector{Float64}}
     
-    omults = ordered_multiplets(multiplets_block)
+    orbital_multiplets = ordered_multiplets(multiplets_block)
     mult2index = Dict( m=>i for (i,m) in 
-                       enumerate(omults))
-   mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict( 
+                       enumerate(orbital_multiplets))
+    mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict( 
         m=>[(i==mult2index[m] ? 1.0 : 0.0)
             for i in 1:length(multiplets_block)] 
-            for m in omults
-   )
-   m_imp::Vector{Float64} = mult_thermo( irrEU ,
+            for m in orbital_multiplets
+    )
+    m_imp::Vector{Float64} = mult_thermo( irrEU ,
                          betabar ,
                          oindex2dimensions ,
                          mm_i )
@@ -735,12 +735,12 @@ function nrg_full(
             max_spin2::Int64=10 ,
             channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
             discretization="standard" ,
-            distworkers::Int64=0 ,
             method::String="" ,
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             spectral_broadening::Float64=1.0 ,
+            K_factor=2.0 ,
             orbitalresolved::Bool=false,
             compute_impmults::Bool=false ) where {R<:Real}
 
@@ -775,8 +775,6 @@ function nrg_full(
     @show cutoff_magnitude
     @show max_spin2
     @show spectral
-    distributed && @show distworkers
-    distributed && @show method
     println( "OCCUPATION ENERGIES" )
     print_dict( epsilon_symparams ) 
     println( "COULOMB PARAMETERS" )
@@ -896,6 +894,8 @@ function nrg_full(
     symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
     multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
     multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    mult2index::Dict{ClearMultiplet,Int64} = Dict()
+    orbital_multiplets::Vector{Tuple{Int64,String,Float64,Int64}} = []
     if calculation=="IMP"
         symstates_atom_noint,
         basis_atom,
@@ -908,9 +908,9 @@ function nrg_full(
                     asym_dir,
                     cg_o_dir ;
                     verbose=true )
-        omults::Vector{Tuple{Int64,String,Float64,Int64}} = ordered_multiplets(multiplets_atom_noint)
-        mult2index::Dict{Tuple{Int64,String,Float64,Int64}} = Dict( m=>i for (i,m) in 
-                                                                    enumerate(omults))
+        orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
+        mult2index = Dict( m=>i for (i,m) in 
+                                                                    enumerate(orbital_multiplets))
         multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
                                                                 oirreps2indices )
         multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
@@ -1035,7 +1035,6 @@ function nrg_full(
                                betabar ,
                                oindex2dimensions )
         println( "IMPURITY COMPOSITION" )
-        @show m_imp
         println()
     end
 
@@ -1228,6 +1227,8 @@ function nrg_full(
                    verbose=false ,
                    precompute_iaj=precompute_iaj ,
                    compute_impmults=compute_impmults ,
+                   mult2index=mult2index ,
+                   orbital_multiplets=orbital_multiplets ,
                    mm_i=mm_i )
     else 
         nrg = NRG( label ,
@@ -1259,6 +1260,7 @@ function nrg_full(
                    verbose=false ,
                    spectral=true ,
                    spectral_broadening=spectral_broadening ,
+                   K_factor=K_factor ,
                    orbitalresolved=orbitalresolved ,
                    M=M,
                    AA=AA , 
@@ -1268,6 +1270,8 @@ function nrg_full(
                    alpha=Float64(alpha) ,
                    precompute_iaj=precompute_iaj ,
                    compute_impmults=compute_impmults ,
+                   mult2index=mult2index ,
+                   orbital_multiplets=orbital_multiplets ,
                    mm_i=mm_i )
     end
 
@@ -1323,7 +1327,7 @@ function atomic_spectrum(
             atom_config::Dict{String,Int64} ,
             identityrep::String ,
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
-            u_symparams::Dict{ Tuple{String,Int64} , Matrix{ComplexF64} } ;
+            u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ;
             max_spin2::Int64=10 )
 
     calculation = "IMP"
@@ -1365,6 +1369,8 @@ function atomic_spectrum(
     symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
     multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
     multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    mult2index::Dict{Tuple{Int64,String,Float64,Int64},Int64} = Dict()
+    orbital_multiplets::Vector{Tuple{Int64,String,Float64,Int64}} = []
     if calculation=="IMP"
         symstates_atom_noint,
         basis_atom,
@@ -1377,9 +1383,9 @@ function atomic_spectrum(
                     asym_dir,
                     cg_o_dir ;
                     verbose=true )
-        omults::Vector{Tuple{Int64,String,Float64,Int64}} = ordered_multiplets(multiplets_atom_noint)
-        mult2index::Dict{Tuple{Int64,String,Float64,Int64}} = Dict( m=>i for (i,m) in 
-                                                                    enumerate(omults))
+        orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
+        mult2index = Dict( m=>i for (i,m) in 
+                                                                    enumerate(orbital_multiplets))
         multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
                                                                 oirreps2indices )
         multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 

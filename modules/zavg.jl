@@ -6,6 +6,16 @@ function generate_Z( Nz::Int64 )
     return Float64[ i/Nz for i in 0:(Nz-1) ]
 end
 
+# generate laps of Z containing number_of_cores z values
+function generate_Zlaps( Z , number_of_cores )
+    Nz = length(Z)
+    cleandiv = Nz ÷ number_of_cores 
+    rest = Nz % number_of_cores
+    laps = rest==0 ? cleandiv : (cleandiv + 1)
+    Zlaps = [ i=>[Z[j] for j in ((i-1)*number_of_cores+1):(i*number_of_cores) if j<=Nz] for i in 1:laps]
+    return Zlaps
+end
+
 # average thermodynamic calculations over values of z
 function zavg_thermo( label::String , Z::Vector{Float64} )
 
@@ -256,11 +266,11 @@ function zavg_spectral(
             spectral_zavg = Matrix(hcat(spectral_zavg_noduplicates...)')
 
             # smooth results 
-            omegas_splined,spectral_zavg_splined = spline_interpolate_spectral_function( 
-                spectral_zavg[:,1] ,
-                spectral_zavg[:,2] ,
-                orbitalresolved=orbitalresolved
-           )
+            #omegas_splined,spectral_zavg_splined = spline_interpolate_spectral_function( 
+            #    spectral_zavg[:,1] ,
+            #    spectral_zavg[:,2] ,
+            #    orbitalresolved=orbitalresolved
+            #)
 
             # write results
             write_spectral_function(
@@ -268,10 +278,10 @@ function zavg_spectral(
                 spectral_zavg,
                 orbitalresolved_header=orbital_header
             )
-            write_spectral_function(
-                spectral_filename(label,zavg=true,orbital=orbital,tail="_splined") ,
-                [omegas_splined spectral_zavg_splined]
-            )
+            #write_spectral_function(
+            #    spectral_filename(label,zavg=true,orbital=orbital,tail="_splined") ,
+            #    [omegas_splined spectral_zavg_splined]
+            #)
         end
 
 

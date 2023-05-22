@@ -965,6 +965,7 @@ end
 
 # get orbital dimension M
 function get_M( I , cg_path ) 
+    @show cg_path
     cgo = cg_orbital( I , I , cg_path )
     return maximum([k[2] for k in keys(cgo)])
 end

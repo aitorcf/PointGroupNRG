@@ -485,20 +485,33 @@ function write_thermo_data(
 end
 
 function write_impurity_info(
-        nrg,
-        omults,
-        mult2index,
-        orbital,
-        z)
-    multfile = "thermodata/impmult_$(orbital)_z$z.dat"
-    open(multfile, write=true) do f
-        for m in omults
-            write(f, "$(m[1]),$(m[2]),$(m[3]) ")
-            for n in 1:length(nrg.impmults)
-                write(f, "$(nrg.impmults[end+1-n][mult2index[m]]) ")
-            end
-            write(f, "\n")
+        impurity_multiplet_weights,
+        orbital_multiplets,
+        mult2index::Dict{ClearMultiplet,Int64},
+        label::String,
+        z::Float64)
+    # name of the output file
+    filename = "thermodata/impurity_multiplet_weights_$(label)_z$z.dat"
+
+    # data as matrix
+    impurity_multiplet_weights_with_iterations = [ Any[Int64(i),weights...] for (i,weights) in enumerate(impurity_multiplet_weights) ]
+    impurity_multiplet_weights_matrix = Matrix(hcat(impurity_multiplet_weights_with_iterations...)')
+
+    # write to file
+    open(filename, write=true) do f
+
+        # header
+        header = """# thermodynamic weights of orbital multiplets (columns)
+                    # for each NRG iteration (rows)\n# iteration"""
+        for orbital_multiplet in orbital_multiplets 
+            header *= " | $orbital_multiplet"
         end
+        header *= "\n"
+        write( f , header )
+
+        # data 
+        writedlm( f , impurity_multiplet_weights_matrix)
+
     end
 end
 

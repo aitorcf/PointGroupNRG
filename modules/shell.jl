@@ -952,6 +952,8 @@ function NRG( label::String ,
               eta::Function=x->1.0 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
+              mult2index::Dict{ ClearMultiplet , Int64 }=Dict() ,
+              orbital_multiplets::Vector{ClearMultiplet}=[] ,
               mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
               write_spectrum::Bool=false ) where {T}
 
@@ -1111,7 +1113,6 @@ function NRG( label::String ,
                                  betabar ,
                                  oindex2dimensions ,
                                  mm_i )
-            @show m_imp
             push!( impmults , m_imp )
         end
 
@@ -1293,9 +1294,14 @@ function NRG( label::String ,
     end
     # impurity properties 
     if compute_impmults
+        
+        # directory
+        isdir("thermodata") || mkdir("thermodata")
+
         if calculation=="IMP" 
-            write_impurity_info( nrg , omults , mult2index , label , z )
+            write_impurity_info( impmults , orbital_multiplets , mult2index , label , z )
         end
+
     end
     # spectra at each step
     if write_spectrum
