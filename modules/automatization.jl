@@ -1282,11 +1282,11 @@ end
 function multiplets_2particles( 
             cg_o_dir::String ,
             multiplet_dir::String ,
-            atom_config::Dict{String,Int64} ,
+            impurity_config::Dict{String,Int64} ,
             identityrep::String ;
             max_spin2::Int64=10 )
 
-    atom_orbital_irreps = collect(keys(atom_config))
+    atom_orbital_irreps = collect(keys(impurity_config))
 
     # orbital symmetry
     (oirreps,
@@ -1301,7 +1301,7 @@ function multiplets_2particles(
     
     symstates_atom_noint,basis_atom,multiplets_atom_noint,multiplets_a_atom_noint = 
         get_symstates_basis_multiplets( 
-                atom_config,
+                impurity_config,
                 oirreps2dimensions,
                 identityrep,
                 multiplet_dir,
