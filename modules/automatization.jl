@@ -87,7 +87,7 @@ function get_symstates_basis_multiplets(
                                     onemult_hilbert ,
                                     hiztegia ,
                                     identityrep ,
-                                    "$(asym_dir)/$(oirrep)_julia/" )
+                                    "$(asym_dir)/$(oirrep)/" )
             push!( separate_symstates , onemult_symstates )
         end
     end
@@ -146,7 +146,7 @@ function get_symstates_basis_multiplets(
                                     onemult_hilbert ,
                                     hiztegia ,
                                     identityrep ,
-                                    "$(asym_dir)$(oirrep)_julia/" )
+                                    "$(asym_dir)$(oirrep)/" )
             push!( separate_symstates , onemult_symstates )
         end
     end
@@ -688,7 +688,7 @@ function construct_custom_orbital_space(
                             hilbert_orbital , 
                             hiztegia ,
                             identityrep ,
-                            "$(ASYM_PATH)$(irrep)_julia/" ) 
+                            "$(ASYM_PATH)$(irrep)/" ) 
 
         push!(
             symstates_orbitals ,
@@ -1279,7 +1279,7 @@ function nrg_full(
     println( "END OF FULL NRG CALCULATION WITH z=$(z)" )
 end
 
-function multiplets_2part( 
+function multiplets_2particles( 
             cg_o_dir::String ,
             multiplet_dir::String ,
             atom_config::Dict{String,Int64} ,
