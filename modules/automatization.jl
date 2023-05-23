@@ -1281,7 +1281,7 @@ end
 
 function multiplets_2particles( 
             cg_o_dir::String ,
-            multiplet_dir::String ,
+            multiplets_path::String ,
             impurity_config::Dict{String,Int64} ,
             identityrep::String ;
             max_spin2::Int64=10 )
@@ -1304,7 +1304,7 @@ function multiplets_2particles(
                 impurity_config,
                 oirreps2dimensions,
                 identityrep,
-                multiplet_dir,
+                multiplets_path,
                 cg_o_dir ;
                 verbose=true )
     multiplets_atom_twopart = filter( 
