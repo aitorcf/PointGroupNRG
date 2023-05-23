@@ -1658,13 +1658,13 @@ end
 #   states with minimal input.
 #
 # ##############################################
-function compute_asymstates_allN( orbital::String ,
-                                  cg_path::String ,
-                                  multiplets_path::String ;
-                                  verbose::Bool=false )
+function compute_multiplets( orbital::String ,
+                             cg_path::String ,
+                             multiplets_path::String ;
+                             verbose::Bool=false )
 
     # add convention name to multiplet folder
-    multiplets_path *= "/$(orbital)_julia"
+    multiplets_path *= "/$(orbital)"
 
     # create asym dir if it does not exist
     isdir(multiplets_path) || mkpath( multiplets_path )

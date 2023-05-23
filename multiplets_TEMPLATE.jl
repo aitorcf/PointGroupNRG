@@ -14,4 +14,4 @@ orbital = "orbital_irrep"
 multiplets_path =  "path/to/multiplet/folder"
 
 # Compute multiplet states.
-compute_asymstates_allN( orbital , cg_path , multiplets_path ; verbose=true )
+compute_multiplets( orbital , cg_path , multiplets_path ; verbose=true )
