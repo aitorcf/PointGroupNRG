@@ -933,7 +933,6 @@ function NRG( label::String ,
               xi_symparams::Dict{ Int64 , Vector{Vector{ComplexF64}} } ;
               verbose::Bool=false ,
               distributed::Bool=false ,
-              method::String="distfor" ,
               minmult::Int64=0 , 
               mine::Float64=0.0 ,
               z::Float64=0.0 ,
@@ -952,8 +951,8 @@ function NRG( label::String ,
               eta::Function=x->1.0 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
-              mult2index::Dict{ ClearMultiplet , Int64 }=Dict() ,
-              orbital_multiplets::Vector{ClearMultiplet}=[] ,
+              mult2index::Dict{ClearMultiplet,Int64}=Dict{ClearMultiplet,Int64}() ,
+              orbital_multiplets::Vector{ClearMultiplet}=ClearMultiplet[] ,
               mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
               write_spectrum::Bool=false ) where {T}
 
