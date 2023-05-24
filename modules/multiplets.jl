@@ -1659,19 +1659,22 @@ end
 #
 # ##############################################
 function compute_multiplets( orbital::String ,
-                             cg_path::String ,
+                             cg_o_dir::String ,
                              multiplets_path::String ;
                              verbose::Bool=false )
 
     # add convention name to multiplet folder
+    if multiplets_path[end]=="/"
+        multplets_path = multiplets_path[1:(end-1)] 
+    end
     multiplets_path *= "/$(orbital)"
 
     # create asym dir if it does not exist
     isdir(multiplets_path) || mkpath( multiplets_path )
 
     # compute multiplet states
-    for n in 2:2*get_M(orbital,cg_path)
-        compute_asymstates_N( orbital , n , cg_path , multiplets_path ; verbose=verbose )
+    for n in 2:2*get_M(orbital,cg_o_dir)
+        compute_asymstates_N( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
     end
 end
 

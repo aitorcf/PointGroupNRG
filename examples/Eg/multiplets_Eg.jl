@@ -5,7 +5,7 @@ moduledir = "/home/aitor/Bulegoa/PointGroupNRG/modules"
 include( "$(moduledir)/multiplets.jl" )
 
 # path to clebsch-gordan coefficients for the chosen orbital
-cg_path = "/home/aitor/Bulegoa/PointGroupNRG/examples/clebschgordan_reduced"
+cg_path = "/home/aitor/Bulegoa/PointGroupNRG/examples/clebschgordan"
 
 # orbital irrep for which to compute the multiplets.
 orbital = "Eg"

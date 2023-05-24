@@ -489,7 +489,7 @@ function symstates_n_oneirrep(
             n::Int64 , 
             hiztegia::D,
             symstates::Dict{ Tuple{Int64,String,Float64,Int64,Float64,Int64} , S }=Dict() ;
-            filename::String="/home/aitor/Kalkuloak/AntiSymmetricPart/Eg/N$n.txt" ,
+            filename::String="" ,
             identity::String="A1g" )::Dict{ Tuple{Int64,String,Float64,Int64,Float64,Int64} , S } where {SFS<:SymbolFockState,D<:Dict,S<:State}
     # input:
     # - canonical basis for N=n subspace 

@@ -723,8 +723,8 @@ function nrg_full(
             cutoff_type::String ,
             cutoff_magnitude::R ,
             cg_o_dir::String ,
-            asym_dir::String ,
-            atom_config::Dict{String,Int64} ,
+            multiplets_dir::String ,
+            impurity_config::Dict{String,Int64} ,
             shell_config::Dict{String,Int64} ,
             identityrep::String ,
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
@@ -734,19 +734,24 @@ function nrg_full(
             z::Float64=0.0 ,
             max_spin2::Int64=10 ,
             channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
-            discretization="standard" ,
-            method::String="" ,
+            discretization::String="standard" ,
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             spectral_broadening::Float64=1.0 ,
-            K_factor=2.0 ,
+            K_factor::Float64=2.0 ,
             orbitalresolved::Bool=false,
             compute_impmults::Bool=false ) where {R<:Real}
 
     # defaults
     precompute_iaj = true
     spectral_method = "sakai1989"
+
+    # checks
+    if (discretization=="standard" && length(channel_etas)>0)
+        error( """For user-defined hybridization functions 
+                  defined with channel_etas, use discretization="lanczos".""" )
+    end
 
     println( "********************************" )
     println( "Full NRG calculation with z=$(z)" )
@@ -759,7 +764,7 @@ function nrg_full(
     end
 
     # orbital irreps present in the atom
-    atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
+    atom_orbital_irreps::Vector{String} = collect(keys(impurity_config))
 
     println( "====================" )
     println( "SETUP AND PARAMETERS" )
@@ -785,7 +790,7 @@ function nrg_full(
     
             
     # hiztegia
-    hiztegia = Dict{String,Any}( o=>o for (o,_) in atom_config )
+    hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
     merge!( hiztegia , Dict( "u"=>0.5, "d"=>-0.5 ) )
 
     #   ==========================   #
@@ -902,10 +907,10 @@ function nrg_full(
         multiplets_atom_noint,
         multiplets_a_atom_noint = 
             get_symstates_basis_multiplets( 
-                    atom_config,
+                    impurity_config,
                     oirreps2dimensions,
                     identityrep,
-                    asym_dir,
+                    multiplets_dir,
                     cg_o_dir ;
                     verbose=true )
         orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
@@ -993,7 +998,7 @@ function nrg_full(
                 shell_config,
                 oirreps2dimensions,
                 identityrep,
-                asym_dir,
+                multiplets_dir,
                 cg_o_dir ;
                 verbose=true )
     multiplets_shell::Set{NTuple{4,Int64}} = multiplets2int( multiplets_shell_noint , 
@@ -1221,7 +1226,6 @@ function nrg_full(
                    xi_symparams ;
                    mine=mine ,
                    distributed=distributed ,
-                   method=method ,
                    z=z ,
                    discretization=discretization ,
                    verbose=false ,
@@ -1254,7 +1258,6 @@ function nrg_full(
                    xi_symparams ;
                    mine=mine ,
                    distributed=distributed ,
-                   method=method ,
                    z=z ,
                    discretization=discretization ,
                    verbose=false ,
@@ -1321,10 +1324,10 @@ function multiplets_2particles(
     end
 end
 
-function atomic_spectrum( 
+function impurity_spectrum( 
             cg_o_dir::String ,
-            asym_dir::String ,
-            atom_config::Dict{String,Int64} ,
+            multiplets_dir::String ,
+            impurity_config::Dict{String,Int64} ,
             identityrep::String ,
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ;
@@ -1333,10 +1336,10 @@ function atomic_spectrum(
     calculation = "IMP"
 
     # orbital irreps present in the atom
-    atom_orbital_irreps::Vector{String} = collect(keys(atom_config))
+    atom_orbital_irreps::Vector{String} = collect(keys(impurity_config))
 
     # hiztegia
-    hiztegia = Dict{String,Any}( o=>o for (o,_) in atom_config )
+    hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
     merge!( hiztegia , Dict( "u"=>0.5, "d"=>-0.5 ) )
 
     #   ==========================   #
@@ -1377,10 +1380,10 @@ function atomic_spectrum(
         multiplets_atom_noint,
         multiplets_a_atom_noint = 
             get_symstates_basis_multiplets( 
-                    atom_config,
+                    impurity_config,
                     oirreps2dimensions,
                     identityrep,
-                    asym_dir,
+                    multiplets_dir,
                     cg_o_dir ;
                     verbose=true )
         orbital_multiplets = ordered_multiplets(multiplets_atom_noint)

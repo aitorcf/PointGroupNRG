@@ -2247,12 +2247,7 @@ function get_new_blockredmat_CGsummethod3(
             end
 
             if any(isnan.(thisredmat)) 
-                error( "NaN in impurity excitation matrix. \
-                        This is probably because the calculation \
-                        requires a value of the optional parameter \
-                        max_spin2 higher than the one given as input \
-                        (2S=10 is the maximum by default). The maximum \
-                        value of 2S required is printed in the output." )
+                error( "NaN in impurity excitation matrix. This is probably because the calculation requires a value of the optional parameter max_spin2 higher than the one given as input (2S=10 is the maximum by default). The maximum value of 2S required is printed in the output." )
             end
 
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
