@@ -5,7 +5,10 @@
 4. [Thermodynamic calculations](#thermodynamics)
 5. [Spectral function calculations](#spectral)
 6. [Averaging over the twisting parameter $z$](#z-averaging)
-7. [Template scripts](#templates)
+
+    6.1. [Parallelization](#parallelization)
+
+7. [Template scripts and workflow](#templates)
 
 # Hamiltonian and Symmetry <a name="hamiltonian"></a>
 The PointGroupNRG code is designed to solve Anderson impurity
@@ -87,16 +90,17 @@ method.
 The code provides four functions to the user, one for each
 step in a typical NRG calculation:
 
-1. `compute_multiplets`: Compute the many-particle multiplet
+1. `compute_multiplets`<a name="step_1"></a>: Compute the many-particle multiplet
    states composed of electrons in states belonging to the
    same orbital irrep.
-2. `multiplet_2particles`: Compute the two-particle
+2. `multiplet_2particles`<a name="step_2"></a>: Compute the two-particle
    impurity multiplet states for the defined system. This
    information helps when defining the parameters of the
    impurity Anderson Hamiltonian.
-3. `impurity_spectrum`: Compute the impurity spectrum.
-4. `nrg_full`: Perform a complete NRG calculation and write
-   the thermodynamic or spectral functions to files.
+3. `impurity_spectrum`<a name="step_3"></a>: Compute the impurity spectrum.
+4. `nrg_full`<a name="step_4"></a>: Perform a complete NRG
+   calculation and write the thermodynamic or spectral
+   functions to files.
 
 These functions are described in detail in the following.
 
@@ -298,9 +302,10 @@ The function is defined as follows:
 
 The mandatory input parameters are:
 
-* `label::String`: Name given to the system. It is used as
-part of the name of the output files containing data about
-thermodynamic or spectral functions.
+* `label::String`<a name="label"></a>: 
+Name given to the system. It is used as part of the name of
+the output files containing data about thermodynamic or
+spectral functions.
 * `calculation::String`: It defines whether to perform a
 calculation with the impurity (`calculation="IMP"`) or
 without the impurity (`calculation="CLEAN"`). The latter
@@ -365,12 +370,12 @@ now, serial calculations have been found to be faster
 for every test performed and therefore it has not been
 extensively used or tested. It is adivised to leave it to
 its default value `distributed=false`.
-* `z::Float64=0.0`: Value of the twisting parameter $z$ used
-for averaging over various discretization grids in order to
-improve smoothness and resolution in thermodynamic and
-spectral calculations, and also to reduce overbroadening
-effects in the latter. See [corresponding
-section](#z-averaging).
+* `z::Float64=0.0`<a name="z"></a>: 
+Value of the twisting parameter $z$ used for averaging over
+various discretization grids in order to improve smoothness
+and resolution in thermodynamic and spectral calculations,
+and also to reduce overbroadening effects in the latter.
+See [corresponding section](#z-averaging).
 * `max_spin2::Int64=10`: Described [here](#max_spin2).
 * `channel_etas::Dict{String,Vector{Function}}=Dict{String,Vector{Function}}()`:
 Parameters $\gamma_{r_\alpha}(\Gamma_\alpha;\epsilon)$ 
@@ -399,34 +404,35 @@ asymptotic formula (see Phys. Rev. B 41, 9403).
 sets a minimum energy of the multiplet with the largest
 eigenenergy, in such a way that the multiplet cutoff is
 augmented as necessary to meet this requirement.
-* `betabar::Float64=1.0`: Parameter $\bar\beta$ used in
+* `betabar::Float64=1.0`<a name="betabar"></a>: Parameter $\bar\beta$ used in
 thermodynamic calculations (see Phys. Rev. B 21, 1003). It
 defines the temperature for each NRG iteration.
 * `spectral::Bool=false`: Whether to compute spectral
 functions (`spectral=true`) or not (`spectral=false`).
 It is set to `false` by default because it greatly increases
-the computation time. The calculations are performed as in 
-J. Phys. Soc. Jpn. 58, pp. 3666-3678, and a Gaussian
-broadening kernel is used to obtain smooth spectra.
-* `spectral_broadening::Float64=1.0`: Broadening factor
-applied to the Gaussian broadening of spectral functions.
-The default value is recommended unless the $z$-averaging is
-used (see [corresponding section](#z-averaging)), in which
-case the broadening should be around $1/N_{z}$, where
-$N_{z}$ is the number of $z$ values. This reduction allows
-to reduce overbroadening errors.
-* `K_factor::Float64=2.0`: Parameter $K$ used in spectral
-function calculations to define the energy $\omega$ for
-which to compute the spectral function at each NRG
-iteration, which is defined as $\omega=K\omega_{N}$, where
-$\omega_{N}$ is the energy scale associated to the $N$-th
-iteration.
-* `orbitalresolved::Bool=false`: Whether to compute
-orbital-resolved spectral functions (`orbitalresolved=true`)
-or not (`orbitalresolved=false`). In orbital-resolved
-calculations, the spectral function is computed separately
-for excitations belonging to each one-electron impurity
-multiplet.
+the computation time. 
+* `spectral_broadening::Float64=1.0`<a
+name="broadening"></a>: 
+Broadening factor applied to the Gaussian broadening of
+spectral functions. The default value is recommended unless
+the $z$-averaging is used (see [corresponding
+section](#z-averaging)), in which case the
+broadening should be around $1/N_{z}$, where $N_{z}$ is the
+number of $z$ values. This reduction allows to reduce
+overbroadening errors.
+* `K_factor::Float64=2.0`<a name="K"></a>: 
+Parameter $K$ used in spectral function calculations to
+define the energy $\omega$ for which to compute the spectral
+function at each NRG iteration, which is defined as
+$\omega=K\omega_{N}$, where $\omega_{N}$ is the energy scale
+associated to the $N$-th iteration.
+* `orbitalresolved::Bool=false`<a name="orbitalresolved"></a>: 
+Whether to compute orbital-resolved spectral functions
+(`orbitalresolved=true`) or not
+(`orbitalresolved=false`). In orbital-resolved
+calculations, the spectral function is computed
+separately for excitations belonging to each
+one-electron impurity multiplet.
 * `compute_impmults::Bool=false`: Whether to compute the
 thermodynamic weights $W_{m}(T)$ for each impurity multiplet
 $m$. This quantity is defined as
@@ -528,8 +534,241 @@ yield states belonging to $A_{1g}$, $A_{2g}$ and $E_{g}$.
 
 # Thermodynamic calculations <a name="thermodynamics"></a>
 
+Thermodynamic calculations are performed in every NRG
+calculation due to the low computational cost involved. 
+The only parameter that targets thermodynamic calculations
+in particular is [`betabar`](#betabar), which defines the
+temperature scale associated to each NRG step. In order to
+obtain the final thermodynamic curves, results from even and
+odd iterations are stored separately and then linearly 
+interpolated and averaged in order to reduce oscillations
+(see Rev. Mod. Phys. 80, 395).
+
+The data obtained at each calculation is stored in a file
+called `thermodata/thermo_$label_$datatype_z$z.dat`, where
+the interpolated values `label` and `z` are those given as
+input to `nrg_full` (see [`label`](#label) and [`z`](#z)),
+and `datatype` is `clean` for `calculation="CLEAN"`,
+`imp` for `calculation="IMP"` or `diff`, which
+contains the impurity contribution as the subtraction
+of the functions in `imp` and `clean`. In $z$-averaged
+calculations, another file with `z=avg` is created,
+which contains the average over files with the
+specified values of `z`. Every file contains a `#`-commented
+header indicating the thermodynamic quantity that
+corresponds to each column. The container directory
+`thermodata` is created automatically in the working
+directory if it does not already exist. 
+
+The computed thermodynamic quantities are the following,
+in the order where they appear as columns in the data files.
+* Temperature $T$.
+* Magnetic susceptibility as $k_{B} T \chi / (g\mu_{B})$, where
+$k_{B}$ is the Boltzmann constant, $T$ is the temperature,
+$\chi$ is the actual magnetic susceptibility, $g$ is the
+Landé factor, and $\mu_{B}$ is the Bohr magneton.
+* Entropy as $S/k_{B}$, where $S$ is the actual entropy.
+* Heat capacity as $C/k_{B}$, where $C$ is the actual heat
+capacity.
+* Free energy as $F/k_{B} T$, where $F$ is the actual free
+energy.
+* Average number of particles $\langle \hat N \rangle$.
+* Energy as $\langle H \rangle$.
+* Partition function $Z$.
+
+
 # Spectral function calculations <a name="spectral"></a>
 
-# Averaging over the twisting parameter $z$ <a name="z-averaging"></a>
+The spectral function is computed when `spectral=true`. The
+calculations are performed as in J. Phys. Soc. Jpn. 58, pp.
+3666-3678, and a Gaussian broadening kernel is used to
+obtain smooth spectra. The parameters that affect the 
+calculation of spectral functions are
+[`spectral_broadening`](#broadening), [`K_factor`](#K), and 
+[`orbitalresolved`](#orbitalresolved).
 
-# Template scripts <a name="templates"></a>
+In orbital-resolved calculations, results for one-electron
+excitations are grouped by multiplets: excitations
+$f_\alpha^{(\dagger)}$ belonging to the multiplet
+$m_\alpha$, 
+
+$$
+\langle F | f_\alpha^{(\dagger)} | I \rangle,
+    \;\; \alpha\in m_\alpha,
+$$
+where $I$ and $F$ are the initial and final states, respectively,
+are in the same group. Spectral funcions for each of
+these groups are stored in separate files for calculations
+with [individual $z$](#orbitalresolvedfile) and
+[$z$-averaged](#orbitalresolvedfilezavg). Notice that the
+one-electron multiplet $m_\alpha=(\Gamma_\alpha,r_\alpha)$,
+where $\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)$, is
+completely specified by the orbital irrep $I_\alpha$ and
+the outer multiplicity $r_\alpha$, hence the name
+"orbital-resolved".
+
+The main result of the calculations are stored in files with
+the following names (similar convention as in [here](#thermo)):
+* `spectral/spectral_$label_z$z.dat` contains the main
+result of each individual calculation, which results from
+averaging over even and odd iterations.
+* `spectral/spectral_$label_z$z_even.dat` and 
+`spectral/spectral_$label_z$z_odd.dat` contain data
+obtained from even and odd iterations, respectively. 
+* `spectral/spectral_$label_z$z_splined.dat` contains the
+spline interpolation of the data in
+`spectral/spectral_$label_z$z.dat`.
+* `spectral/spectral_$label_zavg.dat` contains $z$-averaged
+values as in [thermodynamic calculations](#thermo).
+* `spectral/spectral_$label_z$z_o$o.dat`<a
+name="orbitalresolvedfile"></a> contains the
+orbital-resolved spectral function for excitations belonging
+the multiplet with index `o`. The index `o` is assigned by the
+code, and the multiplet to which it corresponds is indicated
+in the header line of the file. 
+* `spectral/spectral_$label_zavg_o$o.dat`<a
+name="orbitalresolvedfilezavg"></a> contains the
+$z$-average of data from [individual $z$](#orbitalresolvedfile).
+
+# Averaging over the twisting parameter $z$ <a name="z-averaging"></a>
+In some cases, the discretization of the conduction band
+leads to errors that are computationally very expensive to
+eliminate by varying the parameters in a single calculation.
+The problem usually revolves around the need to choose a
+larger value of the discretization parameter $\Lambda$ in
+order to improve the calculation in one way or another: this
+forces one to impose a larger multiplet cutoff to obtain
+converged calculations, which in turn increases the
+computational cost of the calculation exponentially. 
+The $z$-averaging procedures provides a way around this
+problem by introducing a way to take several calculations
+with different values of $z$ into account, which increases
+the computational cost linearly with the number of
+calculations.
+
+In the calculation of thermodynamic functions, the use of a
+large value of $\Lambda$ introduces spurious oscillations in
+the thermodynamic functions. These can be eliminated by
+averaging over several values of $z$, which makes it
+possible to obtain smooth curves with a lower cutoff
+requirement. See Phys. Rev. B 49, 11986.
+
+In the calculation of spectral functions, the problem with
+picking a large value of $\Lambda$ is two fold: on the one
+hand, the resolution of the spectral function is very poor
+for large energy ranges in the linear scale; on the other
+hand, a larger broadening has to be chosen in
+order to include contributions in broader energy windows.
+The $z$-averaging improves the resolution because by
+providing a different energy grid for each calculation. On
+top of that, it works with broadening parameters of the
+order of $\eta\approx 1/N_{z}$, where $N_{z}$ is the number of
+values of $z$, because the energy windows from different $z$
+"patch" together to cover the whole spectrum.
+
+
+## Parallelization<a name="parallelization"></a>
+
+The $z$-averaging procedure is where parallelization can be
+explited most optimally. Since calculations for each $z$ are
+completely independent from each other, the linear increase
+in computational time introduced by the method can be
+greatly reduced, if not almost eliminated, by running
+calculations for different $z$ in parallel.
+
+Parallelization is implement using the tools in the
+`Distributed` Julia package, which is documented in the
+[Julia docs](https://docs.julialang.org/en/v1/manual/distributed-computing/).
+This package has to be loaded including the `using
+Distributed` line and adding the processors with the
+`addprocs` function. All the modules and variables
+have to be loaded in the various processes using the
+`@everywhere` macro. Parallel processes can then spanned
+using a `@distributed` for loop, with the added `@sync` macro 
+to ensure that the code waits until every process
+is completed.
+
+For thermodynamic calculations, $z$-averaging can be simply
+achieved by first running calculations for various $z$ without the
+impurity (`calculation="CLEAN"`) and then calculations
+with the impurity (`calculation="IMP"`). The code has the
+following structure:
+
+    Z = generate_Z( Nz )
+
+    addprocs(number_of_processes)
+
+    @everywhere begin
+        # load all modules
+    end
+
+    for calculation in ["CLEAN","IMP"]
+
+        @everywhere begin
+            # load all variables
+        end
+
+        @sync @distributed for z in Z
+            nrg_full(...)
+        end
+
+    end
+    zavg_thermo( label , Z )
+
+    rmprocs(number_of_processes)
+
+The variable `Z` is a vector containing `Nz` values of $z$
+and is constructed in this example by the function
+`generate_Z`, included in the module `modules/zavg.jl`.
+The `@distributed` macro instructs the program to run the
+various `nrg_full` calculations in parallel, and the `@sync`
+macro ensures that the program waits until every calculation
+is completed before proceding. Finally, the `zavg_thermo`
+function, also part of the `modules/zavg.jl` module,
+averages over thermodynamic calculations for every $z$
+value in `Z` for the system labeled as
+[`label`](#label).
+
+For spectral function calculations, the structure is very
+similar, the only difference being that the variable
+`calculation="IMP"` does not change and that the averaging
+function is `zavg_spectral`:
+
+    @everywhere calculation = "IMP"
+
+    @sync @distributed for z in Z
+        nrg_full(...)
+    end
+
+    zavg_zavg( 
+        label , 
+        Z ,
+        orbitalresolved_number=number_of_orbitals 
+    )
+
+The `zavg_spectral` function takes the additional optional
+argument `orbitalresolved_number::Float64=0`. Its default
+value `0` is used when the calculation is not
+orbital-resolved. For orbital-resolved calculations, the
+number of orbitals `number_of_orbitals` has to be provided.
+
+# Template scripts and workflow<a name="templates"></a>
+
+Two template scripts are provided in the `templates`
+directory. These are designed to be used as a starting point
+for any calculation. A typical workflow would start by
+creating a directory for a given system, copying the
+template scripts and using them to perform the steps
+described [above](#functions).
+
+The `multiplets_TEMPLATE.jl` performs the multiplet
+calculation ([step 1](#step_1)). This has be run once for
+every orbital irrep.
+
+The `nrg_TEMPLATE.jl` performs the two-particle multiplet
+calculation ([step 2](#step_2)), the impurity spectrum
+calculation ([step 3](#step_3)), and the NRG calculation 
+([step 4](#step_4)). These are grouped together in the same
+script because (i) they share many common parameters and
+(ii) a typical workflow can involve back-and-forth running
+of the various steps included.
