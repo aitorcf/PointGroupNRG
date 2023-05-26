@@ -9,6 +9,8 @@
     6.1. [Parallelization](#parallelization)
 
 7. [Template scripts and workflow](#templates)
+8. [Examples](#examples)
+
 
 # Hamiltonian and Symmetry <a name="hamiltonian"></a>
 The PointGroupNRG code is designed to solve Anderson impurity
@@ -772,3 +774,28 @@ calculation ([step 3](#step_3)), and the NRG calculation
 script because (i) they share many common parameters and
 (ii) a typical workflow can involve back-and-forth running
 of the various steps included.
+
+# Examples<a name="examples"></a> 
+
+A directory named `examples` is provided with the code. The
+aim of these examples is to provide guidance and ideas as to
+how to structure calculations using the code. It
+contains two subdirectories, each containg scripts and data
+files for calculations performed for a different system:
+
+* `A1g`: Calculations for a system with one orbital
+transforming as the $A_{1g}$ irrep of the cubic group
+$O_{h}$ and one channel of the same symmetry coupled to that
+orbital. The irrep $A_{1g}$ is the identity irrep, so this
+system is equivalent to the single-impurity Anderson model
+first studied by Wilson and co-workers in Phys. Rev. B 21, 1003.
+
+* `Eg`: Calculations for a system with two orbitals
+transforming as the $E_{g}$ irrep of the cubic group $O_{h}$
+and two channels of the same symmetry, each coupled to its
+corresponding orbital. 
+
+In both examples we find modified versions of the
+[template scripts](#templates). The Clebsch-Gordan
+coefficient directory is the same for both: the one shipped
+with the code.
