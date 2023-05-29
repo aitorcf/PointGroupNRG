@@ -2,6 +2,8 @@ include( "shell.jl" )
 include( "thermo.jl" )
 include( "reddiag.jl" )
 
+using LinearAlgebra
+
 # ============ #
 # FILE WRITING #
 # ============ #
@@ -1079,6 +1081,19 @@ end
 
 end
 
+function compute_transformedmat_mul!(
+            redmat::Array{ComplexF64,3},
+            U_u::Matrix{ComplexF64},
+            U_v::Matrix{ComplexF64} )
+
+    U_udagger = U_u'
+    tmp = zeros( ComplexF64 , size(U_u,1) , size(U_v,1) )
+    @views for j in 1:size(redmat,2)
+        mul!( tmp , redmat[:,j,:] , U_v )
+        mul!( redmat[:,j,:] , U_udagger , tmp )
+    end
+
+end
 function compute_transformedmat!(
             transformedmat::Array{ComplexF64,3},
             U_u::Matrix{ComplexF64},
@@ -2251,10 +2266,11 @@ function get_new_blockredmat_CGsummethod3(
             end
 
             transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
-            compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+            #compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+            compute_transformedmat_mul!( thisredmat , U_u , U_v )
 
             # insert result in final dict
-            uvredmat[(G_u,G_a,G_v)] = transformedmat
+            uvredmat[(G_u,G_a,G_v)] = thisredmat
         end
     end
 
