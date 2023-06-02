@@ -9,18 +9,16 @@
     6.1. [Parallelization](#parallelization)
 
 7. [Template scripts and workflow](#templates)
-8. [Examples](#examples)
+8. [Examples and tutorial](#examples)
 
 
 # Hamiltonian and Symmetry <a name="hamiltonian"></a>
 The PointGroupNRG code is designed to solve Anderson impurity
 models with symmetry 
 
-$$
-\begin{equation}
-U(1)_{\text C}\otimes P_{\text O} \otimes SU(2)_{\text S},
-\end{equation}
-$$
+```math
+U(1)_{\text{C}} \otimes P_{\text{O}} \otimes SU(2)_{\text{S}},
+```
 
 where $U(1)_{\text C}$ corresponds to particle conservation, $P_{\text O}$
 is the a finite orbital point-group, and $SU(2)_{\text S}$
@@ -30,7 +28,7 @@ The general Anderson Hamiltonian is
 
 $$
 \begin{equation}
-H = H_o + H_C + H_h + H_c,
+H = H_{o} + H_{C} + H_{h} + H_{c},
 \end{equation}
 $$
 
@@ -38,7 +36,7 @@ where
 
 $$
 \begin{equation}
-H_o = \sum_{\alpha} \epsilon_\alpha 
+H_{o} = \sum_{\alpha} \epsilon_\alpha 
 f^\dagger_\alpha f_\alpha
 \end{equation}
 $$
@@ -47,10 +45,10 @@ contains the occupation energies,
 
 $$
 \begin{equation}
-H_C = \sum_{\alpha_1 \alpha_2 \alpha_3 \alpha_4} 
-U_{\alpha_1 \alpha_2 \alpha_3 \alpha_4}
-f^\dagger_{\alpha_1} f^\dagger_{\alpha_2}
-f_{\alpha_3} f_{\alpha_4}
+H_{C} = \sum_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}} 
+U_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}}
+f^\dagger_{\alpha_{1}} f^\dagger_{\alpha_{2}}
+f_{\alpha_{3}} f_{\alpha_{4}}
 \end{equation}
 $$
 
@@ -58,7 +56,7 @@ is the Coulomb interaction,
 
 $$
 \begin{equation}
-H_h = \int d\epsilon\sum_{\alpha \beta} V_{\alpha\beta}(\epsilon) f^\dagger_\alpha
+H_{h} = \int d\epsilon\sum_{\alpha \beta} V_{\alpha\beta}(\epsilon) f^\dagger_\alpha
 c_{\beta \epsilon}
 \end{equation}
 $$
@@ -67,7 +65,7 @@ is the hybridization term, and
 
 $$
 \begin{equation}
-H_c = \int 
+H_{c} = \int 
 \epsilon
 c^\dagger_{\beta \epsilon}
 c_{\beta \epsilon}
@@ -77,7 +75,7 @@ $$
 
 is the energy of the conduction electrons. In order to ensure that the Hamiltonian has the 
 desired symmetry, the parameters $\epsilon_\alpha$,
-$U_{\alpha_1\alpha_2\alpha_3\alpha_4}$ and
+$U_{\alpha_{1}\alpha_{2}\alpha_{3}\alpha_{4}}$ and
 $V_{\alpha\beta}(\epsilon)$ have to fullfil certain
 symmetry restrictions. (An in-depth
 review of the model and the notation used can be found in
@@ -95,7 +93,7 @@ step in a typical NRG calculation:
 1. `compute_multiplets`<a name="step_1"></a>: Compute the many-particle multiplet
    states composed of electrons in states belonging to the
    same orbital irrep.
-2. `multiplet_2particles`<a name="step_2"></a>: Compute the two-particle
+2. `multiplets_2particles`<a name="step_2"></a>: Compute the two-particle
    impurity multiplet states for the defined system. This
    information helps when defining the parameters of the
    impurity Anderson Hamiltonian.
@@ -363,6 +361,8 @@ $$
 
             I::String => V_rrp::Matrix{ComplexF64}
 
+The optional input parameters are:
+
 * `distributed::Bool=false`: Whether to perform the
 diagonalization at each NRG step in parallel
 (`distributed=true`) or not (`distributed=false`).
@@ -411,8 +411,6 @@ thermodynamic calculations (see Phys. Rev. B 21, 1003). It
 defines the temperature for each NRG iteration.
 * `spectral::Bool=false`: Whether to compute spectral
 functions (`spectral=true`) or not (`spectral=false`).
-It is set to `false` by default because it greatly increases
-the computation time. 
 * `spectral_broadening::Float64=1.0`<a
 name="broadening"></a>: 
 Broadening factor applied to the Gaussian broadening of
@@ -672,7 +670,7 @@ values of $z$, because the energy windows from different $z$
 ## Parallelization<a name="parallelization"></a>
 
 The $z$-averaging procedure is where parallelization can be
-explited most optimally. Since calculations for each $z$ are
+exploited most optimally. Since calculations for each $z$ are
 completely independent from each other, the linear increase
 in computational time introduced by the method can be
 greatly reduced, if not almost eliminated, by running
@@ -775,7 +773,7 @@ script because (i) they share many common parameters and
 (ii) a typical workflow can involve back-and-forth running
 of the various steps included.
 
-# Examples<a name="examples"></a> 
+# Examples and tutorial<a name="examples"></a> 
 
 A directory named `examples` is provided with the code. The
 aim of these examples is to provide guidance and ideas as to
@@ -798,4 +796,9 @@ corresponding orbital.
 In both examples we find modified versions of the
 [template scripts](#templates). The Clebsch-Gordan
 coefficient directory is the same for both: the one shipped
-with the code.
+with the code. 
+
+A tutorial on how to run calculations following the same
+scheme proposed in the examples is explained in
+`doc/Tutorial.md`, which can be used as additional guidance
+for performing other calculations.
