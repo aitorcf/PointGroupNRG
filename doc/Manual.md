@@ -4,7 +4,7 @@
 3. [Orbital Clebsch-Gordan coefficients](#clebsch-gordan)
 4. [Thermodynamic calculations](#thermodynamics)
 5. [Spectral function calculations](#spectral)
-6. [Averaging over the twisting parameter \textit{z}](#z-averaging)
+6. [Averaging over the twisting parameter z](#z-averaging)
 
     6.1. [Parallelization](#parallelization)
 
@@ -590,8 +590,8 @@ $`m_\alpha`$,
 where $I$ and $F$ are the initial and final states, respectively,
 are in the same group. Spectral funcions for each of
 these groups are stored in separate files for calculations
-with [individual \textit{z}](#orbitalresolvedfile) and
-[\texit{z}-averaged](#orbitalresolvedfilezavg). Notice that the
+with [individual z](#orbitalresolvedfile) and
+[z-averaged](#orbitalresolvedfilezavg). Notice that the
 one-electron multiplet $`m_\alpha=(\Gamma_\alpha,r_\alpha)`$,
 where $`\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$, is
 completely specified by the orbital irrep $`I_\alpha`$ and
@@ -619,7 +619,7 @@ code, and the multiplet to which it corresponds is indicated
 in the header line of the file. 
 * `spectral/spectral_$label_zavg_o$o.dat`<a
 name="orbitalresolvedfilezavg"></a> contains the
-$`z`$-average of data from [individual $`z`$](#orbitalresolvedfile).
+$`z`$-average of data from [individual z](#orbitalresolvedfile).
 
 # Averaging over the twisting parameter $`z`$ <a name="z-averaging"></a>
 In some cases, the discretization of the conduction band
