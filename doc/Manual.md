@@ -20,66 +20,57 @@ models with symmetry
 U(1)_{\text{C}} \otimes P_{\text{O}} \otimes SU(2)_{\text{S}},
 ```
 
-where $`U(1)_{\text{C}}`$ corresponds to particle conservation, $P_{\text O}$
-is the a finite orbital point-group, and $SU(2)_{\text S}$
-represents spin isotropy.
+where $`U(1)_{\text{C}}`$ corresponds to particle
+conservation, $`P_{\text O}`$ is the a finite orbital
+point-group, and $`SU(2)_{\text S}`$ represents spin isotropy.
 
 The general Anderson Hamiltonian is
 
-$$
-\begin{equation}
+```math
 H = H_{o} + H_{C} + H_{h} + H_{c},
-\end{equation}
-$$
+```
 
 where 
 
-$$
-\begin{equation}
+```math
 H_{o} = \sum_{\alpha} \epsilon_\alpha 
 f^\dagger_\alpha f_\alpha
-\end{equation}
-$$
+```
 
 contains the occupation energies,
 
-$$
-\begin{equation}
+```math
 H_{C} = \sum_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}} 
 U_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}}
 f^\dagger_{\alpha_{1}} f^\dagger_{\alpha_{2}}
 f_{\alpha_{3}} f_{\alpha_{4}}
-\end{equation}
-$$
+```
 
 is the Coulomb interaction,
 
-$$
-\begin{equation}
+```math
 H_{h} = \int d\epsilon\sum_{\alpha \beta} V_{\alpha\beta}(\epsilon) f^\dagger_\alpha
 c_{\beta \epsilon}
-\end{equation}
-$$
+```
 
 is the hybridization term, and 
 
-$$
-\begin{equation}
+```math
 H_{c} = \int 
 \epsilon
 c^\dagger_{\beta \epsilon}
 c_{\beta \epsilon}
 d\epsilon  
-\end{equation}
-$$
+```
 
-is the energy of the conduction electrons. In order to ensure that the Hamiltonian has the 
-desired symmetry, the parameters $\epsilon_\alpha$,
-$U_{\alpha_{1}\alpha_{2}\alpha_{3}\alpha_{4}}$ and
-$V_{\alpha\beta}(\epsilon)$ have to fullfil certain
+is the energy of the conduction electrons. In order to
+ensure that the Hamiltonian has the 
+desired symmetry, the parameters $`\epsilon_\alpha`$,
+$`U_{\alpha_{1}\alpha_{2}\alpha_{3}\alpha_{4}}`$ and
+$`V_{\alpha\beta}(\epsilon)`$ have to fullfil certain
 symmetry restrictions. (An in-depth
 review of the model and the notation used can be found in
-[REF_TO_PAPER]).The code provides a tool for
+[REF_TO_PAPER]). The code provides a tool for
 constructing a Hamiltonian with those restrictions for a
 given crystal point-group and solving it using the NRG
 method.  
@@ -168,21 +159,21 @@ The mandatory input parameters are:
 * `impurity_config::Dict{String,Int64}`<a name="impurity_config"></a>: 
 For each orbital irrep, how many orbitals levels there are
 belonging to that same irrep. For example, in a system with
-two impurities, each with an $s$ orbital that we represent
-with the irrep $A_{1g}$ of the cubic group $\mathcal O_{h}$,
+two impurities, each with an $`s`$ orbital that we represent
+with the irrep $`A_{1g}`$ of the cubic group $`\mathcal O_{h}`$,
 we would have:
 
         impurity_config = Dict{String,Int64}( "A1g" => 2 )
 
 * `identityrep::String`<a name="identityrep"></a>: 
 The name of the identity orbital irrep. For example, for the
-orbital group $\mathcal O_{h}$ it is $A_{1g}$, so
+orbital group $`\mathcal O_{h}`$ it is $`A_{1g}`$, so
 `identityrep="A1g"`.
 
 Optional parameter:
 
 * `max_spin2::Int64=10`<a name="max_spin2"></a>: 
-Maximum value of twice the total spin, $2S$, for which the
+Maximum value of twice the total spin, $`2S`$, for which the
 spin Clebsch-Gordan coefficients are going to be computed.
 If the value is too low, the program will likely run into
 `NaN` problems as a consequence of segmentation faults,
@@ -220,37 +211,37 @@ The mandatory input parameters are:
 * `epsilon_symparams::Dict{String,Vector{Float64}}` 
 <a = name="epsilon_symparams"></a>:
 Symmetry-adapted occupation energy parameters
-$\epsilon_{\alpha}=\epsilon_{r_\alpha}(\Gamma_\alpha)$ of
+$`\epsilon_{\alpha}=\epsilon_{r_\alpha}(\Gamma_\alpha)`$ of
 the impurity Anderson Hamiltonian. The keys are the names of
-the one-electron orbital irreps $I_{\alpha}$, which
+the one-electron orbital irreps $`I_{\alpha}`$, which
 completely determine the irrep
-$\Gamma_{\alpha}=(N_\alpha=1,I_\alpha,S_\alpha=1/2)$. The
+$`\Gamma_{\alpha}=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$. The
 values are vectors of occupations energies for each
-one-electron multiplet belonging to irrep $\Gamma_\alpha$
-and with outer multiplicity $r_\alpha$: the $r_\alpha$-th
+one-electron multiplet belonging to irrep $`\Gamma_\alpha`$
+and with outer multiplicity $`r_\alpha`$: the $`r_\alpha`$-th
 element of each of these vectors is the occupation energy of
 the corresponding multiplet. Each dictionary entry can be
 expressed as follows:
 
-$$
+```math
 \Gamma \implies \epsilon_{r}(\Gamma)
-$$
-    
+```
+
                                         I::String => eps_r::Vector{Float64}
 
 * `u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}}`
 <a name="u_symparams"></a>:
 Symmetry-adapted Coulomb parameters
-$U_{r_{\alpha}r_{\alpha}'}(\Gamma_\alpha)$of the impurity Anderson
+$`U_{r_{\alpha}r_{\alpha}'}(\Gamma_\alpha)`$of the impurity Anderson
 Hamiltonian (see PAPER). The keys are tuples containing the
-irreps $I_\alpha$ and the spin irreps $S_\alpha$ (total
+irreps $`I_\alpha`$ and the spin irreps $`S_\alpha`$ (total
 spin) of the two-particle impurity multiplets. The values
-are matrices with indices $r_\alpha$ and $r_\alpha'$. The
+are matrices with indices $`r_\alpha`$ and $`r_\alpha'`$. The
 dictionary entries can be expressed accordingly as follows:
 
-$$
+```math
 (I,S) \implies U_{r r'}(\Gamma)
-$$
+```
 
                     (I,S)::Tuple{String,Float64} => U_rrp::Matrix{ComplexF64}
 
@@ -313,10 +304,10 @@ option is used in the thermodynamic calculations in order to
 subtract the results to those obtained with the impurity and
 thereby isolate the impurity contribution to the
 thermodynamics of the system.
-* `L::Float64`: Discretization parameter $\Lambda$. It is
-usually chosen between $\Lambda=2$ and $\Lambda=3$, although
-values as large as $\Lambda=10$ can be used for
-thermodynamic calculations with $z$-averaging (see
+* `L::Float64`: Discretization parameter $`\Lambda`$. It is
+usually chosen between $`\Lambda=2`$ and $`\Lambda=3`$, although
+values as large as $`\Lambda=10`$ can be used for
+thermodynamic calculations with $`z`$-averaging (see
 [corresponding section](#z-averaging)).
 * `iterations::Int64`: Number of NRG iterations to perform.
 * `cutoff_type::String`: Choose whether to keep a given
@@ -337,7 +328,7 @@ for the conduction shell sites (every conduction shell site has the
 same configuration). For example, in we have a one-orbital
 impurity connected to a single conduction channel,
 we would have `shell_config=impurity_config`. For an
-impurity with one $s$ orbital connected to two $s$ channels,
+impurity with one $`s`$ orbital connected to two $`s`$ channels,
 we would have 
 
     impurity_config = Dict{String,Int64}( "A1g" => 1 )
@@ -350,14 +341,14 @@ we would have
 Described [here](#u_symparams).
 * `hop_symparams::Dict{String,Matrix{ComplexF64}}`:
 Hybridization amplitudes (hopping parameters)
-$V_{\alpha\beta}=V_{r_\alpha r_\beta}(\Gamma_\alpha)$, where
-$\Gamma_\alpha=\Gamma_\beta$ is a one-particle irrep
-completely determined by the orbital irrep $I_\alpha$. The
+$`V_{\alpha\beta}=V_{r_\alpha r_\beta}(\Gamma_\alpha)`$, where
+$`\Gamma_\alpha=\Gamma_\beta`$ is a one-particle irrep
+completely determined by the orbital irrep $`I_\alpha`$. The
 dictionary entries can be expressed as follows:
 
-$$
+```math
 I \implies V_{r r'}(\Gamma)
-$$
+```
 
             I::String => V_rrp::Matrix{ComplexF64}
 
@@ -373,24 +364,24 @@ for every test performed and therefore it has not been
 extensively used or tested. It is adivised to leave it to
 its default value `distributed=false`.
 * `z::Float64=0.0`<a name="z"></a>: 
-Value of the twisting parameter $z$ used for averaging over
+Value of the twisting parameter $`z`$ used for averaging over
 various discretization grids in order to improve smoothness
 and resolution in thermodynamic and spectral calculations,
 and also to reduce overbroadening effects in the latter.
 See [corresponding section](#z-averaging).
 * `max_spin2::Int64=10`: Described [here](#max_spin2).
 * `channel_etas::Dict{String,Vector{Function}}=Dict{String,Vector{Function}}()`:
-Parameters $\gamma_{r_\alpha}(\Gamma_\alpha;\epsilon)$ 
+Parameters $`\gamma_{r_\alpha}(\Gamma_\alpha;\epsilon)`$ 
 that define energy-dependent hybridization functions (see parameter 
-$\gamma(\epsilon)$ used by Campo and Oliveira in Phys. Rev.
+$`\gamma(\epsilon)`$ used by Campo and Oliveira in Phys. Rev.
 B 72, 104432). The dictionary has a similar structure as
 `hop_symparams`, the differences being that (i) the vectors
 contain functions instead of numbers and (ii) we have a
-single index $r_\alpha$ instead of double indices $r_\alpha
-r_\alpha'$ because the energy-dependent hybridization is
+single index $`r_\alpha`$ instead of double indices $`r_\alpha
+r_\alpha'`$ because the energy-dependent hybridization is
 only implemented for systems where each orbital is coupled
 to one channel at most. The default value results in
-constant functions $\gamma(\epsilon)=1/2$ for every channel.
+constant functions $`\gamma(\epsilon)=1/2`$ for every channel.
 If a value other than the default is used for this
 parameter, choose `discretization="lanczos"` (see
 [`discretization`](#discretization))
@@ -406,7 +397,7 @@ asymptotic formula (see Phys. Rev. B 41, 9403).
 sets a minimum energy of the multiplet with the largest
 eigenenergy, in such a way that the multiplet cutoff is
 augmented as necessary to meet this requirement.
-* `betabar::Float64=1.0`<a name="betabar"></a>: Parameter $\bar\beta$ used in
+* `betabar::Float64=1.0`<a name="betabar"></a>: Parameter $`\bar\beta`$ used in
 thermodynamic calculations (see Phys. Rev. B 21, 1003). It
 defines the temperature for each NRG iteration.
 * `spectral::Bool=false`: Whether to compute spectral
@@ -415,17 +406,17 @@ functions (`spectral=true`) or not (`spectral=false`).
 name="broadening"></a>: 
 Broadening factor applied to the Gaussian broadening of
 spectral functions. The default value is recommended unless
-the $z$-averaging is used (see [corresponding
+the $`z`$-averaging is used (see [corresponding
 section](#z-averaging)), in which case the
-broadening should be around $1/N_{z}$, where $N_{z}$ is the
-number of $z$ values. This reduction allows to reduce
+broadening should be around $`1/N_{z}`$, where $`N_{z}`$ is the
+number of $`z`$ values. This reduction allows to reduce
 overbroadening errors.
 * `K_factor::Float64=2.0`<a name="K"></a>: 
-Parameter $K$ used in spectral function calculations to
-define the energy $\omega$ for which to compute the spectral
+Parameter $`K`$ used in spectral function calculations to
+define the energy $`\omega`$ for which to compute the spectral
 function at each NRG iteration, which is defined as
-$\omega=K\omega_{N}$, where $\omega_{N}$ is the energy scale
-associated to the $N$-th iteration.
+$`\omega=K\omega_{N}`$, where $`\omega_{N}`$ is the energy scale
+associated to the $`N`$-th iteration.
 * `orbitalresolved::Bool=false`<a name="orbitalresolved"></a>: 
 Whether to compute orbital-resolved spectral functions
 (`orbitalresolved=true`) or not
@@ -434,44 +425,44 @@ calculations, the spectral function is computed
 separately for excitations belonging to each
 one-electron impurity multiplet.
 * `compute_impmults::Bool=false`: Whether to compute the
-thermodynamic weights $W_{m}(T)$ for each impurity multiplet
-$m$. This quantity is defined as
+thermodynamic weights $`W_{m}(T)`$ for each impurity multiplet
+$`m`$. This quantity is defined as
 
-$$
+```math
 W_{m}(T) = \text{Tr}\{ D_{m} P_{m} e^{-H/k_{B} T}\},
-$$
+```
 
-where the $P_{m}$ is a projector onto the impurity multiplet
+where the $`P_{m}`$ is a projector onto the impurity multiplet
 space, defined as 
 
-$$
+```math
 P_{m} = \sum_{\psi\in m} \sum_{c}
 |\psi;c\rangle \langle\psi;c|,
-$$
+```
 
 where the sums run over projections onto states where
-the impurity is in a state $|\psi\rangle$ belonging to the
-impurity multiplet $m$ and the conduction electrons are in a
-state $|c\rangle$.
+the impurity is in a state $`|\psi\rangle`$ belonging to the
+impurity multiplet $`m`$ and the conduction electrons are in a
+state $`|c\rangle`$.
 
 # Orbital Clebsch-Gordan coefficients <a name="clebsch-gordan"></a>
 
 The directory of Clebsch-Gordan coefficients, specified by
 the variable [`cg_o_dir`](#cg_o_dir), must contain files
 named `NxM_IxJ.tex`. These files contain information about 
-the decomposition of $I\otimes J$, the product of orbital
+the decomposition of $`I\otimes J`$, the product of orbital
 irreps `I` and `J` with associated indices `N` and `M`,
 respectively (the names of the irreps are defined by the
 user). It is sufficient to provide files for the
 irrep products that will be used in the calculation. A
 single file has to be provided for each orbital irrep pair:
-if there is a file for $I\otimes J$, there must be no file
-for $J\otimes I$.
+if there is a file for $`I\otimes J`$, there must be no file
+for $`J\otimes I`$.
 
 The content of each file is organized in blocks separated by
 blank lines. Each block contains the coefficients of the
-states belonging to an irrep $K$ in the product $I\otimes J$,
-_i.e._ $I\otimes J = ... \oplus K \oplus \dots$, 
+states belonging to an irrep $`K`$ in the product $`I\otimes J`$,
+_i.e._ $`I\otimes J = ... \oplus K \oplus \dots`$, 
 in terms of states belonging to irreps $I$ and $J$ (these
 are the  Clebsch-Gordan coefficients). The first line of the
 block contains the index of $K$ and its name, and the
@@ -486,8 +477,8 @@ where `c` is the value of the coefficient.
 
 As an example, consider a file `2x2_EgxEg.txt` containing
 the Clebsch-Gordan coefficients for the decomposition of the
-irrep product $E_{g}\otimes E_{g}$ involving the irrep $E_{g}$
-of the cubic group $O_{h}$. Then the contents of the file
+irrep product $`E_{g}\otimes E_{g}`$ involving the irrep $`E_{g}`$
+of the cubic group $`O_{h}`$. Then the contents of the file
 can be
 
     0 A1g 
@@ -505,17 +496,17 @@ can be
 This is an example taken from the `examples/clebschgordan`
 directory included in the code. The irreps are indexed as
 `A1g->0`, `A2g->1` and `Eg->2`. The first block, for
-instance, tells us that the only state belonging to $A_{1g}$
+instance, tells us that the only state belonging to $`A_{1g}`$
 resulting from the decomposition of products of states in
-$E_{g}$ is 
+$`E_{g}`$ is 
 
-$$
+```math
 |A_{1g},1\rangle = \frac{1}{\sqrt 2}\left(
         |E_g,2\rangle \otimes |E_g,1\rangle
         +
         |E_g,1\rangle \otimes |E_g,2\rangle
         \right).
-$$
+```
 
 Notice that the code can parse expressions such as `sqrt(2)`
 provided that they are valid as expressions in the Julia
@@ -524,12 +515,12 @@ language. More example files can be found in the
 Clebsch-Gordan coefficients necessary to perform
 calculations for (i) a simple system with orbitals
 belonging to the identity representation (notice that
-$A_{1g}$ is the identity representation of $\mathcal
-O_h$, but it can be used in this case for any other identity
+$`A_{1g}`$ is the identity representation of $`\mathcal
+O_h`$, but it can be used in this case for any other identity
 representation such as the irrep $s$ of the rotation group
-$O(3)$), and (ii) a system with two $E_{g}$ orbitals, since
-any combination of states belonging to $E_{g}$ can only
-yield states belonging to $A_{1g}$, $A_{2g}$ and $E_{g}$.
+$`O(3)`$), and (ii) a system with two $`E_{g}`$ orbitals, since
+any combination of states belonging to $`E_{g}`$ can only
+yield states belonging to $`A_{1g}`$, $`A_{2g}`$ and $`E_{g}`$.
 
 
 # Thermodynamic calculations <a name="thermodynamics"></a>
@@ -563,17 +554,17 @@ directory if it does not already exist.
 The computed thermodynamic quantities are the following,
 in the order where they appear as columns in the data files.
 * Temperature $T$.
-* Magnetic susceptibility as $k_{B} T \chi / (g\mu_{B})$, where
-$k_{B}$ is the Boltzmann constant, $T$ is the temperature,
+* Magnetic susceptibility as $`k_{B} T \chi / (g\mu_{B})`$, where
+$`k_{B}`$ is the Boltzmann constant, $T$ is the temperature,
 $\chi$ is the actual magnetic susceptibility, $g$ is the
-Landé factor, and $\mu_{B}$ is the Bohr magneton.
-* Entropy as $S/k_{B}$, where $S$ is the actual entropy.
-* Heat capacity as $C/k_{B}$, where $C$ is the actual heat
+Landé factor, and $`\mu_{B}`$ is the Bohr magneton.
+* Entropy as $`S/k_{B}`$, where $S$ is the actual entropy.
+* Heat capacity as $`C/k_{B}`$, where $C$ is the actual heat
 capacity.
-* Free energy as $F/k_{B} T$, where $F$ is the actual free
+* Free energy as $`F/k_{B} T`$, where $F$ is the actual free
 energy.
-* Average number of particles $\langle \hat N \rangle$.
-* Energy as $\langle H \rangle$.
+* Average number of particles $`\langle \hat N \rangle`$.
+* Energy as $`\langle H \rangle`$.
 * Partition function $Z$.
 
 
@@ -589,22 +580,22 @@ calculation of spectral functions are
 
 In orbital-resolved calculations, results for one-electron
 excitations are grouped by multiplets: excitations
-$f_\alpha^{(\dagger)}$ belonging to the multiplet
-$m_\alpha$, 
+$`f_\alpha^{(\dagger)}`$ belonging to the multiplet
+$`m_\alpha`$, 
 
-$$
+```math
 \langle F | f_\alpha^{(\dagger)} | I \rangle,
     \;\; \alpha\in m_\alpha,
-$$
+```
 where $I$ and $F$ are the initial and final states, respectively,
 are in the same group. Spectral funcions for each of
 these groups are stored in separate files for calculations
 with [individual $z$](#orbitalresolvedfile) and
 [$z$-averaged](#orbitalresolvedfilezavg). Notice that the
-one-electron multiplet $m_\alpha=(\Gamma_\alpha,r_\alpha)$,
-where $\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)$, is
-completely specified by the orbital irrep $I_\alpha$ and
-the outer multiplicity $r_\alpha$, hence the name
+one-electron multiplet $`m_\alpha=(\Gamma_\alpha,r_\alpha)`$,
+where $`\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$, is
+completely specified by the orbital irrep $`I_\alpha`$ and
+the outer multiplicity $`r_\alpha`$, hence the name
 "orbital-resolved".
 
 The main result of the calculations are stored in files with
@@ -662,7 +653,7 @@ order to include contributions in broader energy windows.
 The $z$-averaging improves the resolution because by
 providing a different energy grid for each calculation. On
 top of that, it works with broadening parameters of the
-order of $\eta\approx 1/N_{z}$, where $N_{z}$ is the number of
+order of $`\eta\approx 1/N_{z}`$, where $`N_{z}`$ is the number of
 values of $z$, because the energy windows from different $z$
 "patch" together to cover the whole spectrum.
 
