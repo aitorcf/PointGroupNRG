@@ -1815,15 +1815,22 @@ function update_redmat_AA_CGsummethod(
             oindex2dimensions::Vector{Int64} ;
             verbose=false )
 
-    Mred = get_new_blockredmat_CGsummethod3( 
-                Mred,
+    #Mred = get_new_blockredmat_CGsummethod3( 
+    #            Mred,
+    #            collect(multiplets_a),
+    #            combinations_uprima ,
+    #            irrEU ,
+    #            Karray_orbital ,
+    #            Karray_spin ,
+    #            cg_o_fullmatint ,
+    #            cg_s_fullmatint )
+    Mred = update_blockredmat( 
                 collect(multiplets_a),
-                combinations_uprima ,
-                irrEU ,
                 Karray_orbital ,
                 Karray_spin ,
-                cg_o_fullmatint ,
-                cg_s_fullmatint )
+                Mred,
+                combinations_uprima ,
+                irrEU )
 
     if verbose 
         println( "M" )
@@ -2293,4 +2300,232 @@ function print_A( A ; orbitalresolved::Bool=false )
         end
     end
 
+end
+
+# optimized version of M updating
+function get_new_blockredmat_old( 
+            ijredmat::Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}} ,
+            multiplets_a::Vector{NTuple{4,Int64}} ,
+            combinations_uprima::Dict{NTuple{3,Int64}, Vector{NTuple{3,NTuple{4,Int64}}}},
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            Karray_orbital::Array{ComplexF64,6} ,
+            Karray_spin::Array{ComplexF64,6},
+            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+            cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} })
+
+    # initialize result matrix
+    uvredmat::Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,3}} = Dict()
+
+    # hopping irreps and multiplicities
+    irrmult_a = get_irreps(Set(multiplets_a);multiplicity=true)
+    
+    # iterate over irrep combinations G_u and G_v
+    # in the new step
+    for (G_u::NTuple{3,Int64},ucombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima,
+        (G_v::NTuple{3,Int64},vcombs::Vector{NTuple{3,NTuple{4,Int64}}}) in combinations_uprima
+
+        # irrep quantum numbers
+        (N_u,I_u,S_u) = G_u 
+        (N_v,I_v,S_v) = G_v 
+
+        # early discard
+        N_u==(N_v+1) || continue
+        
+        # diagonalization matrices 
+        U_u = irrEU[G_u][2]::Matrix{ComplexF64}  
+        U_v=  irrEU[G_v][2]::Matrix{ComplexF64} 
+
+        # irrep multiplicities
+        R_u = length(ucombs)
+        R_v = length(vcombs)
+
+        # iterate over hopping irreps G_a
+        for (G_a::NTuple{3,Int64},R_a::Int64) in irrmult_a
+
+            # irrep quantum numbers
+            (N_a,I_a,S_a) = G_a
+
+            # early discard
+            haskey( cg_o_fullmatint , (I_a,I_v,I_u) ) || continue
+            haskey( cg_s_fullmatint , (S_a,S_v,S_u) ) || continue
+
+            # initiate new matrix entry
+            thisredmat     = zeros(ComplexF64,R_u,R_a,R_v)
+            transformedmat = zeros(ComplexF64,R_u,R_a,R_v)
+
+            # iterate over primed combinations, to be 
+            # combined later by u matrices.
+            # here:
+            #   u = u'
+            #   v = v'
+            for (m_u::NTuple{4,Int64},m_mu::NTuple{4,Int64},m_i::NTuple{4,Int64}) in ucombs,
+                (m_v::NTuple{4,Int64},m_nu::NTuple{4,Int64},m_j::NTuple{4,Int64}) in vcombs
+
+                # for block matrix elements, same shell states
+                m_mu==m_nu || continue
+
+                # multiplet quantum numbers
+                r_u = m_u[4]
+                r_v = m_v[4]
+                (N_mu,I_mu,S_mu,r_mu) = m_mu
+                (N_i, I_i, S_i, r_i ) = m_i 
+                (N_j, I_j, S_j, r_j ) = m_j
+                G_mu = (N_mu,I_mu,S_mu)
+                G_i = (N_i,I_i,S_i)
+                G_j = (N_j,I_j,S_j)
+
+                ((G_i,G_a,G_j) in keys(ijredmat)) || continue
+
+                # clebsch-gordan sum coefficient
+                @inbounds Ko = Karray_orbital[I_u,I_v,I_a,I_mu,I_i,I_j]
+                @inbounds Ks = Karray_spin[((S_u,S_v,S_a,S_mu,S_i,S_j).+1)...]
+                K::ComplexF64 = Ko * Ks
+                K==zero(K) && continue
+                #isnan(K) && error( "NaN in K" )
+
+                # sign factor
+                sign = ComplexF64((-1)^N_mu)
+
+                # reduced matrix sector
+                ijsector = @view ijredmat[(G_i,G_a,G_j)][r_i,:,r_j]
+                #any(isnan.(ijsector)) && error( "NaN in ijsector" )
+                @inbounds @. thisredmat[r_u,:,r_v] = sign*K*ijsector[:]
+            end
+
+            if any(isnan.(thisredmat)) 
+                error( "NaN in impurity excitation matrix. This is probably because the calculation requires a value of the optional parameter max_spin2 higher than the one given as input (2S=10 is the maximum by default). The maximum value of 2S required is printed in the output." )
+            end
+
+            transformedmat::Array{ComplexF64,3} = zeros(ComplexF64,R_u,R_a,R_v)
+            #compute_transformedmat!( transformedmat , U_u , U_v , thisredmat )
+            compute_transformedmat_mul!( thisredmat , U_u , U_v )
+
+            # insert result in final dict
+            uvredmat[(G_u,G_a,G_v)] = thisredmat
+        end
+    end
+
+    return uvredmat
+
+end
+
+function update_blockredmat(
+                multiplets_a_block::Vector{NTuple{4,Int64}}, 
+                Ksum_o_array::Array{ComplexF64,6} ,
+                Ksum_s_array::Array{ComplexF64,6} ,
+                redmat_iaj::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
+                combinations_uprima::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}}} ,
+                irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } )
+
+    # G => multiplicity of G
+    #
+    # i (n) / u (n-1)
+    G2R_uv::Dict{IntIrrep,Int64} = Dict( G_u=>size(U_u,1) for (G_u,(_,U_u)) in irrEU )
+    # a
+    G2R_a::Dict{NTuple{3,Int64},Int64} = Dict( 
+        G=>R for (G,R) in get_irreps( Set(multiplets_a_block) ; multiplicity=true ) 
+    )
+    
+    # irrep -> decomposition -> multiplet
+    Gu2GiGmu2uimumults::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}} = Dict(
+        G_u => Dict(
+            (G_i,G_mu) => [(m_u[4],m_i[4],m_mu[4]) for (m_u,m_mu,m_i) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+            for (G_i,G_mu) in Set( (m_i[1:3],m_mu[1:3]) for (_,m_mu,m_i) in combinations_uprima[G_u])
+        )
+        for (G_u,multiplet_combinations_Gu) in combinations_uprima
+    )
+
+    # initialize result dictionary
+    redmat_uav::Dict{NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = Dict()
+
+    # G_u, G_v iteration
+    for (G_u,GiGmu2uimumults) in Gu2GiGmu2uimumults,
+        (G_v,GjGnu2vjnumults) in Gu2GiGmu2uimumults
+
+        # irrep quantum numbers 
+        N_u,I_u,S_u = G_u
+        N_v,I_v,S_v = G_v
+
+        # early discard 
+        N_u==(N_v+1) || continue
+
+        # multiplicities
+        R_u= G2R_uv[G_u]
+        R_v= G2R_uv[G_v]
+
+        # transformation matrices
+        @views begin
+            U_u::Matrix{ComplexF64} = irrEU[G_u][2]
+            U_v::Matrix{ComplexF64} = irrEU[G_v][2]
+        end
+        # temporary matrix for transformation
+        tmp = zeros(ComplexF64,R_u,R_v)
+
+        # G_a iteration
+        for (G_a,R_a) in G2R_a
+
+            # irrep quantum numbers
+            N_a,I_a,S_a = G_a
+            
+            # < G_u || f^\dagger_{G_a} || G_v >
+            uav_matrix = zeros(ComplexF64,R_u,R_a,R_v)
+            
+            # G_i,G_mu,G_j,G_nu iteration
+            for ((G_i,G_mu),uimumults) in GiGmu2uimumults,
+                ((G_j,G_nu),vjnumults) in GjGnu2vjnumults
+
+                # irrep quantum numbers 
+                N_i,I_i,S_i = G_i
+                N_j,I_j,S_j = G_j
+                N_munu,I_munu,S_munu = G_mu
+
+                # permutation factor
+                sign = (-1)^N_munu
+
+                # early discard
+                G_mu==G_nu   || continue
+                N_i==(N_j+1) || continue
+
+                # clebsch-gordan sum
+                @inbounds K = Ksum_o_array[I_u,I_v,I_a,I_munu,I_i,I_j]*
+                              Ksum_s_array[((S_u,S_v,S_a,S_munu,S_i,S_j).+1)...]
+                K==zero(K) && continue
+
+                # total prefactor
+                sign_times_K = sign * K
+
+                # < G_mu || f^\dagger_{G_a} || G_j >
+                haskey( redmat_iaj , (G_i,G_a,G_j) ) || continue
+                @views iaj_matrix = redmat_iaj[(G_i,G_a,G_j)]
+
+                # u,i,mu , v,j,nu  multiplet iteration
+                for (r_u,r_i,r_mu) in uimumults,
+                    (r_v,r_j,r_nu) in vjnumults
+
+                    r_mu==r_nu || continue
+
+                    @inbounds for r_a in 1:R_a 
+                        uav_matrix[r_u,r_a,r_v] += sign_times_K * iaj_matrix[r_i,r_a,r_j]
+                    end
+
+                end # u,i,mu , v,j,nu , a multiplet iteration
+
+            end # G_i,G_mu,G_j,G_nu iteration
+
+            # final discard
+            isapprox(sum(abs2.(uav_matrix)),zero(ComplexF64)) && continue
+
+            # transform matrix
+            @views for r_a in 1:G2R_a[G_a]
+                mul!( tmp , uav_matrix[:,r_a,:] , U_v )
+                mul!( uav_matrix[:,r_a,:] , U_u' , tmp )
+            end
+
+            # redmat_uav
+            redmat_uav[(G_u,G_a,G_v)] = uav_matrix
+
+        end # G_a iteration
+    end # G_u, G_v iteration
+
+    return redmat_uav
 end

@@ -1062,7 +1062,7 @@ function NRG( label::String ,
         # diagonalization
         # 
         # construct and diagonalize ( m_u | H_1 | m_v )
-        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat( 
+        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat_new( 
                 multiplets_block , 
                 multiplets_shell ,
                 irrEU , 
