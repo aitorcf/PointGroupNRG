@@ -4,7 +4,7 @@
 3. [Orbital Clebsch-Gordan coefficients](#clebsch-gordan)
 4. [Thermodynamic calculations](#thermodynamics)
 5. [Spectral function calculations](#spectral)
-6. [Averaging over the twisting parameter $`z`$](#z-averaging)
+6. [Averaging over the twisting parameter \textit{z}](#z-averaging)
 
     6.1. [Parallelization](#parallelization)
 
@@ -307,7 +307,7 @@ thermodynamics of the system.
 * `L::Float64`: Discretization parameter $`\Lambda`$. It is
 usually chosen between $`\Lambda=2`$ and $`\Lambda=3`$, although
 values as large as $`\Lambda=10`$ can be used for
-thermodynamic calculations with $`z`$-averaging (see
+thermodynamic calculations with $z$-averaging (see
 [corresponding section](#z-averaging)).
 * `iterations::Int64`: Number of NRG iterations to perform.
 * `cutoff_type::String`: Choose whether to keep a given
@@ -364,7 +364,7 @@ for every test performed and therefore it has not been
 extensively used or tested. It is adivised to leave it to
 its default value `distributed=false`.
 * `z::Float64=0.0`<a name="z"></a>: 
-Value of the twisting parameter $`z`$ used for averaging over
+Value of the twisting parameter $z$ used for averaging over
 various discretization grids in order to improve smoothness
 and resolution in thermodynamic and spectral calculations,
 and also to reduce overbroadening effects in the latter.
@@ -590,8 +590,8 @@ $`m_\alpha`$,
 where $I$ and $F$ are the initial and final states, respectively,
 are in the same group. Spectral funcions for each of
 these groups are stored in separate files for calculations
-with [individual $`z`$](#orbitalresolvedfile) and
-[$`z`$-averaged](#orbitalresolvedfilezavg). Notice that the
+with [individual \textit{z}](#orbitalresolvedfile) and
+[\texit{z}-averaged](#orbitalresolvedfilezavg). Notice that the
 one-electron multiplet $`m_\alpha=(\Gamma_\alpha,r_\alpha)`$,
 where $`\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$, is
 completely specified by the orbital irrep $`I_\alpha`$ and
