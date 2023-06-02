@@ -26,7 +26,7 @@ function get_cg_o_info(
     end
 
     # clebsch-gordan matrix
-    cg_o_full::Dict{Tuple{String,Int64,String,Int64,String,Int64}} = get_cg_o_fulldict( oirreps , cg_o_dir )
+    cg_o_full::Dict{Tuple{String,Int64,String,Int64,String,Int64},ComplexF64} = get_cg_o_fulldict( oirreps , cg_o_dir )
     cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_o_fullmatint( cg_o_full , oirreps )
     if verbose 
         println( "Orbital CG matrix:" )
@@ -615,7 +615,8 @@ end
 function print_spectrum( 
             irrEU ;
             savefile=false ,
-            label="" )
+            label="" ,
+            multiplet_cutoff::Int64=100 )
 
     spectrum = [ 
         ((G...,r),e) 
@@ -626,8 +627,9 @@ function print_spectrum(
 
     @printf "%20s    %7s\n" "multiplet" "energy"
     println()
-    for (multiplet,energy) in spectrum
+    for (i,(multiplet,energy)) in enumerate(spectrum)
         @printf "%20s    %.5f\n" multiplet energy
+        i>multiplet_cutoff && break
     end
 
     if savefile 
