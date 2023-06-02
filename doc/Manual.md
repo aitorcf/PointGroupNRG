@@ -20,7 +20,7 @@ models with symmetry
 U(1)_{\text{C}} \otimes P_{\text{O}} \otimes SU(2)_{\text{S}},
 ```
 
-where $U(1)_{\text C}$ corresponds to particle conservation, $P_{\text O}$
+where $\`U(1)_{\text{C}}\`$ corresponds to particle conservation, $P_{\text O}$
 is the a finite orbital point-group, and $SU(2)_{\text S}$
 represents spin isotropy.
 
