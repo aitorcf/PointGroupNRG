@@ -1878,15 +1878,22 @@ function update_redmat_AA_CGsummethod_orbitalresolved(
             oindex2dimensions::Vector{Int64} ;
             verbose=false )
 
-    Mred = get_new_blockredmat_CGsummethod3( 
-                Mred,
+    Mred = update_blockredmat( 
                 collect(multiplets_a),
-                combinations_uprima ,
-                irrEU ,
                 Karray_orbital ,
                 Karray_spin ,
-                cg_o_fullmatint ,
-                cg_s_fullmatint )
+                Mred,
+                combinations_uprima ,
+                irrEU )
+    #Mred = get_new_blockredmat_CGsummethod3( 
+    #            Mred,
+    #            collect(multiplets_a),
+    #            combinations_uprima ,
+    #            irrEU ,
+    #            Karray_orbital ,
+    #            Karray_spin ,
+    #            cg_o_fullmatint ,
+    #            cg_s_fullmatint )
 
 
     if verbose 
