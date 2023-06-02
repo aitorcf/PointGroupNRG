@@ -4,7 +4,7 @@
 3. [Orbital Clebsch-Gordan coefficients](#clebsch-gordan)
 4. [Thermodynamic calculations](#thermodynamics)
 5. [Spectral function calculations](#spectral)
-6. [Averaging over the twisting parameter $z$](#z-averaging)
+6. [Averaging over the twisting parameter $`z`$](#z-averaging)
 
     6.1. [Parallelization](#parallelization)
 
@@ -160,14 +160,14 @@ The mandatory input parameters are:
 For each orbital irrep, how many orbitals levels there are
 belonging to that same irrep. For example, in a system with
 two impurities, each with an $`s`$ orbital that we represent
-with the irrep $`A_{1g}`$ of the cubic group $`\mathcal O_{h}`$,
+with the irrep $`A_{1g}`$ of the cubic group $`O_{h}`$,
 we would have:
 
         impurity_config = Dict{String,Int64}( "A1g" => 2 )
 
 * `identityrep::String`<a name="identityrep"></a>: 
 The name of the identity orbital irrep. For example, for the
-orbital group $`\mathcal O_{h}`$ it is $`A_{1g}`$, so
+orbital group $`O_{h}`$ it is $`A_{1g}`$, so
 `identityrep="A1g"`.
 
 Optional parameter:
@@ -542,7 +542,7 @@ input to `nrg_full` (see [`label`](#label) and [`z`](#z)),
 and `datatype` is `clean` for `calculation="CLEAN"`,
 `imp` for `calculation="IMP"` or `diff`, which
 contains the impurity contribution as the subtraction
-of the functions in `imp` and `clean`. In $z$-averaged
+of the functions in `imp` and `clean`. In $`z`$-averaged
 calculations, another file with `z=avg` is created,
 which contains the average over files with the
 specified values of `z`. Every file contains a `#`-commented
@@ -565,7 +565,7 @@ capacity.
 energy.
 * Average number of particles $`\langle \hat N \rangle`$.
 * Energy as $`\langle H \rangle`$.
-* Partition function $Z$.
+* Partition function $`z`$.
 
 
 # Spectral function calculations <a name="spectral"></a>
@@ -590,8 +590,8 @@ $`m_\alpha`$,
 where $I$ and $F$ are the initial and final states, respectively,
 are in the same group. Spectral funcions for each of
 these groups are stored in separate files for calculations
-with [individual $z$](#orbitalresolvedfile) and
-[$z$-averaged](#orbitalresolvedfilezavg). Notice that the
+with [individual $`z`$](#orbitalresolvedfile) and
+[$`z`$-averaged](#orbitalresolvedfilezavg). Notice that the
 one-electron multiplet $`m_\alpha=(\Gamma_\alpha,r_\alpha)`$,
 where $`\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$, is
 completely specified by the orbital irrep $`I_\alpha`$ and
@@ -609,7 +609,7 @@ obtained from even and odd iterations, respectively.
 * `spectral/spectral_$label_z$z_splined.dat` contains the
 spline interpolation of the data in
 `spectral/spectral_$label_z$z.dat`.
-* `spectral/spectral_$label_zavg.dat` contains $z$-averaged
+* `spectral/spectral_$label_zavg.dat` contains $`z`$-averaged
 values as in [thermodynamic calculations](#thermo).
 * `spectral/spectral_$label_z$z_o$o.dat`<a
 name="orbitalresolvedfile"></a> contains the
@@ -619,9 +619,9 @@ code, and the multiplet to which it corresponds is indicated
 in the header line of the file. 
 * `spectral/spectral_$label_zavg_o$o.dat`<a
 name="orbitalresolvedfilezavg"></a> contains the
-$z$-average of data from [individual $z$](#orbitalresolvedfile).
+$`z`$-average of data from [individual $`z`$](#orbitalresolvedfile).
 
-# Averaging over the twisting parameter $z$ <a name="z-averaging"></a>
+# Averaging over the twisting parameter $`z`$ <a name="z-averaging"></a>
 In some cases, the discretization of the conduction band
 leads to errors that are computationally very expensive to
 eliminate by varying the parameters in a single calculation.
@@ -631,16 +631,16 @@ order to improve the calculation in one way or another: this
 forces one to impose a larger multiplet cutoff to obtain
 converged calculations, which in turn increases the
 computational cost of the calculation exponentially. 
-The $z$-averaging procedures provides a way around this
+The $`z`$-averaging procedures provides a way around this
 problem by introducing a way to take several calculations
-with different values of $z$ into account, which increases
+with different values of $`z`$ into account, which increases
 the computational cost linearly with the number of
 calculations.
 
 In the calculation of thermodynamic functions, the use of a
 large value of $\Lambda$ introduces spurious oscillations in
 the thermodynamic functions. These can be eliminated by
-averaging over several values of $z$, which makes it
+averaging over several values of $`z`$, which makes it
 possible to obtain smooth curves with a lower cutoff
 requirement. See Phys. Rev. B 49, 11986.
 
@@ -650,22 +650,22 @@ hand, the resolution of the spectral function is very poor
 for large energy ranges in the linear scale; on the other
 hand, a larger broadening has to be chosen in
 order to include contributions in broader energy windows.
-The $z$-averaging improves the resolution because by
+The $`z`$-averaging improves the resolution because by
 providing a different energy grid for each calculation. On
 top of that, it works with broadening parameters of the
 order of $`\eta\approx 1/N_{z}`$, where $`N_{z}`$ is the number of
-values of $z$, because the energy windows from different $z$
+values of $`z`$, because the energy windows from different $`z`$
 "patch" together to cover the whole spectrum.
 
 
 ## Parallelization<a name="parallelization"></a>
 
-The $z$-averaging procedure is where parallelization can be
-exploited most optimally. Since calculations for each $z$ are
+The $`z`$-averaging procedure is where parallelization can be
+exploited most optimally. Since calculations for each $`z`$ are
 completely independent from each other, the linear increase
 in computational time introduced by the method can be
 greatly reduced, if not almost eliminated, by running
-calculations for different $z$ in parallel.
+calculations for different $`z`$ in parallel.
 
 Parallelization is implement using the tools in the
 `Distributed` Julia package, which is documented in the
@@ -679,8 +679,8 @@ using a `@distributed` for loop, with the added `@sync` macro
 to ensure that the code waits until every process
 is completed.
 
-For thermodynamic calculations, $z$-averaging can be simply
-achieved by first running calculations for various $z$ without the
+For thermodynamic calculations, $`z`$-averaging can be simply
+achieved by first running calculations for various $`z`$ without the
 impurity (`calculation="CLEAN"`) and then calculations
 with the impurity (`calculation="IMP"`). The code has the
 following structure:
@@ -708,7 +708,7 @@ following structure:
 
     rmprocs(number_of_processes)
 
-The variable `Z` is a vector containing `Nz` values of $z$
+The variable `Z` is a vector containing `Nz` values of $`z`$
 and is constructed in this example by the function
 `generate_Z`, included in the module `modules/zavg.jl`.
 The `@distributed` macro instructs the program to run the
@@ -716,7 +716,7 @@ various `nrg_full` calculations in parallel, and the `@sync`
 macro ensures that the program waits until every calculation
 is completed before proceding. Finally, the `zavg_thermo`
 function, also part of the `modules/zavg.jl` module,
-averages over thermodynamic calculations for every $z$
+averages over thermodynamic calculations for every $`z`$
 value in `Z` for the system labeled as
 [`label`](#label).
 
