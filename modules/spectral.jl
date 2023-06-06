@@ -2442,6 +2442,12 @@ function update_blockredmat(
         for (G_u,multiplet_combinations_Gu) in combinations_uprima
     )
 
+    # full-sized matrices for avoiding allocations
+    R_uv_max = maximum(values(G2R_uv))
+    R_a_max = maximum(values(G2R_a))
+    tmp_full = zeros(ComplexF64,R_uv_max,R_uv_max)
+    uav_matrix_full = zeros(ComplexF64,R_uv_max,R_a_max,R_uv_max)
+
     # initialize result dictionary
     redmat_uav::Dict{NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = Dict()
 
@@ -2466,7 +2472,8 @@ function update_blockredmat(
             U_v::Matrix{ComplexF64} = irrEU[G_v][2]
         end
         # temporary matrix for transformation
-        tmp = zeros(ComplexF64,R_u,R_v)
+        @views tmp = tmp_full[1:R_u,1:R_v]
+        tmp .= zero(ComplexF64)
 
         # G_a iteration
         for (G_a,R_a) in G2R_a
@@ -2475,7 +2482,8 @@ function update_blockredmat(
             N_a,I_a,S_a = G_a
             
             # < G_u || f^\dagger_{G_a} || G_v >
-            uav_matrix = zeros(ComplexF64,R_u,R_a,R_v)
+            @views uav_matrix = uav_matrix_full[1:R_u,1:R_a,1:R_v]
+            uav_matrix .= zero(ComplexF64)
             
             # G_i,G_mu,G_j,G_nu iteration
             for ((G_i,G_mu),uimumults) in GiGmu2uimumults,
@@ -2520,7 +2528,7 @@ function update_blockredmat(
             end # G_i,G_mu,G_j,G_nu iteration
 
             # final discard
-            isapprox(sum(abs2.(uav_matrix)),zero(ComplexF64)) && continue
+            is_matrix_zero(uav_matrix) && continue
 
             # transform matrix
             @views for r_a in 1:G2R_a[G_a]
@@ -2529,10 +2537,21 @@ function update_blockredmat(
             end
 
             # redmat_uav
-            redmat_uav[(G_u,G_a,G_v)] = uav_matrix
+            push!( redmat_uav , (G_u,G_a,G_v) => uav_matrix[:,:,:] )
+            #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix_full[1:R_u,1:R_a,1:R_v]
+            #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix[:,:,:]
 
         end # G_a iteration
     end # G_u, G_v iteration
 
     return redmat_uav
+end
+
+function is_matrix_zero( matrix::SubArray{ComplexF64,3} )
+    s::Float64 = zero(Float64)
+    @inbounds for i in eachindex(matrix)
+        s += abs2(matrix[i])
+        s > zero(s) && return false
+    end
+    return true
 end

@@ -666,25 +666,30 @@ function matdiag_redmat(
 
     verbose && println( "CALCULATION OF <u||H||v> MATRIX\n" )
 
-    # block-shell combination multiplets 
-    multiplets_mui2u::Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}}  = 
-            get_combination_multiplets( multiplets_block , 
+    ## block-shell combination multiplets 
+    #multiplets_mui2u::Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}}  = 
+    #        get_combination_multiplets( multiplets_block , 
+    #                                    multiplets_shell , 
+    #                                    Set(keys(cg_o_fullmatint)) ,
+    #                                    Set(keys(cg_s_fullmatint)) ;
+    #                                    verbose=false )
+    #
+    ## new block-shell combinations 
+    #GG_u = Set( m_u[1:3] for mm_u in values(multiplets_mui2u) 
+    #                     for m_u in mm_u )
+    #combinations_uprima_new::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} } = Dict( 
+    #            G => NTuple{3,NTuple{4,Int64}}[ (m_u,m_mu,m_i) 
+    #                                            for ((m_mu,m_i),mm_u) in multiplets_mui2u 
+    #                                            for m_u in mm_u
+    #                                            if m_u[1:3]==G 
+    #                                          ] 
+    #            for G in GG_u
+    #)
+    combinations_uprima_new = get_combination_multiplets( multiplets_block , 
                                         multiplets_shell , 
                                         Set(keys(cg_o_fullmatint)) ,
                                         Set(keys(cg_s_fullmatint)) ;
                                         verbose=false )
-    
-    # new block-shell combinations 
-    GG_u = Set( m_u[1:3] for mm_u in values(multiplets_mui2u) 
-                         for m_u in mm_u )
-    combinations_uprima_new::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} } = Dict( 
-                G => NTuple{3,NTuple{4,Int64}}[ (m_u,m_mu,m_i) 
-                                                for ((m_mu,m_i),mm_u) in multiplets_mui2u 
-                                                for m_u in mm_u
-                                                if m_u[1:3]==G 
-                                              ] 
-                for G in GG_u
-    )
     combinations_uprima_new_vec = collect( (x[1],x[2]) for x in combinations_uprima_new )
     
     irrEU_new::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
@@ -2013,6 +2018,8 @@ function matdiag_redmat_new(
         hop_symparams::Dict{ Int64 , Matrix{ComplexF64} },
         cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
         cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} ,
+        keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ,
         Csum_o_array::Array{ComplexF64,6} ,
         Csum_s_array::Array{ComplexF64,6} ,
         Bsum_o_array::Array{ComplexF64,6} ,
@@ -2047,25 +2054,12 @@ function matdiag_redmat_new(
 
     verbose && println( "CALCULATION OF <u||H||v> MATRIX\n" )
 
-    # block-shell combination multiplets 
-    multiplets_mui2u::Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}}  = 
-            get_combination_multiplets( multiplets_block , 
-                                        multiplets_shell , 
-                                        Set(keys(cg_o_fullmatint)) ,
-                                        Set(keys(cg_s_fullmatint)) ;
-                                        verbose=false )
-    # new block-shell combinations 
-    GG_u = Set( m_u[1:3] for mm_u in values(multiplets_mui2u) 
-                         for m_u in mm_u )
-    combinations_uprima_new::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} } = Dict( 
-                G => NTuple{3,NTuple{4,Int64}}[ (m_u,m_mu,m_i) 
-                                                for ((m_mu,m_i),mm_u) in multiplets_mui2u 
-                                                for m_u in mm_u
-                                                if m_u[1:3]==G 
-                                              ] 
-                for G in GG_u
-    )
-    combinations_uprima_new_vec = collect( (x[1],x[2]) for x in combinations_uprima_new )
+    ## block-shell combination multiplets 
+    combinations_uprima_new = get_combination_multiplets( multiplets_block , 
+                                                          multiplets_shell , 
+                                                          keys_as_dict_o ,
+                                                          keys_as_dict_s )
+
     # irrep and multiplet combinations 
     #
     # Dict(
@@ -2102,6 +2096,13 @@ function matdiag_redmat_new(
         for G_a in Set( m_a_block[1:3] for (m_a_block,_) in multiplets_a_combs )
     )
 
+    # full-sized hblock matrix
+    R_uv_max = maximum(
+        mapreduce( length , + , values(GiGmu2combinations) )
+        for (G_uv,GiGmu2combinations) in Guv2GiGmu2uimumults
+    )
+    hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+
     # construct new irrEU
     irrEU_new::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
     for (G_uv::IntIrrep,GiGmu2uimumults::Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}) in Guv2GiGmu2uimumults
@@ -2111,7 +2112,9 @@ function matdiag_redmat_new(
         
         # hblock
         R_uv::Int64 = length( combinations_uprima_new[G_uv] )
-        hblock::Array{ComplexF64,3} = zeros( ComplexF64 , R_uv , R_uv , 2 )
+        #hblock::Array{ComplexF64,3} = zeros( ComplexF64 , R_uv , R_uv , 2 )
+        @views hblock = hblock_full[1:R_uv,1:R_uv,:]
+        hblock .= zero(ComplexF64)
 
         # iterate through u decompositions only, for diagonal part
         for ((G_i::IntIrrep,G_mu::IntIrrep),uimumults::Vector{NTuple{3,Int64}}) in GiGmu2uimumults
@@ -2166,9 +2169,9 @@ function matdiag_redmat_new(
 
                             # hopping contribution as matrix operation
                             @views hblock[r_u,r_v,2] += dot(
-                                pcgred_nuamu_matrix[r_nu,:,r_mu] , 
-                                transpose(hoparam_matrix) , 
-                                pcgred_iaj_matrix[r_i,:,r_j] 
+                                pcgred_nuamu_matrix[r_nu,:,r_mu], # automatically complex-conjugated
+                                hoparam_matrix,
+                                pcgred_iaj_matrix[r_i,:,r_j]
                             ) * sign * B
 
                         end # end of u,i,mu,v,j,nu multiplet iteration
@@ -2177,16 +2180,15 @@ function matdiag_redmat_new(
             end # end of v decomposition
         end # end of u decomposition
 
-        # add hermitian conjugate of hopping part
+        # add hopping part with hermitian conjugate
         @inbounds for r_v::Int64 in 1:R_uv, 
                       r_u::Int64 in 1:R_uv
             hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
         end
 
         # diagonalize
-        F = eigen( hblock[:,:,1] )
-        (e,u) = ( real(F.values) , F.vectors )
-        e = real.(e)
+        @views F = eigen( hblock[:,:,1] )
+        e, u = real.(F.values), F.vectors
 
         # insert in irrEU
         irrEU_new[G_uv] = (e,u)
@@ -2229,6 +2231,13 @@ function compute_pcgred_iaj_full_new(
         for (G_u,multiplet_combinations_Gu) in combinations_uprima if G_u in keys(irrEU)
     )
 
+    # full-sized matrices for avoiding allocations
+    R_uv_precutoff_max = maximum(values(G2R_uv_precutoff))
+    R_uv_postcutoff_max = maximum(values(G2R_uv_postcutoff))
+    R_a_max = maximum(values(G2R_a))
+    uav_matrix_full = zeros(ComplexF64,R_uv_precutoff_max,R_a_max,R_uv_precutoff_max)
+    tmp_full = zeros(ComplexF64,R_uv_precutoff_max,R_uv_postcutoff_max)
+
     # G_u, G_v iteration
     for (G_u,GiGmu2uimumults) in Gu2GiGmu2uimumults,
         (G_v,GjGnu2vjnumults) in Gu2GiGmu2uimumults
@@ -2248,11 +2257,12 @@ function compute_pcgred_iaj_full_new(
 
         # transformation matrices
         @views begin
-            U_u::Matrix{ComplexF64} = irrEU[G_u][2][1:R_u_precutoff,1:R_u_postcutoff] 
-            U_v::Matrix{ComplexF64} = irrEU[G_v][2][1:R_v_precutoff,1:R_v_postcutoff] 
+            U_u = irrEU[G_u][2][1:R_u_precutoff,1:R_u_postcutoff] 
+            U_v = irrEU[G_v][2][1:R_v_precutoff,1:R_v_postcutoff] 
         end
         # temporary matrix for transformation
-        tmp = zeros(ComplexF64,R_u_precutoff,R_v_postcutoff)
+        tmp = tmp_full[1:R_u_precutoff,1:R_v_postcutoff]
+        tmp .= zero(ComplexF64)
 
         # G_a iteration
         for (G_a,R_a) in G2R_a
@@ -2261,7 +2271,8 @@ function compute_pcgred_iaj_full_new(
             N_a,I_a,S_a = G_a
             
             # < G_u || f^\dagger_{G_a} || G_v >
-            uav_matrix = zeros(ComplexF64,R_u_precutoff,R_a,R_v_precutoff)
+            @views uav_matrix = uav_matrix_full[1:R_u_precutoff,1:R_a,1:R_v_precutoff]
+            uav_matrix .= zero(ComplexF64)
             
             # G_i,G_mu,G_j,G_nu iteration
             for ((G_i,G_mu),uimumults) in GiGmu2uimumults,
@@ -2301,7 +2312,7 @@ function compute_pcgred_iaj_full_new(
             end # G_i,G_mu,G_j,G_nu iteration
 
             # final discard
-            isapprox(sum(abs2.(uav_matrix)),zero(ComplexF64)) && continue
+            #isapprox(sum(abs2.(uav_matrix)),zero(ComplexF64)) && continue
 
             # transform matrix
             pcgred_iaj_full[(G_u,G_a,G_v)] = zeros(ComplexF64,R_u_postcutoff,R_a,R_v_postcutoff)

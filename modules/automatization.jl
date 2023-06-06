@@ -34,6 +34,7 @@ function get_cg_o_info(
         println()
     end
 
+
     # orbital dimensions
     oirreps2dimensions::Dict{String,Int64} = Dict()
     for (ostring,oindex) in oirreps2indices
@@ -809,6 +810,19 @@ function nrg_full(
     # spin symmetry
     cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_s_fullmatint( max_spin2 );
 
+    # G1 x G2 = G1' + G2' + ...
+    # (G1,G2) => [G1',G2',...]
+    cg_o_fullmatint_keys = keys(cg_o_fullmatint)
+    cg_s_fullmatint_keys = keys(cg_s_fullmatint)
+    keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} = Dict(
+        (I1,I2)=>collect(Set(x[3] for x in cg_o_fullmatint_keys if x[1:2]==(I1,I2)))
+        for (I1,I2,_) in cg_o_fullmatint_keys 
+    )
+    keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} = Dict(
+        (S1,S2)=>collect(Set(x[3] for x in cg_s_fullmatint_keys if x[1:2]==(S1,S2)))
+        for (S1,S2,_) in cg_s_fullmatint_keys 
+    )
+
     #   ===========   #
     #%% ATOMIC PART %%#
     #   ===========   #
@@ -1122,13 +1136,15 @@ function nrg_full(
     #   ---------------------------------------   #
     #%% matrix construction and diagonalization %%#
     #   ---------------------------------------   #
-    (irrEU,combinations_uprima) = matdiag_redmat( 
+    (irrEU,combinations_uprima) = matdiag_redmat_new( 
                     multiplets_atom , 
                     multiplets_shell ,
                     irrEU , 
                     hop_symparams_int , 
                     cg_o_fullmatint , 
                     cg_s_fullmatint ,
+                    keys_as_dict_o ,
+                    keys_as_dict_s ,
                     Csum_o_array ,
                     Csum_s_array ,
                     Bsum_o_array ,
@@ -1216,6 +1232,8 @@ function nrg_full(
                    multiplets_shell,
                    cg_o_fullmatint,
                    cg_s_fullmatint,
+                   keys_as_dict_o ,
+                   keys_as_dict_s ,
                    Csum_o_array ,
                    Csum_s_array ,
                    Bsum_o_array ,
@@ -1248,6 +1266,8 @@ function nrg_full(
                    multiplets_shell,
                    cg_o_fullmatint,
                    cg_s_fullmatint,
+                   keys_as_dict_o ,
+                   keys_as_dict_s ,
                    Csum_o_array ,
                    Csum_s_array ,
                    Bsum_o_array ,

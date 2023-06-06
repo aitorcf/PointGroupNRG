@@ -263,112 +263,19 @@ end
 # ################################
 # MULTIPLETS u IN COMBINATION i,mu
 # ................................
-# string method
-function get_combination_multiplets( 
-            multiplets_block::Set{Tuple{Int64,String,Float64,Int64}} , 
-            multiplets_shell::Set{Tuple{Int64,String,Float64,Int64}} ,
-            cg_o_fullmat::Dict{ NTuple{3,Tuple{Int64,String,Float64}} , Matrix{ComplexF64} } ;
-            verbose=false )
-
-    mui2u = Dict{NTuple{2,Tuple{Int64,String,Float64,Int64}},Vector{Tuple{Int64,String,Float64,Int64}}}()
-    cg_mui_s::Dict{NTuple{6, Float64}, ComplexF64} = Dict()
-
-    G2R::Dict{Tuple{Int64,String,Float},Int64} = Dict()
-
-    for m_i::Tuple{Int64,String,Float64,Int64} in multiplets_block, 
-        m_mu::Tuple{Int64,String,Float64,Int64} in multiplets_shell 
-        if verbose 
-            println( "m_mu = $m_mu ; m_i = $m_i" )
-            println( "============================" )
-        end
-        
-        (N_i,I_i,S_i,r_i) = m_i
-        (N_mu,I_mu,S_mu,r_mu) = m_mu 
-
-        cg_mui_o = Dict( k=>v for (k,v) in cg_o_fullmat
-                         if (k[1],k[2])==(I_mu,I_i) )
-        cg_mui_s = cg_spin(    S_mu , S_i )
-
-        N_u = N_i + N_mu
-        II_u = Set( k[3] for k in keys(cg_mui_o) )::Set{String}
-        SS_u = Set( k[5] for k in keys(cg_mui_s) )::Set{Float64}
-
-        for I_u::String in II_u, S_u::Float64 in SS_u
-            G_u = (N_u,I_u,S_u)
-            (G_u in keys(G2R)) ? G2R[G_u]+=1 : merge!(G2R,Dict(G_u=>1))
-            m_u = ( G_u... , G2R[G_u] )
-            mergewith!( (x,y)->append!(x,y) , mui2u , Dict( (m_mu,m_i)=>[m_u]) )
-            verbose && println( m_u )
-        end
-        verbose && println()
-    end
-    return mui2u 
-end
-
-# method for int 
 function get_combination_multiplets( 
             multiplets_block::Set{NTuple{4,Int64}} , 
             multiplets_shell::Set{NTuple{4,Int64}} ,
-            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} } ;
+            keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} ,
+            keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ;
             verbose=false )
 
-    mui2u::Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}} = Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}}()
-    cg_mui_s::Dict{NTuple{6,Float64}, ComplexF64} = Dict()
-
-    G2R::Dict{Tuple{Int64,Int64,Int64},Int64} = Dict{Tuple{Int64,Int64,Int64},Int64}()
-    
-
-    for m_i::NTuple{4,Int64} in multiplets_block, 
-        m_mu::NTuple{4,Int64} in multiplets_shell 
-        if verbose 
-            println( "m_mu = $m_mu ; m_i = $m_i" )
-            println( "============================" )
-        end
-        
-        (N_i,I_i,S_i,r_i) = m_i
-        (N_mu,I_mu,S_mu,r_mu) = m_mu 
-
-        cg_mui_o = Dict( k=>v for (k,v) in cg_o_fullmatint
-                         if (k[1],k[2])==(I_mu,I_i) )
-        cg_mui_s = cg_spin(    S_mu/2.0 , S_i/2.0 )
-
-        N_u = N_i + N_mu
-        II_u = Set( k[3] for k in keys(cg_mui_o) )::Set{Int64}
-        SS_u = Set( convert(Int64,2*k[5]) for k in keys(cg_mui_s) )::Set{Int64}
-
-        for I_u::Int64 in II_u, S_u::Int64 in SS_u
-            G_u = (N_u,I_u,S_u)
-            (G_u in keys(G2R)) ? G2R[G_u]+=1 : merge!(G2R,Dict(G_u=>1))
-            m_u = ( G_u... , G2R[G_u] )
-            mergewith!( (x,y)->append!(x,y) , mui2u , Dict( (m_mu,m_i)=>[m_u]) )
-            verbose && println( m_u )
-        end
-        verbose && println()
-    end
-    return mui2u 
-end
-
-# fastest method
-function get_combination_multiplets( 
-            multiplets_block::Set{NTuple{4,Int64}} , 
-            multiplets_shell::Set{NTuple{4,Int64}} ,
-            cg_o_fullmatint_keys::Set{NTuple{3,Int64}} ,
-            cg_s_fullmatint_keys::Set{NTuple{3,Int64}} ;
-            verbose=false )
-
-    mui2u::Dict{ NTuple{2,NTuple{4,Int64}} , Vector{NTuple{4,Int64}} } = Dict()
+    combinations_u::Dict{IntIrrep,Vector{NTuple{3,IntMultiplet}}} = Dict()
 
     G2R::Dict{ NTuple{3,Int64} , Int64 } = Dict()
     
-    cg_mui_o_keys::Set{NTuple{3,Int64}} = Set()
-    cg_mui_s_keys::Set{NTuple{3,Int64}} = Set()
-
-    N_u::Int64 = 0 
-    II_u::Set{Int64} = Set()
-    SS_u::Set{Int64} = Set()
-
-    for m_i::NTuple{4,Int64}  in multiplets_block, 
-        m_mu::NTuple{4,Int64} in multiplets_shell 
+    for m_i::IntMultiplet  in multiplets_block, 
+        m_mu::IntMultiplet in multiplets_shell 
 
         if verbose 
             println( "m_mu = $m_mu ; m_i = $m_i" )
@@ -378,33 +285,28 @@ function get_combination_multiplets(
         (N_i,I_i,S_i,r_i) = m_i
         (N_mu,I_mu,S_mu,r_mu) = m_mu 
 
-        cg_mui_o_keys = filter( x->(x[1],x[2])==(I_mu,I_i) ,
-                                cg_o_fullmatint_keys )
-        cg_mui_s_keys = filter( x->(x[1],x[2])==(S_mu,S_i) ,
-                                cg_s_fullmatint_keys )
-
-        N_u = N_i + N_mu
-        II_u = Set( k[3] for k in cg_mui_o_keys )
-        SS_u = Set( k[3] for k in cg_mui_s_keys )
+        N_u::Int64 = N_i + N_mu
+        II_u::Vector{Int64} = keys_as_dict_o[(I_mu,I_i)]
+        SS_u::Vector{Int64} = keys_as_dict_s[(S_mu,S_i)]
 
         for I_u::Int64 in II_u, 
             S_u::Int64 in SS_u
 
             G_u = (N_u,I_u,S_u)
             if G_u in keys(G2R)
-                G2R[G_u]+=1 
+                G2R[G_u] += 1 
             else 
-                merge!(G2R,Dict{NTuple{3,Int64},Int64}(G_u=>1))
+                G2R[G_u] = 1
             end
             m_u = ( G_u... , G2R[G_u] )
             mergewith!( (x,y)->append!(x,y) , 
-                         mui2u , 
-                         Dict{NTuple{2,NTuple{4,Int64}},Vector{NTuple{4,Int64}}}( (m_mu,m_i)=>[m_u]) )
+                         combinations_u , 
+                         Dict(G_u=>[(m_u,m_mu,m_i)]) )
             verbose && println( m_u )
         end
         verbose && println()
     end
-    return mui2u 
+    return combinations_u 
 end
 
 # #############################################
@@ -726,6 +628,7 @@ function cut_off!(
             type::String="multiplet" , 
             cutoff::T=200 , 
             safeguard::Bool=true , 
+            safeguard_tol::Float64=1e-3 ,
             minmult::Int64=0 , 
             mine::Float64=0.0 ,
             verbose::Bool=true ,
@@ -741,11 +644,11 @@ function cut_off!(
     # - discarded : amount of multiplets discarded
 
     # order multiplets in terms of their energy 
-    mm::Vector{Tuple{NTuple{4,Int64},Float64}} = collect( ((G...,r),E[r]) for (G,(E,U)) in irrEU for r=1:length(E) )
+    mm::Vector{Tuple{IntMultiplet,Float64}} = collect( ((G...,r),E[r]) for (G,(E,U)) in irrEU for r=1:length(E) )
     sort!( mm , by=x->x[2] )
-    discarded::Vector{NTuple{4,Int64}} = []
-    kept::Vector{NTuple{4,Int64}} = []
-    sg::Vector{NTuple{4,Int64}} = []
+    discarded::Vector{IntMultiplet} = []
+    kept::Vector{IntMultiplet} = []
+    sg::Vector{IntMultiplet} = []
 
     # multiplet cutoff
     if type=="multiplet"
@@ -755,15 +658,20 @@ function cut_off!(
         else
             mine_idx = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>mine , mm )
             cutoff = maximum([ mine_idx , cutoff ])
-            kept = map( x->x[1] , mm[1:cutoff]::Vector{Tuple{NTuple{4,Int64},Float64}} )
+            kept = map( x->x[1] , mm[1:cutoff] )
             if safeguard
-                sg = map( x->x[1] ,
-                        [ m for m in mm[(cutoff+1):end]::Vector{Tuple{NTuple{4,Int64},Float64}} 
-                          if isapprox(m[2],mm[cutoff][2];atol=1e-1)] )::Vector{NTuple{4,Int64}}
+                sg = map( 
+                    x->x[1] ,
+                    [ 
+                        m 
+                        for m in mm[(cutoff+1):end]
+                        if isapprox(m[2],mm[cutoff][2];atol=safeguard_tol )
+                    ] 
+                )
                 append!( kept , sg )
             end
             discarded = map( x->x[1] , 
-                             mm[(cutoff+length(safeguard)+1):end]::Vector{Tuple{NTuple{4,Int64},Float64}} )::Vector{NTuple{4,Int64}}
+                             mm[(cutoff+length(safeguard)+1):end] )
         end
     # energy cutoff
     elseif type=="energy" 
@@ -921,6 +829,8 @@ function NRG( label::String ,
               multiplets_shell::Set{NTuple{4,Int64}}, 
               cg_o_fullmatint::Dict{Tuple{Int64, Int64, Int64}, Array{ComplexF64, 3}},
               cg_s_fullmatint::Dict{Tuple{Int64, Int64, Int64}, Array{ComplexF64, 3}},
+              keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} ,
+              keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ,
               Csum_o_array::Array{ComplexF64,6} ,
               Csum_s_array::Array{ComplexF64,6} ,
               Bsum_o_array::Array{ComplexF64,6} ,
@@ -1069,6 +979,8 @@ function NRG( label::String ,
                 hop_symparams , 
                 cg_o_fullmatint , 
                 cg_s_fullmatint ,
+                keys_as_dict_o ,
+                keys_as_dict_s ,
                 Csum_o_array ,
                 Csum_s_array ,
                 Bsum_o_array ,
