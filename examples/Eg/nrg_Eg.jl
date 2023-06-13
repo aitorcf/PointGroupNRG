@@ -8,17 +8,18 @@ include( "$(moduledir)/modules.jl" )
 label = "Eg"
 
 # numerical parameters
-L = 3.0
+L = 5.0
 cutoff_type = "multiplet"
-cutoff_magnitude = 100
-iterations = 10
+cutoff_magnitude = 300
+iterations = 60
 
 # z averaging 
 Nz = 4
 Z = generate_Z(Nz)
 
 # clebsch-gordan and multiplet directories
-cg_o_dir = "/home/aitor/Bulegoa/PointGroupNRG/examples/clebschgordan_reduced"
+cg_o_dir = "/home/aitor/Bulegoa/PointGroupNRG/examples/clebschgordan"
+#cg_o_dir = "/home/aitor/Bulegoa/ClebschGordan/Oh/cg_symbolic
 multiplets_dir = "multiplets"
 identityrep = "A1g"
 
@@ -33,14 +34,14 @@ epsilon_symparams = Dict{String,Vector{ComplexF64}}(
 u_symparams = Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }(
     ("Eg",0.0)  => [0.6;;],
     ("A1g",0.0) => [0.5;;],
-    ("A2g",1.0) => [0.0;;]
+    ("A2g",1.0) => [0.1;;]
 )
 hop_symparams = Dict{ String , Matrix{ComplexF64} }(
-    "Eg" => [0.5;;]
+    "Eg" => [0.1;;]
 )
 
 # choose what to calculate
-run = "thermozavg"
+run = "thermo"
 
 if run=="multiplets"
 
@@ -53,7 +54,7 @@ if run=="multiplets"
 
 elseif run=="spectrum"
 
-    atomic_spectrum( 
+    impurity_spectrum( 
         cg_o_dir ,
         multiplets_dir ,
         imp_config ,
@@ -111,7 +112,7 @@ elseif run=="thermozavg"
 
 
     for calculation in ["CLEAN","IMP"],
-        z in generate_Z(Nz)
+        z in Z
 
         nrg_full( 
             label ,
@@ -127,7 +128,8 @@ elseif run=="thermozavg"
             identityrep ,
             epsilon_symparams ,
             u_symparams ,
-            hop_symparams
+            hop_symparams ;
+            z=z
         )
 
     end
