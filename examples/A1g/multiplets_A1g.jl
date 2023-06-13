@@ -1,7 +1,7 @@
 #!/usr/bin/env julia 
 
 # load multiplet module
-moduledir = "/home/aitor/Bulegoa/PointGroupNRG/modules"
+moduledir = "../../modules"
 include( "$(moduledir)/multiplets.jl" )
 
 # path to clebsch-gordan coefficients for the chosen orblets
