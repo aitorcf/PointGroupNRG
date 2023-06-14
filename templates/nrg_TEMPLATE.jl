@@ -27,7 +27,32 @@ elseif run=="spectrum"
         u_symparams
     )
 
-elseif run=="nrg"
+elseif run=="thermo"
+
+    for calculation in ["CLEAN","IMP"]
+
+        nrg_full( 
+            label ,
+            calculation ,
+            L ,
+            iterations ,
+            cutoff_type ,
+            cutoff_magnitude ,
+            cg_o_dir ,
+            multiplets_dir ,
+            atom_config ,
+            shell_config ,
+            identityrep ,
+            epsilon_symparams ,
+            u_symparams ,
+            hop_symparams
+        )
+
+    end
+
+elseif run=="spectral"
+
+    calculation = "IMP"
 
     nrg_full( 
         label ,
@@ -43,7 +68,8 @@ elseif run=="nrg"
         identityrep ,
         epsilon_symparams ,
         u_symparams ,
-        hop_symparams
+        hop_symparams ;
+        spectral=true
     )
 
 
