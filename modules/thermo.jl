@@ -29,6 +29,15 @@ function compute_temperature(N::Int64,
 
     end
 end
+function compute_temperature_newdiscretization( 
+            N::Int64 ,
+            L::Float64 ,
+            betabar::Float64 ,
+            scale::Float64 )
+
+    return scale * L^(-(N - 2) / 2) / betabar
+
+end
 
 function compute_partition_function(
     irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
@@ -491,7 +500,7 @@ function write_impurity_info(
         label::String,
         z::Float64)
     # name of the output file
-    filename = "thermodata/impurity_multiplet_weights_$(label)_z$z.dat"
+    filename = "impurityprojections/imp_proj_$(label)_z$z.dat"
 
     # data as matrix
     impurity_multiplet_weights_with_iterations = [ Any[Int64(i),weights...] for (i,weights) in enumerate(impurity_multiplet_weights) ]

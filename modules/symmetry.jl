@@ -852,6 +852,44 @@ function epsilon_sym( symstates , symparams::Dict{String,Vector{ComplexF64}} ; v
     return epsop
 end
 
+function electron_counter_sym( symstates , 
+                               multiplet::Tuple{String,Int64} ; 
+                               verbose=false )
+
+    # gather one-particle symstates
+    symstates_n1 = symstates_n( symstates , 1 )
+
+    # basis
+    basis = pickrandom( symstates_n1 )[2].basis
+    n = length( basis.states )
+
+    # creation operators for all the one-electron states
+    coperators = basis2coperators( basis )
+
+    # initialize counting operator
+    counter = Operator( 0 , basis )
+
+    # select symstate from selected multiplet
+    symstates_chosen = [ s for (q,s) in symstates if (q[1],q[2],q[end])==(1,multiplet...) ]
+
+    # find the non-zero (=1) component of the symstates in the
+    # and create the number operator for the corresponding site.
+    for symstate in symstates_chosen,
+        (i,component) in enumerate(symstate.vector)
+
+        # filter components
+        isapprox(component,zero(component)) && continue
+        @assert isapprox(component,1.0) "Problem with one-electron state occupation: $component."
+
+        # add contribution to counter operator
+        cop = coperators[i]
+        counter += cop*adjoint(cop)
+
+    end
+
+    return counter
+end
+
 function u_sym( symstates , symparams ; verbose=false )
     if verbose 
         println( "CONSTRUCTING U..." )

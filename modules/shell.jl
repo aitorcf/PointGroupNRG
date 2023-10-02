@@ -628,9 +628,10 @@ function cut_off!(
             type::String="multiplet" , 
             cutoff::T=200 , 
             safeguard::Bool=true , 
-            safeguard_tol::Float64=1e-3 ,
+            safeguard_tol::Float64=1e-5 ,
+            safeguard_max::Int64=200 ,
             minmult::Int64=0 , 
-            mine::Float64=0.0 ,
+            mine::Float64=-1.0 ,
             verbose::Bool=true ,
             M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict()) where {T<:Number}
     # input 
@@ -656,7 +657,7 @@ function cut_off!(
             kept = map( x->x[1] , mm )
             discarded = []
         else
-            mine_idx = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>mine , mm )
+            mine_idx = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>=mine , mm )
             cutoff = maximum([ mine_idx , cutoff ])
             kept = map( x->x[1] , mm[1:cutoff] )
             if safeguard
@@ -664,8 +665,8 @@ function cut_off!(
                     x->x[1] ,
                     [ 
                         m 
-                        for m in mm[(cutoff+1):end]
-                        if isapprox(m[2],mm[cutoff][2];atol=safeguard_tol )
+                        for (i,m) in enumerate(mm[(cutoff+1):end])
+                        if (isapprox(m[2],mm[cutoff][2];atol=safeguard_tol ) && i<=safeguard_max)
                     ] 
                 )
                 append!( kept , sg )
@@ -817,8 +818,411 @@ end
 # NRG ITERATIONS #
 # ============== #
 
-# pcgred method
 function NRG( label::String ,
+              calculation::String ,
+              iterations::Int64, 
+              cutoff_type::String, 
+              cutoff_magnitude::Number,
+              L::Float64,
+              hop_symparams::Dict{ Int64 , Matrix{ComplexF64} },
+              irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+              multiplets_shell::Set{NTuple{4,Int64}}, 
+              cg_o_fullmatint::Dict{Tuple{Int64, Int64, Int64}, Array{ComplexF64, 3}},
+              cg_s_fullmatint::Dict{Tuple{Int64, Int64, Int64}, Array{ComplexF64, 3}},
+              keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} ,
+              keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ,
+              Csum_o_array::Array{ComplexF64,6} ,
+              Csum_s_array::Array{ComplexF64,6} ,
+              Bsum_o_array::Array{ComplexF64,6} ,
+              Bsum_s_array::Array{ComplexF64,6} ,
+              pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
+              multiplets_a::Vector{NTuple{4,Int64}} , 
+              combinations_uprima::Dict{NTuple{3,Int64}, Vector{NTuple{3,NTuple{4,Int64}}}},
+              betabar::Float64 ,
+              oindex2dimensions::Vector{Int64} ,
+              channels_codiagonals::Vector{Dict{Int64,Vector{Float64}}};
+              verbose::Bool=false ,
+              distributed::Bool=false ,
+              minmult::Int64=0 , 
+              mine::Float64=0.0 ,
+              z::Float64=0.0 ,
+              discretization::String="campo2005" ,
+              spectral::Bool=false ,
+              K_factor::Float64=2.0 ,
+              spectral_method::String="sakai1989",
+              spectral_broadening::Float64=1.0 ,
+              orbitalresolved::Bool=false ,
+              M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
+              AA::Vector{T}=[] ,
+              Karray_orbital::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) , 
+              Karray_spin::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) ,
+              multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
+              scale::Float64=1.0 ,
+              eta::Function=x->1.0 ,
+              precompute_iaj::Bool=true ,
+              compute_impmults::Bool=false ,
+              mult2index::Dict{ClearMultiplet,Int64}=Dict{ClearMultiplet,Int64}() ,
+              orbital_multiplets::Vector{ClearMultiplet}=ClearMultiplet[] ,
+              mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
+              write_spectrum::Bool=false ,
+              channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[]) where {T}
+
+    println( "=============" )
+    println( "NRG PROCEDURE" )
+    println( "=============" )
+    println()
+
+    # thermodynamic information from even and odd iterations
+    thermo_even = zeros( Float64 , 0 , 8 )
+    thermo_odd  = zeros( Float64 , 0 , 8 )
+
+    impspins       = []
+    impnums        = []
+    impmults       = []
+
+    # spectrum after diagonalization in each step
+    spectrum_even = Vector{Dict{IntIrrep,Vector{Float64}}}()
+    spectrum_odd  = Vector{Dict{IntIrrep,Vector{Float64}}}()
+
+    # performance at each step
+    diagonalization_performances = []
+    if spectral
+        spectral_performances = []
+    end
+
+    # maximum energies and 2S (twice total spin)
+    cutoff_eigenenergies = Float64[]
+    cutoff_eigenenergy_all_iterations = 0.0
+    maximum_spin2s = Int64[]
+    maximum_spin2_all_iterations = 0
+    
+    # kept state ratios
+    kept_discarded_ratios = Float64[]
+
+    # create spectral directory
+    isdir("spectral") || mkdir("spectral")
+
+    # NRG iterations
+    nrg_performance = @timed for n in 2:iterations
+
+        println( "-"^17 )
+        @printf "ITERATION n = %3i\n" n
+        println( "-"^17 )
+
+        # cutoff
+        #
+        # apply cutoff
+        (multiplets_block, discarded) = cut_off!( irrEU ; 
+                                                  type=cutoff_type , 
+                                                  cutoff=cutoff_magnitude , 
+                                                  safeguard=true ,
+                                                  minmult=minmult ,
+                                                  mine=mine ,
+                                                  verbose=false ,
+                                                  M=M )
+        # print info
+        number_kept_multiplets = length(multiplets_block)
+        number_kept_states = sum( (oindex2dimensions[m[2]]*(m[3]+1)) for m in multiplets_block )
+        number_discarded_multiplets = length(discarded)
+        number_total_multiplets = number_kept_multiplets+number_discarded_multiplets
+        kept_discarded_ratio = number_kept_multiplets/number_total_multiplets
+        cutoff_eigenenergy = maximum(collect( e for (G,(E,U)) in irrEU for e in E ))
+        cutoff_eigenenergy_all_iterations = maximum([ cutoff_eigenenergy , cutoff_eigenenergy_all_iterations ])
+        push!( cutoff_eigenenergies , cutoff_eigenenergy )
+        println( "CUTOFF" )
+        println( "  kept:      $number_kept_multiplets multiplets ($number_kept_states states)" )
+        println( "  discarded: $number_discarded_multiplets multiplets" )
+        println( "  ratio kept/total: $kept_discarded_ratio, $(number_kept_multiplets)/$(number_total_multiplets) " )
+        println( "  cutoff eigenenergy: $cutoff_eigenenergy" )
+        push!( kept_discarded_ratios , kept_discarded_ratio )
+
+
+        # renormalize by √Λ
+        for (G,(E,U)) in irrEU 
+            irrEU[G] = ( E.*sqrt(L) , U )
+        end
+
+        # hopping parameter
+        hop_symparams = Dict( 
+            I_o => diagm(ComplexF64.(channels_codiagonals[n-1][I_o])) 
+            for I_o in keys(channels_codiagonals[1])
+        )
+        #if discretization=="lanczos"
+        #    hop_symparams = Dict( k=>diagm(ComplexF64.([xi_symparams[k][i][n-1]
+        #                                                for i in 1:length(xi_symparams[k])]))
+        #                          for (k,v) in xi_symparams )
+        #else
+        #    hop_symparams = Dict( k=>ComplexF64.(xi[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
+        #                          for (k,v) in hop_symparams )
+        #end
+        println( "CONDUCTION COUPLING TERMS" )
+        println( "Codiagonals (hoppings)")
+        @printf "  %-8s  %-10s  %-s\n" "orbital" "multiplet" "amplitude"
+        for (I,hop_matrix) in hop_symparams,
+            cartesian_index in CartesianIndices(hop_matrix)
+
+            i,j = Tuple(cartesian_index)
+            isapprox(hop_matrix[i,j],0.0) && continue
+
+            @printf "  %-8s  %-3i => %-3i  %-.3f\n" I i j hop_matrix[i,j]
+
+        end
+        println( "Diagonals (occupation energies)")
+        @printf "  %-8s  %-10s  %-s\n" "irrep" "multiplet" "amplitude"
+        for (I_o,I_o_multiplets_diagonals) in channels_diagonals[n],
+            (r_o,r_o_multiplet_diagonal) in enumerate(I_o_multiplets_diagonals)
+
+            @printf "  %-8s  %-3i => %-.3f\n" I_o r_o r_o_multiplet_diagonal
+
+        end
+
+        # diagonalization
+        # 
+        # construct and diagonalize ( m_u | H_1 | m_v )
+        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat( 
+                multiplets_block , 
+                multiplets_shell ,
+                irrEU , 
+                hop_symparams , 
+                keys_as_dict_o ,
+                keys_as_dict_s ,
+                Csum_o_array ,
+                Csum_s_array ,
+                Bsum_o_array ,
+                Bsum_s_array ,
+                pcgred_shell ,
+                pcgred_shell ,
+                multiplets_a , 
+                multiplets_a ,
+                combinations_uprima ;
+                verbose=verbose ,
+                distributed=distributed ,
+                precompute_iaj=precompute_iaj ,
+                conduction_diagonals=channels_diagonals[n] );
+        # information
+        maximum_spin2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
+        maximum_spin2_all_iterations = maximum([ maximum_spin2 , maximum_spin2_all_iterations ])
+        maximum_eigenenergy_after_diagonalization = maximum([ maximum(E) for (_,(E,_)) in irrEU ])
+        println( "DIAGONALIZATION" )
+        println( "  time: $(diagonalization_performance.time)s" )
+        println( "  memory: $(diagonalization_performance.bytes*10^-6)Mb" )
+        println( "  garbage collection time: $(diagonalization_performance.gctime)s" )
+        println( "  maximum 2S needed: $maximum_spin2")
+        println( "  maximum eigenenergy obtained: $maximum_eigenenergy_after_diagonalization" )
+
+        # store performance
+        push!( diagonalization_performances , diagonalization_performance )
+
+        # spectrum 
+        if write_spectrum
+            (n%2==0)  && save_spectrum!( spectrum_even , irrEU )
+            (n%2!==0) && save_spectrum!( spectrum_odd  , irrEU )
+        end
+
+        # impurity info
+        if compute_impmults
+            mm_i = imp_mults( irrEU ,
+                              oindex2dimensions ,
+                              combinations_uprima ,
+                              mm_i )
+            m_imp::Vector{Float64} = mult_thermo( irrEU ,
+                                 betabar ,
+                                 oindex2dimensions ,
+                                 mm_i )
+            push!( impmults , m_imp )
+        end
+
+        # thermodynamics 
+        #
+        # iteration temperature
+        temperature = compute_temperature_newdiscretization(n,L,betabar,scale)
+        #if discretization!=="lanczos" 
+        #    temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization )
+        #elseif discretization=="lanczos" 
+        #    temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
+        #end
+        # compute thermodynamic variables
+        magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar , oindex2dimensions )
+        entropy = compute_entropy( irrEU , betabar , oindex2dimensions )
+        heat_capacity = compute_heat_capacity( irrEU , betabar , oindex2dimensions )
+        free_energy = compute_free_energy( irrEU , betabar , oindex2dimensions )
+        number_particles = compute_average_number_of_particles( irrEU , betabar , oindex2dimensions )
+        energy = compute_energy( irrEU , betabar , oindex2dimensions )
+        partition_function = compute_partition_function( irrEU , betabar , oindex2dimensions )
+        thermodynamic_matrix = [temperature magnetic_susceptibility entropy heat_capacity free_energy number_particles energy partition_function]
+        # store even/odd therodynamic results
+        if n%2==0
+            thermo_even = vcat( thermo_even , thermodynamic_matrix )
+        else
+            thermo_odd  = vcat( thermo_odd , thermodynamic_matrix )
+        end
+        # information
+        println( "THERMODYNAMICS" )
+        @printf "  %s = %.3e\n" "temperature" temperature
+        @printf "  %s = %.3f\n" "magnetic susceptibility" magnetic_susceptibility
+        @printf "  %s = %.3f\n" "entropy" entropy
+        @printf "  %s = %.3f\n" "heat capacity" heat_capacity
+        @printf "  %s = %.3f\n" "free energy" free_energy
+        @printf "  %s = %i\n"   "average number of particles" number_particles
+        @printf "  %s = %.3f\n" "energy" energy
+        @printf "  %s = %.3e\n" "Z" partition_function
+
+        # spectral function calculation
+        if spectral 
+
+            if orbitalresolved
+
+                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+                            M ,
+                            irrEU ,
+                            combinations_uprima ,
+                            collect(multiplets_atomhop) ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            Karray_orbital ,
+                            Karray_spin ,
+                            AA ,
+                            oindex2dimensions ;
+                            verbose=false )
+
+            else 
+
+                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod(
+                            M ,
+                            irrEU ,
+                            combinations_uprima ,
+                            collect(multiplets_atomhop) ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            Karray_orbital ,
+                            Karray_spin ,
+                            AA ,
+                            oindex2dimensions ;
+                            verbose=false )
+            end
+
+            # information
+            maximum_irrep_spin2 = irreps -> maximum((irreps[1][3],irreps[2][3],irreps[3][3]))
+            maximum_spin2 = maximum([ maximum_irrep_spin2(irreps) for irreps in keys(M) ])
+            maximum_spin2_all_iterations = maximum([ maximum_spin2_all_iterations , maximum_spin2 ])
+            println( "EXCITATION MATRIX CALCULATION" )
+            println( "  time: $(spectral_performance.time)s" )
+            println( "  memory: $(spectral_performance.bytes*10^-6)Mb" )
+            println( "  garbage collection time: $(spectral_performance.gctime)s" )
+            println( "  maximum 2S needed: $maximum_spin2")
+            push!( spectral_performances , spectral_performance )
+
+        end
+
+        println()
+    end # NRG iterations finished
+    println()
+
+
+    # average even and odd thermodynamic results
+    #
+    # reverse thermodynamic matrices for interpolation
+    reverse!( thermo_even , dims=1 )
+    reverse!( thermo_odd  , dims=1 )
+    # collect temperatures from even and odd
+    temperatures_even = thermo_even[:,1]
+    temperatures_odd  = thermo_odd[:,1]
+    temperatures_evenodd = sort(vcat(temperatures_even,temperatures_odd))
+    # interpolate even and odd data to new temperatures
+    thermo_even_interpolated = interpolate_thermo_matrix( thermo_even , temperatures_evenodd )
+    thermo_odd_interpolated  = interpolate_thermo_matrix( thermo_odd  , temperatures_evenodd )
+    # average even and odd
+    thermo_average = copy(thermo_even_interpolated)
+    thermo_average[:,2:end] = 0.5*( thermo_even_interpolated[:,2:end] + thermo_odd_interpolated[:,2:end] )
+
+    if spectral 
+
+        compute_spectral_function(
+            AA ,
+            L ,
+            iterations ,
+            scale ;
+            spectral_broadening=spectral_broadening,
+            method=spectral_method,
+            label=label ,
+            z=z ,
+            K_factor=K_factor ,
+            orbitalresolved=orbitalresolved
+        )
+
+    end
+
+    # print summary information
+    println( "=========================" )
+    println( "SUMMARY OF NRG ITERATIONS" )
+    println( "=========================" )
+    # energy, kept states and spin2
+    cutoff_eigenenergy_average = sum(cutoff_eigenenergies)/length(cutoff_eigenenergies)
+    kept_discarded_ratio_average = sum(kept_discarded_ratios)/length(kept_discarded_ratios)
+    println( "CHECK" )
+    println( "  maximum 2S needed: $maximum_spin2_all_iterations" )
+    println( "  average cutoff eigenenergy: $cutoff_eigenenergy_average" )
+    println( "  average kept/discarded ratio: $kept_discarded_ratio_average" )
+    println( "PERFORMANCE SUMMARY" )
+    println( "  Diagonalization" )
+    print_performance_summary( diagonalization_performances )
+    if spectral
+        println( "  Excitation matrix calculation" )
+        print_performance_summary( spectral_performances )
+    end
+    println( "  Global" )
+    println( "    time: $(nrg_performance.time)s" )
+    println( "    memory: $(nrg_performance.bytes*10^-6)Mb" )
+    println( "    garbage collection time: $(nrg_performance.gctime)s" )
+
+    # save data to file (spectral is saved from within the function)
+    #
+    # thermodynamics
+    if !spectral
+
+        # directory
+        isdir("thermodata") || mkdir("thermodata")
+
+        # thermodynamic data for this given value of z
+        write_thermodata_onez( thermo_average , calculation , label , z )
+
+        # impurity contribution (diff)
+        if calculation=="IMP"
+            thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+            println()
+            if length(glob(thermo_clean_filename))!==0 
+                println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
+                write_thermodiff( label , z )
+            end
+        end
+
+    end
+    # impurity properties 
+    if compute_impmults
+
+        println( "Saving impurity projections..." )
+        # directory
+        isdir("impurityprojections") || mkdir("impurityprojections")
+
+        if calculation=="IMP" 
+            write_impurity_info( impmults , orbital_multiplets , mult2index , label , z )
+        end
+
+    end
+    # spectra at each step
+    if write_spectrum
+        write_nrg_spectra( spectrum_even , spectrum_odd )
+    end
+
+    return ( 
+        thermo = thermo_average ,
+        diagonalization_performances = diagonalization_performances ,
+        impmults = compute_impmults ? impmults : nothing ,
+        spectral_performances = spectral ? spectral_performances : nothing
+    )
+end
+# pcgred method
+function NRG_old_discretization( label::String ,
               calculation::String ,
               iterations::Int64, 
               cutoff_type::String, 
@@ -972,7 +1376,7 @@ function NRG( label::String ,
         # diagonalization
         # 
         # construct and diagonalize ( m_u | H_1 | m_v )
-        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat_new( 
+        diagonalization_performance = @timed (irrEU,combinations_uprima) = matdiag_redmat_old_discretization( 
                 multiplets_block , 
                 multiplets_shell ,
                 irrEU , 
@@ -1205,9 +1609,10 @@ function NRG( label::String ,
     end
     # impurity properties 
     if compute_impmults
-        
+
+        println( "Saving impurity projections..." )
         # directory
-        isdir("thermodata") || mkdir("thermodata")
+        isdir("impurityprojections") || mkdir("impurityprojections")
 
         if calculation=="IMP" 
             write_impurity_info( impmults , orbital_multiplets , mult2index , label , z )
@@ -1340,7 +1745,7 @@ end
 # IMPURITY MULTIPLETS #
 # ~~~~~~~~~~~~~~~~~~~ #
 function ordered_multiplets( mults )
-    max_N = maximum(k[1] for k in mults) 
+    max_N::Int64 = maximum(m[1] for m in mults) 
     omults = []
     for N in 0:max_N 
         for mult in mults

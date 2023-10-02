@@ -625,7 +625,7 @@ function compute_pcgred_iaj_full(
 end
 
 # reduced matrix method
-function matdiag_redmat( 
+function matdiag_redmat_old( 
         multiplets_block::Set{NTuple{4,Int64}}, 
         multiplets_shell::Set{NTuple{4,Int64}},
         irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
@@ -2011,7 +2011,194 @@ end
 
 # NEW DIAGONALIZATION METHODS
 
-function matdiag_redmat_new( 
+function matdiag_redmat( 
+        multiplets_block::Set{NTuple{4,Int64}}, 
+        multiplets_shell::Set{NTuple{4,Int64}},
+        irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+        hop_symparams::Dict{ Int64 , Matrix{ComplexF64} },
+        keys_as_dict_o::Dict{NTuple{2,Int64},Vector{Int64}} ,
+        keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ,
+        Csum_o_array::Array{ComplexF64,6} ,
+        Csum_s_array::Array{ComplexF64,6} ,
+        Bsum_o_array::Array{ComplexF64,6} ,
+        Bsum_s_array::Array{ComplexF64,6} ,
+        pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
+        pcgred_shell::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
+        multiplets_a_block::Vector{NTuple{4,Int64}}, 
+        multiplets_a_shell::Vector{NTuple{4,Int64}}, 
+        combinations_uprima::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} };
+        conduction_diagonals::Dict{IntIrrep,Vector{Float64}}=Dict{IntIrrep,Vector{Float64}}(),
+        distributed=false,
+        impinfo=false ,
+        verbose=false ,
+        precompute_iaj=true)
+    # computes matrix elements ( m_u | H_1 | m_v ) for 
+    # the next step.
+    # input:
+    # - multiplets_block : { q_i }
+    # - multiplets_shell : { q_mu }
+    # - irrEU : G => E, U (main result of previous step)
+    # - hop : m_a => xi for n-th step
+    # - cg_o_fullmatin : orbital CG coefficients for this problem (int format)
+    # - pcg : pseudo-CG coefficients
+    # - pcgmat : pseudo-CG coefficients in matrix form
+    # - qq_a : set of all q_a
+    # - combinations_uprima : m_u' => m_mu', m_i'
+    # - oirreps2dimensions : orbital_irrep => dimension 
+    # output:
+    # - u_H1_v : ( m_u | H_1 | m_v )
+    # - combinations_uprima_new : m_u => m_mu, m_i
+    #
+
+    verbose && println( "CALCULATION OF <u||H||v> MATRIX\n" )
+
+    ## block-shell combination multiplets 
+    combinations_uprima_new = get_combination_multiplets( multiplets_block , 
+                                                          multiplets_shell , 
+                                                          keys_as_dict_o ,
+                                                          keys_as_dict_s )
+
+    # irrep and multiplet combinations 
+    #
+    # Dict(
+    #   G_uv => Dict(
+    #           (G_i,G_j) => [(r_i,r_j),...]
+    #       )
+    # )
+    Guv2GiGmu2uimumults::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}} = Dict(
+        G_uv => Dict(
+            (G_i,G_mu) => [(m_u[4],m_i[4],m_mu[4]) for (m_u,m_mu,m_i) in multiplet_combinations_Guv if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+            for (G_i,G_mu) in Set( (m_i[1:3],m_mu[1:3]) for (_,m_mu,m_i) in combinations_uprima_new[G_uv])
+        )
+        for (G_uv,multiplet_combinations_Guv) in combinations_uprima_new
+    )
+    
+
+    # < i || f^\dagger_a || j >
+    pcgred_iaj_full= compute_pcgred_iaj_full_new( multiplets_a_block, 
+                                                  Csum_o_array,
+                                                  Csum_s_array,
+                                                  pcgred_block,
+                                                  combinations_uprima,
+                                                  irrEU )
+
+    multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}} = [
+        (m_a_block,m_a_shell) for m_a_block in multiplets_a_block 
+                              for m_a_shell in multiplets_a_shell 
+                              if m_a_block[2]==m_a_shell[2] 
+    ]
+    Ga2amultcombs::Dict{IntIrrep,Vector{NTuple{2,Int64}}} = Dict(
+        G_a => [ (m_a_block[4],m_a_shell[4]) for m_a_block in multiplets_a_block 
+                                             for m_a_shell in multiplets_a_shell 
+                                             if m_a_block[1:3]==G_a ]
+        for G_a in Set( m_a_block[1:3] for (m_a_block,_) in multiplets_a_combs )
+    )
+
+    # full-sized hblock matrix
+    R_uv_max = maximum(
+        mapreduce( length , + , values(GiGmu2combinations) )
+        for (G_uv,GiGmu2combinations) in Guv2GiGmu2uimumults
+    )
+    hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+
+    # construct new irrEU
+    irrEU_new::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
+    for (G_uv::IntIrrep,GiGmu2uimumults::Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}) in Guv2GiGmu2uimumults
+
+        # irrep quantum numbers
+        N_uv::Int64,I_uv::Int64,S_uv::Int64 = G_uv
+
+        # hblock
+        R_uv::Int64 = length( combinations_uprima_new[G_uv] )
+        #hblock::Array{ComplexF64,3} = zeros( ComplexF64 , R_uv , R_uv , 2 )
+        @views hblock = hblock_full[1:R_uv,1:R_uv,:]
+        hblock .= zero(ComplexF64)
+
+        # iterate through u decompositions only, for diagonal part
+        for ((G_i::IntIrrep,G_mu::IntIrrep),uimumults::Vector{NTuple{3,Int64}}) in GiGmu2uimumults
+
+            # diagonal part 
+            @inbounds for (r_u::Int64,r_i::Int64,r_mu::Int64) in uimumults
+                hblock[r_u,r_u,1] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
+            end
+
+            # hopping part
+            for ((G_j::IntIrrep,G_nu::IntIrrep),vjnumults::Vector{NTuple{3,Int64}}) in GiGmu2uimumults
+
+                # irrep quantum numbers
+                N_i,I_i,S_i = G_i
+                N_j,I_j,S_j = G_j
+                N_mu,I_mu,S_mu = G_mu
+                N_nu,I_nu,S_nu = G_nu
+
+                # hopping allowed?
+                hopallowed = (N_nu==(N_mu+1) && N_i==(N_j+1)) 
+                if hopallowed
+
+                    # permutation sign factor
+                    sign = (-1)^N_mu
+
+                    # iterate through hopper irreps
+                    for (G_a,amultcombs) in Ga2amultcombs
+
+                        # hopping irrep quantum numbers
+                        N_a,I_a,S_a = G_a
+
+                        # early discard
+                        haskey( pcgred_iaj_full , (G_i,G_a,G_j)   ) || continue
+                        haskey( pcgred_shell ,    (G_nu,G_a,G_mu) ) || continue
+
+                        # clebsch gordan sum (B) 
+                        sidx = (S_mu,S_nu,S_i,S_j,S_uv,S_a).+1
+                        B = Bsum_o_array[I_mu,I_nu,I_i,I_j,I_uv,I_a]*
+                            Bsum_s_array[sidx...]
+                        B==zero(B) && continue
+
+                        # matrices 
+                        @views begin
+                            pcgred_iaj_matrix = pcgred_iaj_full[(G_i,G_a,G_j)]
+                            pcgred_nuamu_matrix = pcgred_shell[(G_nu,G_a,G_mu)]
+                            hoparam_matrix = hop_symparams[G_a[2]]
+                        end
+
+                        # multiplet iteration
+                        for (r_u,r_i,r_mu) in uimumults,
+                            (r_v,r_j,r_nu) in vjnumults
+
+                            # hopping contribution as matrix operation
+                            @views hblock[r_u,r_v,2] += dot(
+                                pcgred_nuamu_matrix[r_nu,:,r_mu], # automatically complex-conjugated
+                                hoparam_matrix,
+                                pcgred_iaj_matrix[r_i,:,r_j]
+                            ) * sign * B
+
+                        end # end of u,i,mu,v,j,nu multiplet iteration
+                    end # end of G_a iteration
+                end # end of hopping part
+            end # end of v decomposition
+        end # end of u decomposition
+
+        # add hopping part with hermitian conjugate
+        @inbounds for r_v::Int64 in 1:R_uv, 
+                      r_u::Int64 in 1:R_uv
+            hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
+        end
+
+        # diagonalize
+        @views F = eigen( hblock[:,:,1] )
+        e, u = real.(F.values), F.vectors
+
+        # insert in irrEU
+        irrEU_new[G_uv] = (e,u)
+
+    end 
+
+    minE = minimum([e for (E,U) in values(irrEU_new) for e in E])
+    irrEU_new = Dict( G=>(E.-minE,U) for (G,(E,U)) in irrEU_new )
+
+    return ( irrEU_new , combinations_uprima_new )
+end
+function matdiag_redmat_old_discretization( 
         multiplets_block::Set{NTuple{4,Int64}}, 
         multiplets_shell::Set{NTuple{4,Int64}},
         irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
@@ -2289,7 +2476,9 @@ function compute_pcgred_iaj_full_new(
 
                 # clebsch-gordan sum
                 sidx = (S_u,S_v,S_ij,S_mu,S_nu,S_a).+1
-                @inbounds C = Csum_o_array[I_u,I_v,I_ij,I_mu,I_nu,I_a]*
+                #@inbounds C = Csum_o_array[I_u,I_v,I_ij,I_mu,I_nu,I_a]*
+                #              Csum_s_array[sidx...]
+                C = Csum_o_array[I_u,I_v,I_ij,I_mu,I_nu,I_a]*
                               Csum_s_array[sidx...]
                 C==zero(C) && continue
 
