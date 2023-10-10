@@ -1,13 +1,14 @@
 #!/usr/bin/env julia
 
 # load modules
-moduledir = "../../modules"
-include( "$(moduledir)/modules.jl" )
-
+package_dir = "/home/aitor/Bulegoa/PointGroupNRG"
+#cd(package_dir)
+import Pkg; Pkg.activate(package_dir)
+using PointGroupNRG
 
 # input necessary for run=="multiplets"
-cg_o_dir = "../clebschgordan"
-multiplets_dir = "multiplets"
+cg_o_dir = "/home/aitor/Bulegoa/PointGroupNRG/examples/clebschgordan"
+multiplets_dir = "/home/aitor/Bulegoa/PointGroupNRG/examples/A1g/multiplets"
 atom_config = Dict{String,Int64}( "A1g" => 1 )
 identityrep = "A1g"
 
@@ -16,15 +17,15 @@ epsilon_symparams = Dict{String,Vector{ComplexF64}}(
     "A1g" => [-0.1]
 )
 u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
-    ("A1g",0.0) => [0.3;;]
+    ("A1g",0.0) => [0.4;;]
 )
 
 # additional input for run=="thermo"
 label = "A1g"
-L = 2.5
-iterations = 50
+L = 3.0
+iterations = 42
 cutoff_type = "multiplet"
-cutoff_magnitude = 500
+cutoff_magnitude = 100
 shell_config = atom_config 
 hop_symparams = Dict{String,Matrix{ComplexF64}}(
     "A1g" => [0.1;;]
@@ -32,7 +33,6 @@ hop_symparams = Dict{String,Matrix{ComplexF64}}(
 
 # additional input for run=="spectral"
 K_factor = 3.0
-
 
 # choose what to calculate
 run = "spectral"
@@ -55,6 +55,25 @@ elseif run=="spectrum"
         identityrep ,
         epsilon_symparams ,
         u_symparams
+    )
+
+elseif run=="imp"
+
+    nrg_full( 
+        label ,
+        "IMP" ,
+        L ,
+        iterations ,
+        cutoff_type ,
+        cutoff_magnitude ,
+        cg_o_dir ,
+        multiplets_dir ,
+        atom_config ,
+        shell_config ,
+        identityrep ,
+        epsilon_symparams ,
+        u_symparams ,
+        hop_symparams
     )
 
 elseif run=="thermo"
