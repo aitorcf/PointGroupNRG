@@ -639,33 +639,51 @@ function cut_off!(
     # order multiplets in terms of their energy 
     mm::Vector{Tuple{IntMultiplet,Float64}} = collect( ((G...,r),E[r]) for (G,(E,U)) in irrEU for r=1:length(E) )
     sort!( mm , by=x->x[2] )
-    discarded::Vector{IntMultiplet} = []
-    kept::Vector{IntMultiplet} = []
-    sg::Vector{IntMultiplet} = []
+
+    # discard, kept and safeguarded
+    discarded::Vector{IntMultiplet} = IntMultiplet[]
+    kept::Vector{IntMultiplet} = IntMultiplet[]
+    sg::Vector{IntMultiplet} = IntMultiplet[]
 
     # multiplet cutoff
     if type=="multiplet"
+
+        # excessive cutoff, no discard
         if cutoff>=length(mm)
+
             kept = map( x->x[1] , mm )
             discarded = []
+
+        # discard needed
         else
-            mine_idx = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>=mine , mm )
+
+            mine_idx::Int64 = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>=mine , mm )
             cutoff = maximum([ mine_idx , cutoff ])
-            kept = map( x->x[1] , mm[1:cutoff] )
-            if safeguard
-                sg = map( 
-                    x->x[1] ,
-                    [ 
-                        m 
-                        for (i,m) in enumerate(mm[(cutoff+1):end])
-                        if (isapprox(m[2],mm[cutoff][2];atol=safeguard_tol ) && i<=safeguard_max)
-                    ] 
-                )
-                append!( kept , sg )
-            end
-            discarded = map( x->x[1] , 
-                             mm[(cutoff+length(safeguard)+1):end] )
+            cutoff_energy = mm[cutoff][2]
+            #kept = map( x->x[1] , mm[1:cutoff] )
+
+            mm_kept = filter( x->(x[2]<=cutoff_energy || (safeguard && isapprox(x[2],cutoff_energy;atol=safeguard_tol))) , mm ) 
+            mm_discarded = mm[(length(mm_kept+1)):end]
+
+            kept      = map( x->x[1] , mm_kept )
+            discarded = map( x->x[1] , mm_discarded )
+
+            #if safeguard
+
+            #    # append safeguard to kept
+            #    append!( 
+            #        kept , 
+            #        IntMultiplet[ 
+            #            mm[i][1] 
+            #            for i in (cutoff+1):length(cutoff)
+            #            if (isapprox(mm[i][2],mm[cutoff][2];atol=safeguard_tol ) && (cutoff+i)<=safeguard_max)
+            #        ] 
+            #    )
+            #end
+            #discarded = map( x->x[1] , 
+            #                 mm[(cutoff+length(safeguard)+1):end] )
         end
+
     # energy cutoff
     elseif type=="energy" 
         kept      = collect( pair[1] for pair in mm if pair[2]<=cutoff  )
