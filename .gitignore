@@ -28,3 +28,7 @@ my_examples/*
 
 # package files
 !Project.toml
+
+# src files
+!src/
+!src/*
