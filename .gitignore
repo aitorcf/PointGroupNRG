@@ -1,0 +1,30 @@
+# main dir
+./* 
+!nrg_TEMPLATE.jl 
+!multiplets_TEMPLATE.jl
+!nrg_zavg.jl
+!nrg_spectralzavg.jl
+!README.md
+!TODO.txt
+
+# data files 
+*.dat
+
+# modules
+modules/twostepdiag.jl
+modules/dmnrg.jl
+modules/templates.jl
+modules/butterfly.jl
+
+# butterfly modules
+modules_butterfly/
+butterfly/*
+
+# examples
+my_examples/*
+
+# doc files 
+!doc/Tutorial.md
+
+# package files
+!Project.toml
