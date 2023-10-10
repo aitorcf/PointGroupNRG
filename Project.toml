@@ -1,0 +1,4 @@
+name = "PointGroupNRG"
+uuid = "befb9077-1ebb-472b-8f33-f1345d46fcdd"
+authors = ["Aitor <acalvo049@ehu.eus>"]
+version = "0.1.0"
