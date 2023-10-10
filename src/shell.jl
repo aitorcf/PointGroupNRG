@@ -262,9 +262,9 @@ function get_combination_multiplets(
             keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ;
             verbose=false )
 
-    combinations_u::Dict{IntIrrep,Vector{NTuple{3,IntMultiplet}}} = Dict()
+    combinations_u::Dict{IntIrrep,Vector{NTuple{3,IntMultiplet}}} = Dict{IntIrrep,Vector{NTuple{3,IntMultiplet}}}()
 
-    G2R::Dict{ NTuple{3,Int64} , Int64 } = Dict()
+    G2R::Dict{ NTuple{3,Int64} , Int64 } = Dict{ NTuple{3,Int64} , Int64 }()
     
     for m_i::IntMultiplet  in multiplets_block, 
         m_mu::IntMultiplet in multiplets_shell 
@@ -274,17 +274,17 @@ function get_combination_multiplets(
             println( "============================" )
         end
         
-        (N_i,I_i,S_i,r_i) = m_i
-        (N_mu,I_mu,S_mu,r_mu) = m_mu 
+        (N_i::Int64,I_i::Int64,S_i::Int64,r_i) = m_i
+        (N_mu::Int64,I_mu::Int64,S_mu::Int64,r_mu) = m_mu 
 
         N_u::Int64 = N_i + N_mu
-        II_u::Vector{Int64} = keys_as_dict_o[(I_mu,I_i)]
-        SS_u::Vector{Int64} = keys_as_dict_s[(S_mu,S_i)]
+        @views II_u::Vector{Int64} = keys_as_dict_o[(I_mu,I_i)]
+        @views SS_u::Vector{Int64} = keys_as_dict_s[(S_mu,S_i)]
 
         for I_u::Int64 in II_u, 
             S_u::Int64 in SS_u
 
-            G_u = (N_u,I_u,S_u)
+            G_u::IntIrrep = (N_u,I_u,S_u)
             if G_u in keys(G2R)
                 G2R[G_u] += 1 
             else 
@@ -293,7 +293,7 @@ function get_combination_multiplets(
             m_u = ( G_u... , G2R[G_u] )
             mergewith!( (x,y)->append!(x,y) , 
                          combinations_u , 
-                         Dict(G_u=>[(m_u,m_mu,m_i)]) )
+                         Dict{IntIrrep,Vector{NTuple{3,IntMultiplet}}}(G_u=>[(m_u,m_mu,m_i)]) )
             verbose && println( m_u )
         end
         verbose && println()
