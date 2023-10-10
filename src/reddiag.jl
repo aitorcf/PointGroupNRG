@@ -2410,20 +2410,20 @@ function compute_pcgred_iaj_full_new(
     pcgred_iaj_full::Dict{NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = Dict()
 
     # irrep -> decomposition -> multiplet
-    Gu2GiGmu2uimumults::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}} = Dict(
-        G_u => Dict(
-            (G_i,G_mu) => [(m_u[4],m_i[4],m_mu[4]) for (m_u,m_mu,m_i) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
-            for (G_i,G_mu) in Set( (m_i[1:3],m_mu[1:3]) for (_,m_mu,m_i) in combinations_uprima[G_u])
+    Gu2GiGmu2uimumults::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}} = Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}}(
+        G_u::IntIrrep => Dict{NTuple{2,IntIrrep},Vector{NTuple{3,Int64}}}(
+            (G_i::IntIrrep,G_mu::IntIrrep) => NTuple{3,Int64}[(m_u[4]::Int64,m_i[4]::Int64,m_mu[4]::Int64) for (m_u::IntMultiplet,m_mu::IntMultiplet,m_i::IntMultiplet) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+            for (G_i::IntIrrep,G_mu::IntIrrep) in Set( (m_i[1:3],m_mu[1:3]) for (_,m_mu,m_i) in combinations_uprima[G_u])
         )
-        for (G_u,multiplet_combinations_Gu) in combinations_uprima if G_u in keys(irrEU)
+        for (G_u::IntIrrep,multiplet_combinations_Gu::Vector{NTuple{3,IntMultiplet}}) in combinations_uprima if G_u in keys(irrEU)
     )
 
     # full-sized matrices for avoiding allocations
-    R_uv_precutoff_max = maximum(values(G2R_uv_precutoff))
-    R_uv_postcutoff_max = maximum(values(G2R_uv_postcutoff))
-    R_a_max = maximum(values(G2R_a))
-    uav_matrix_full = zeros(ComplexF64,R_uv_precutoff_max,R_a_max,R_uv_precutoff_max)
-    tmp_full = zeros(ComplexF64,R_uv_precutoff_max,R_uv_postcutoff_max)
+    R_uv_precutoff_max::Int64 = maximum(values(G2R_uv_precutoff))
+    R_uv_postcutoff_max::Int64 = maximum(values(G2R_uv_postcutoff))
+    R_a_max::Int64 = maximum(values(G2R_a))
+    uav_matrix_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_precutoff_max,R_a_max,R_uv_precutoff_max)
+    tmp_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_precutoff_max,R_uv_postcutoff_max)
 
     # G_u, G_v iteration
     for (G_u,GiGmu2uimumults) in Gu2GiGmu2uimumults,
@@ -2446,9 +2446,9 @@ function compute_pcgred_iaj_full_new(
         @views begin
             U_u = irrEU[G_u][2][1:R_u_precutoff,1:R_u_postcutoff] 
             U_v = irrEU[G_v][2][1:R_v_precutoff,1:R_v_postcutoff] 
+            tmp = tmp_full[1:R_u_precutoff,1:R_v_postcutoff]
         end
         # temporary matrix for transformation
-        tmp = tmp_full[1:R_u_precutoff,1:R_v_postcutoff]
         tmp .= zero(ComplexF64)
 
         # G_a iteration
@@ -2505,9 +2505,17 @@ function compute_pcgred_iaj_full_new(
 
             # transform matrix
             pcgred_iaj_full[(G_u,G_a,G_v)] = zeros(ComplexF64,R_u_postcutoff,R_a,R_v_postcutoff)
-            @views for r_a in 1:R_a
-                mul!( tmp , uav_matrix[:,r_a,:] , U_v )
-                mul!( pcgred_iaj_full[(G_u,G_a,G_v)][:,r_a,:] , U_u' , tmp )
+            #@views for r_a in 1:R_a
+            #    mul!( tmp , uav_matrix[:,r_a,:] , U_v )
+            #    mul!( pcgred_iaj_full[(G_u,G_a,G_v)][:,r_a,:] , U_u' , tmp )
+            #end
+            for r_a in 1:R_a
+                @views begin
+                    uav_matrix_view = uav_matrix[:,r_a,:]
+                    pcgred_matrix_view = pcgred_iaj_full[(G_u,G_a,G_v)][:,r_a,:]
+                end
+                mul!( tmp , uav_matrix_view , U_v )
+                mul!( pcgred_matrix_view , U_u' , tmp )
             end
 
         end # G_a iteration
