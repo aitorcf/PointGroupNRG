@@ -18,3 +18,9 @@
 # src files
 !src/
 !src/*
+
+# precompile scripts
+!precompilescripts/
+!precompilescripts/clebschgordan
+!precompilescripts/clebschgordan/*
+!precompilescripts/*.jl
