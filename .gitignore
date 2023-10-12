@@ -2,7 +2,13 @@
 ./* 
 !README.md
 
-# template files
+# test
+!test/runtests.jl
+!test/multiplets_A1g.jl
+!test/nrg_A1g.jl
+!test/clebschgordan/
+
+# template
 !templates/
 !templates/nrg_TEMPLATE.jl 
 !templates/multiplets_TEMPLATE.jl
