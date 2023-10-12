@@ -16,93 +16,99 @@
 The PointGroupNRG code is designed to solve Anderson impurity
 models with symmetry 
 
-```math
+$$
 U(1)_{\text{C}} \otimes P_{\text{O}} \otimes SU(2)_{\text{S}},
-```
+$$
 
-where $`U(1)_{\text{C}}`$ corresponds to particle
-conservation, $`P_{\text O}`$ is the a finite orbital
-point-group, and $`SU(2)_{\text S}`$ represents spin isotropy.
+where $U(1)_{\text{C}}$ corresponds to particle
+conservation, $P_{\text O}$ is the a finite orbital
+point-group, and $SU(2)_{\text S}$ represents spin isotropy.
 
 The general Anderson Hamiltonian is
 
-```math
+$$
 H = H_{o} + H_{C} + H_{h} + H_{c},
-```
+$$
 
 where 
 
-```math
+$$
 H_{o} = \sum_{\alpha} \epsilon_\alpha 
 f^\dagger_\alpha f_\alpha
-```
+$$
 
 contains the occupation energies,
 
-```math
+$$
 H_{C} = \sum_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}} 
 U_{\alpha_{1} \alpha_{2} \alpha_{3} \alpha_{4}}
 f^\dagger_{\alpha_{1}} f^\dagger_{\alpha_{2}}
 f_{\alpha_{3}} f_{\alpha_{4}}
-```
+$$
 
 is the Coulomb interaction,
 
-```math
+$$
 H_{h} = \int d\epsilon\sum_{\alpha \beta} V_{\alpha\beta}(\epsilon) f^\dagger_\alpha
 c_{\beta \epsilon}
-```
+$$
 
 is the hybridization term, and 
 
-```math
+$$
 H_{c} = \int 
 \epsilon
 c^\dagger_{\beta \epsilon}
 c_{\beta \epsilon}
 d\epsilon  
-```
+$$
 
 is the energy of the conduction electrons. In order to
 ensure that the Hamiltonian has the 
-desired symmetry, the parameters $`\epsilon_\alpha`$,
-$`U_{\alpha_{1}\alpha_{2}\alpha_{3}\alpha_{4}}`$ and
-$`V_{\alpha\beta}(\epsilon)`$ have to fullfil certain
-symmetry restrictions. (An in-depth
-review of the model and the notation used can be found in
-[REF_TO_PAPER]). The code provides a tool for
+desired symmetry, the parameters $\epsilon_\alpha$,
+$U_{\alpha_{1}\alpha_{2}\alpha_{3}\alpha_{4}}$ and
+$V_{\alpha\beta}(\epsilon)$ have to fullfil certain
+symmetry restrictions. . The code provides a tool for
 constructing a Hamiltonian with those restrictions for a
 given crystal point-group and solving it using the NRG
-method.  
+method. The model and the notation used are the same as in
+[the paper](https://arxiv.org/abs/2307.03658)
 
 
 # Main functions and parameters <a name="functions"></a>
 
-The code provides four functions to the user, one for each
-step in a typical NRG calculation:
+The code consists of two submodules that provide a total of
+four main functions to the user, one for each step in a typical
+NRG calculation:
 
-1. `compute_multiplets`<a name="step_1"></a>: Compute the many-particle multiplet
-   states composed of electrons in states belonging to the
-   same orbital irrep.
-2. `multiplets_2particles`<a name="step_2"></a>: Compute the two-particle
-   impurity multiplet states for the defined system. This
-   information helps when defining the parameters of the
-   impurity Anderson Hamiltonian.
-3. `impurity_spectrum`<a name="step_3"></a>: Compute the impurity spectrum.
+1. `compute_multiplets`<a name="step_1"></a>: Compute the
+   many-particle multiplet states composed of electrons in
+   states belonging to the same orbital irrep.
+   `PointGroupNRG.MultipletCalculator` submodule.
+2. `multiplets_2particles`<a name="step_2"></a>: Compute the
+   two-particle impurity multiplet states for the defined
+   system. This information helps when defining the
+   parameters of the impurity Anderson Hamiltonian.
+   `PointGroupNRG.NRGCalculator` submodule.
+3. `impurity_spectrum`<a name="step_3"></a>: Compute the
+   impurity spectrum. `PointGroupNRG.NRGCalculator`
+   submodule.
 4. `nrg_full`<a name="step_4"></a>: Perform a complete NRG
    calculation and write the thermodynamic or spectral
-   functions to files.
+   functions to files. `PointGroupNRG.NRGCalculator`
+   submodule.
 
 These functions are described in detail in the following.
 
 ## `compute_multiplets`
 
-This function is defined in the `modules/multiplets.jl`
-module. Given the appropriately formatted orbital
+This function is defined in `src/multiplets.jl`. Given the
+appropriately formatted orbital
 Clebsch-Gordan coefficients as input (see the corresponding
 [section](#clebsch-gordan)), it computes the
-multiplet states for a given orbital irrep and stores them
-in a directory created in the desired path. This directory
+multiplet states for a given orbital irreducible
+representation (irrep) and stores them
+in a directory created in the given path. This directory
 is then read by the other functions. This function has to be
 run for each orbital irrep present in the system: for
 example, in an impurity with orbital irreps $E_g$ and
@@ -133,16 +139,16 @@ created.
 The optional parameter is:
 
 * `verbose::Bool=false`: Extra verbose output if `true`,
-    normal verbosity if `false`. Mostly for testing
-    purposes.
+    normal verbosity if `false`. Option `true` is mostly for
+    testing purposes.
 
 ## `multiplets_2particles` 
 
-This function is defined in the `modules/automatization.jl`
-module. Given the Clebsch-Gordan coefficients and the
-one-irrep multiplet states computed in the previous step, it
-computes all the impurity multiplet states for a given
-impurity configuration. 
+This function is defined in `src/automatization.jl`. Given
+the Clebsch-Gordan coefficients and the one-irrep multiplet
+states computed in the previous step, it computes all the
+impurity multiplet states for a given impurity
+configuration. 
 
 The function is defined as follows:
 
@@ -160,29 +166,29 @@ The mandatory input parameters are:
 For each orbital irrep, how many orbitals levels there are
 belonging to that same irrep. For example, in a system with
 two impurities, each with an $`s`$ orbital that we represent
-with the irrep $`A_{1g}`$ of the cubic group $`O_{h}`$,
+with the irrep $A_{1g}$ of the cubic group $O_{h}$,
 we would have:
 
         impurity_config = Dict{String,Int64}( "A1g" => 2 )
 
 * `identityrep::String`<a name="identityrep"></a>: 
 The name of the identity orbital irrep. For example, for the
-orbital group $`O_{h}`$ it is $`A_{1g}`$, so
+orbital group $O_{h}$ it is $A_{1g}$, so
 `identityrep="A1g"`.
 
 Optional parameter:
 
 * `max_spin2::Int64=10`<a name="max_spin2"></a>: 
-Maximum value of twice the total spin, $`2S`$, for which the
+Maximum value of twice the total spin, $2S$, for which the
 spin Clebsch-Gordan coefficients are going to be computed.
-If the value is too low, the program will likely run into
-`NaN` problems as a consequence of segmentation faults,
-since it will try to access out-of-bounds array
-elements. If the value is too large, storing all the
-coefficients will require a lot of memory. This is
-especially relevant for the `nrg_full` function, which
-also uses this variable and is very
-performance-sensitive.
+If the value is too low, the program will throw an error
+when a larger spin2 value is found in an NRG iteration. If
+this happens, the calculation should be run again with a
+value of `max_spin2` larger than the value found. If the
+value is too large, storing all the coefficients will
+require a lot of memory. This is especially relevant for the
+`nrg_full` function, which also uses this variable and is
+very performance-sensitive.
 
 ## `impurity_spectrum`
 
@@ -209,39 +215,39 @@ The mandatory input parameters are:
 [here](#impurity_config).
 * `identityrep::String`: Described [here](#identityrep).
 * `epsilon_symparams::Dict{String,Vector{Float64}}` 
-<a = name="epsilon_symparams"></a>:
+<a name="epsilon_symparams"></a>:
 Symmetry-adapted occupation energy parameters
-$`\epsilon_{\alpha}=\epsilon_{r_\alpha}(\Gamma_\alpha)`$ of
+$\epsilon_{\alpha}=\epsilon_{r_\alpha}(\Gamma_\alpha)$ of
 the impurity Anderson Hamiltonian. The keys are the names of
-the one-electron orbital irreps $`I_{\alpha}`$, which
+the one-electron orbital irreps $I_{\alpha}$, which
 completely determine the irrep
-$`\Gamma_{\alpha}=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$. The
+$\Gamma_{\alpha}=(N_\alpha=1,I_\alpha,S_\alpha=1/2)$. The
 values are vectors of occupations energies for each
-one-electron multiplet belonging to irrep $`\Gamma_\alpha`$
-and with outer multiplicity $`r_\alpha`$: the $`r_\alpha`$-th
+one-electron multiplet belonging to irrep $\Gamma_\alpha$
+and with outer multiplicity $r_\alpha$: the $r_\alpha$-th
 element of each of these vectors is the occupation energy of
 the corresponding multiplet. Each dictionary entry can be
 expressed as follows:
 
-```math
+$$
 \Gamma \implies \epsilon_{r}(\Gamma)
-```
+$$
 
                                         I::String => eps_r::Vector{Float64}
 
 * `u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}}`
 <a name="u_symparams"></a>:
 Symmetry-adapted Coulomb parameters
-$`U_{r_{\alpha}r_{\alpha}'}(\Gamma_\alpha)`$of the impurity Anderson
+$U_{r_{\alpha}r_{\alpha}'}(\Gamma_\alpha)$ of the impurity Anderson
 Hamiltonian (see PAPER). The keys are tuples containing the
 irreps $`I_\alpha`$ and the spin irreps $`S_\alpha`$ (total
 spin) of the two-particle impurity multiplets. The values
 are matrices with indices $`r_\alpha`$ and $`r_\alpha'`$. The
 dictionary entries can be expressed accordingly as follows:
 
-```math
+$$
 (I,S) \implies U_{r r'}(\Gamma)
-```
+$$
 
                     (I,S)::Tuple{String,Float64} => U_rrp::Matrix{ComplexF64}
 
@@ -280,8 +286,12 @@ The function is defined as follows:
         distributed::Bool=false,
         z::Float64=0.0 ,
         max_spin2::Int64=10 ,
+        channels_dos::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
+        discretization::String="campo2005" ,
+        tridiagonalization::String="chen1995" ,
+        enforce_particle_hole_symmetry::Bool=true ,
         channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
-        discretization::String="standard" ,
+        discretization::String="campo2005" ,
         mine::Float64=0.0 ,
         betabar::Float64=1.0 ,
         spectral::Bool=false ,
@@ -304,11 +314,14 @@ option is used in the thermodynamic calculations in order to
 subtract the results to those obtained with the impurity and
 thereby isolate the impurity contribution to the
 thermodynamics of the system.
-* `L::Float64`: Discretization parameter $`\Lambda`$. It is
-usually chosen between $`\Lambda=2`$ and $`\Lambda=3`$, although
-values as large as $`\Lambda=10`$ can be used for
-thermodynamic calculations with $z$-averaging (see
-[corresponding section](#z-averaging)).
+* `L::Float64`: Discretization parameter $\Lambda$. It is
+usually chosen between $\Lambda=2$ and $\Lambda=3$, although
+values as large as $\Lambda=10$ can be used. This usually
+generates oscillations in the thermodynamic functions, which
+in most cases are smoothed by the automatic even-odd
+averaging, and also in spectral function calculations, which
+can be smoothed by the $z$-averaging technique (see
+        [corresponding section](#z-averaging)).
 * `iterations::Int64`: Number of NRG iterations to perform.
 * `cutoff_type::String`: Choose whether to keep a given
 number of multiplets per iteration (`cutoff_type="multiplet"`)
@@ -341,16 +354,16 @@ we would have
 Described [here](#u_symparams).
 * `hop_symparams::Dict{String,Matrix{ComplexF64}}`:
 Hybridization amplitudes (hopping parameters)
-$`V_{\alpha\beta}=V_{r_\alpha r_\beta}(\Gamma_\alpha)`$, where
-$`\Gamma_\alpha=\Gamma_\beta`$ is a one-particle irrep
-completely determined by the orbital irrep $`I_\alpha`$. The
+$V_{\alpha\beta}=V_{r_\alpha r_\beta}(\Gamma_\alpha)$, where
+$\Gamma_\alpha=\Gamma_\beta$ is a one-particle irrep
+completely determined by the orbital irrep $I_\alpha$. The
 dictionary entries can be expressed as follows:
 
-```math
+$$
 I \implies V_{r r'}(\Gamma)
-```
+$$
 
-            I::String => V_rrp::Matrix{ComplexF64}
+                                    I::String => V_rrp::Matrix{ComplexF64}
 
 The optional input parameters are:
 
@@ -370,34 +383,32 @@ and resolution in thermodynamic and spectral calculations,
 and also to reduce overbroadening effects in the latter.
 See [corresponding section](#z-averaging).
 * `max_spin2::Int64=10`: Described [here](#max_spin2).
-* `channel_etas::Dict{String,Vector{Function}}=Dict{String,Vector{Function}}()`:
-Parameters $`\gamma_{r_\alpha}(\Gamma_\alpha;\epsilon)`$ 
-that define energy-dependent hybridization functions (see parameter 
-$`\gamma(\epsilon)`$ used by Campo and Oliveira in Phys. Rev.
-B 72, 104432). The dictionary has a similar structure as
-`hop_symparams`, the differences being that (i) the vectors
-contain functions instead of numbers and (ii) we have a
-single index $`r_\alpha`$ instead of double indices $`r_\alpha
-r_\alpha'`$ because the energy-dependent hybridization is
-only implemented for systems where each orbital is coupled
-to one channel at most. The default value results in
-constant functions $`\gamma(\epsilon)=1/2`$ for every channel.
-If a value other than the default is used for this
-parameter, choose `discretization="lanczos"` (see
-[`discretization`](#discretization))
-* `discretization::String="standard"`: Discretization
-method. If `discretization="standard"`, the original scheme
-proposed by Wilson (Phys. Rev. B 21, 1003) is used and the
-rescaled channel hopping amplitudes are computed using the
-analytic formula. If `discretization="lanczos"`, a
-matrix Lanczos algorith is used to compute the hoppings for
-the first iterations and the rest are computed using the
-asymptotic formula (see Phys. Rev. B 41, 9403). 
+* `channels_dos::Dict{String,Vector{Function}}=Dict{String,Vector{Function}}()`:
+Density of states (DOS) functions
+$\rho_{r_\beta}(\Gamma_\beta;\epsilon)$ that contain all the
+energy-dependence of the hybridization between the impurity
+and the conduction bath (equivalent to the
+parameter $\gamma(\epsilon)$ used by Campo and Oliveira in
+Phys. Rev. B 72, 104432, 2005). The default value results in
+constant functions $\rho(\epsilon)=1/2$ for every channel.
+The DOS function are used when discretizing the conduction
+channels (see [discretization section](#discretization)).
+* `discretization::String="campo2005"`: Discretization
+method. The options are `discretization=yoshida1990` (Phys. Rev. B, 41:9403, 1990), which is the original scheme
+proposed by Wilson (Phys. Rev. B 21, 1003, 1975) adapted to
+include the twisted parameter $z$. The option
+`discretization="campo2005"` (Phys. Rev. B 72, 104432,
+        2005) applies an improved version designed to
+eliminate discretization artifacts. See [discretization section](#discretization).
+* `tridiagonalization::String="chen1995"`: Lanczos method 
+for tridiagonalizing the conduction Hamiltonian. The
+default option (Phys. Rev. B 52, 14436, 1995) is the only
+stable option implemented. See [discretization section](#discretization).
 * `mine::Float64=0.0`: If `cutoff_type="multiplet"`, `mine`
 sets a minimum energy of the multiplet with the largest
 eigenenergy, in such a way that the multiplet cutoff is
 augmented as necessary to meet this requirement.
-* `betabar::Float64=1.0`<a name="betabar"></a>: Parameter $`\bar\beta`$ used in
+* `betabar::Float64=1.0`<a name="betabar"></a>: Parameter $\bar\beta$ used in
 thermodynamic calculations (see Phys. Rev. B 21, 1003). It
 defines the temperature for each NRG iteration.
 * `spectral::Bool=false`: Whether to compute spectral
@@ -406,17 +417,17 @@ functions (`spectral=true`) or not (`spectral=false`).
 name="broadening"></a>: 
 Broadening factor applied to the Gaussian broadening of
 spectral functions. The default value is recommended unless
-the $`z`$-averaging is used (see [corresponding
+the $z$-averaging is used (see [corresponding
 section](#z-averaging)), in which case the
-broadening should be around $`1/N_{z}`$, where $`N_{z}`$ is the
-number of $`z`$ values. This reduction allows to reduce
+broadening should be around $1/N_{z}$, where $N_{z}$ is the
+number of $z$ values. This reduction allows to reduce
 overbroadening errors.
 * `K_factor::Float64=2.0`<a name="K"></a>: 
-Parameter $`K`$ used in spectral function calculations to
-define the energy $`\omega`$ for which to compute the spectral
+Parameter $K$ used in spectral function calculations to
+define the energy $\omega$ for which to compute the spectral
 function at each NRG iteration, which is defined as
-$`\omega=K\omega_{N}`$, where $`\omega_{N}`$ is the energy scale
-associated to the $`N`$-th iteration.
+$\omega=K\omega_{N}$, where $\omega_{N}$ is the energy scale
+associated to the $N$-th iteration.
 * `orbitalresolved::Bool=false`<a name="orbitalresolved"></a>: 
 Whether to compute orbital-resolved spectral functions
 (`orbitalresolved=true`) or not
@@ -425,20 +436,20 @@ calculations, the spectral function is computed
 separately for excitations belonging to each
 one-electron impurity multiplet.
 * `compute_impmults::Bool=false`: Whether to compute the
-thermodynamic weights $`W_{m}(T)`$ for each impurity multiplet
+thermodynamic weights $W_{m}(T)$ for each impurity multiplet
 $`m`$. This quantity is defined as
 
-```math
+$$
 W_{m}(T) = \text{Tr}\{ D_{m} P_{m} e^{-H/k_{B} T}\},
-```
+$$
 
-where the $`P_{m}`$ is a projector onto the impurity multiplet
+where the $P_{m}$ is a projector onto the impurity multiplet
 space, defined as 
 
-```math
+$$
 P_{m} = \sum_{\psi\in m} \sum_{c}
 |\psi;c\rangle \langle\psi;c|,
-```
+$$
 
 where the sums run over projections onto states where
 the impurity is in a state $`|\psi\rangle`$ belonging to the
@@ -461,11 +472,11 @@ for $`J\otimes I`$.
 
 The content of each file is organized in blocks separated by
 blank lines. Each block contains the coefficients of the
-states belonging to an irrep $`K`$ in the product $`I\otimes J`$,
-_i.e._ $`I\otimes J = ... \oplus K \oplus \dots`$, 
-in terms of states belonging to irreps $I$ and $J$ (these
-are the  Clebsch-Gordan coefficients). The first line of the
-block contains the index of $K$ and its name, and the
+states belonging to an irrep $K$ in the product $I\otimes
+J$, _i.e._ $I\otimes J = ... \oplus K \oplus \dots$, in
+terms of states belonging to irreps $I$ and $J$ (these are
+the  Clebsch-Gordan coefficients). The first line of
+the block contains the index of $K$ and its name, and the
 following lines contain the Clebsch-Gordan coefficients. If
 $i$, $j$ and $k$ are the partner labels of states belonging
 to $I$, $J$ and $K$, respectively, then the Clebsch-Gordan
@@ -477,9 +488,9 @@ where `c` is the value of the coefficient.
 
 As an example, consider a file `2x2_EgxEg.txt` containing
 the Clebsch-Gordan coefficients for the decomposition of the
-irrep product $`E_{g}\otimes E_{g}`$ involving the irrep $`E_{g}`$
-of the cubic group $`O_{h}`$. Then the contents of the file
-can be
+irrep product $E_{g}\otimes E_{g}$ involving the irrep
+$E_{g}$ of the cubic group $O_{h}$. Then the contents of the
+file can be
 
     0 A1g 
     ( 2 1 | 1 ) = 1/2*sqrt(2)
@@ -496,17 +507,17 @@ can be
 This is an example taken from the `examples/clebschgordan`
 directory included in the code. The irreps are indexed as
 `A1g->0`, `A2g->1` and `Eg->2`. The first block, for
-instance, tells us that the only state belonging to $`A_{1g}`$
+instance, tells us that the only state belonging to $A_{1g}$
 resulting from the decomposition of products of states in
-$`E_{g}`$ is 
+$E_{g}$ is 
 
-```math
+$$
 |A_{1g},1\rangle = \frac{1}{\sqrt 2}\left(
         |E_g,2\rangle \otimes |E_g,1\rangle
         +
         |E_g,1\rangle \otimes |E_g,2\rangle
         \right).
-```
+$$
 
 Notice that the code can parse expressions such as `sqrt(2)`
 provided that they are valid as expressions in the Julia
@@ -515,12 +526,12 @@ language. More example files can be found in the
 Clebsch-Gordan coefficients necessary to perform
 calculations for (i) a simple system with orbitals
 belonging to the identity representation (notice that
-$`A_{1g}`$ is the identity representation of $`\mathcal
-O_h`$, but it can be used in this case for any other identity
+$A_{1g}$ is the identity representation of $\mathcal
+O_h$, but it can be used in this case for any other identity
 representation such as the irrep $s$ of the rotation group
-$`O(3)`$), and (ii) a system with two $`E_{g}`$ orbitals, since
-any combination of states belonging to $`E_{g}`$ can only
-yield states belonging to $`A_{1g}`$, $`A_{2g}`$ and $`E_{g}`$.
+$O(3)$), and (ii) a system with two $E_{g}$ orbitals, since
+any combination of states belonging to $E_{g}$ can only
+yield states belonging to $A_{1g}$, $A_{2g}$ and $E_{g}$.
 
 
 # Thermodynamic calculations <a name="thermodynamics"></a>
@@ -554,18 +565,18 @@ directory if it does not already exist.
 The computed thermodynamic quantities are the following,
 in the order where they appear as columns in the data files.
 * Temperature $T$.
-* Magnetic susceptibility as $`k_{B} T \chi / (g\mu_{B})`$, where
-$`k_{B}`$ is the Boltzmann constant, $T$ is the temperature,
+* Magnetic susceptibility as $k_{B} T \chi / (g\mu_{B})$, where
+$k_{B}$ is the Boltzmann constant, $T$ is the temperature,
 $\chi$ is the actual magnetic susceptibility, $g$ is the
-Landé factor, and $`\mu_{B}`$ is the Bohr magneton.
-* Entropy as $`S/k_{B}`$, where $S$ is the actual entropy.
-* Heat capacity as $`C/k_{B}`$, where $C$ is the actual heat
+Landé factor, and $\mu_{B}$ is the Bohr magneton.
+* Entropy as $S/k_{B}$, where $S$ is the actual entropy.
+* Heat capacity as $C/k_{B}$, where $C$ is the actual heat
 capacity.
-* Free energy as $`F/k_{B} T`$, where $F$ is the actual free
+* Free energy as $F/k_{B} T$, where $F$ is the actual free
 energy.
-* Average number of particles $`\langle \hat N \rangle`$.
-* Energy as $`\langle H \rangle`$.
-* Partition function $`z`$.
+* Average number of particles $\langle \hat N \rangle$.
+* Energy as $\langle H \rangle$.
+* Partition function $z$.
 
 
 # Spectral function calculations <a name="spectral"></a>
@@ -580,22 +591,23 @@ calculation of spectral functions are
 
 In orbital-resolved calculations, results for one-electron
 excitations are grouped by multiplets: excitations
-$`f_\alpha^{(\dagger)}`$ belonging to the multiplet
-$`m_\alpha`$, 
+$f_\alpha^{(\dagger)}$ belonging to the multiplet
+$m_\alpha$, 
 
-```math
+$$
 \langle F | f_\alpha^{(\dagger)} | I \rangle,
     \;\; \alpha\in m_\alpha,
-```
+$$
+
 where $I$ and $F$ are the initial and final states, respectively,
 are in the same group. Spectral funcions for each of
 these groups are stored in separate files for calculations
 with [individual z](#orbitalresolvedfile) and
 [z-averaged](#orbitalresolvedfilezavg). Notice that the
-one-electron multiplet $`m_\alpha=(\Gamma_\alpha,r_\alpha)`$,
-where $`\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)`$, is
-completely specified by the orbital irrep $`I_\alpha`$ and
-the outer multiplicity $`r_\alpha`$, hence the name
+one-electron multiplet $m_\alpha=(\Gamma_\alpha,r_\alpha)$,
+where $\Gamma_\alpha=(N_\alpha=1,I_\alpha,S_\alpha=1/2)$, is
+completely specified by the orbital irrep $I_\alpha$ and
+the outer multiplicity $r_\alpha$, hence the name
 "orbital-resolved".
 
 The main result of the calculations are stored in files with
@@ -621,66 +633,62 @@ in the header line of the file.
 name="orbitalresolvedfilezavg"></a> contains the
 $`z`$-average of data from [individual z](#orbitalresolvedfile).
 
-# Averaging over the twisting parameter $`z`$ <a name="z-averaging"></a>
+# Averaging over the twisting parameter $z$ <a name="z-averaging"></a>
 In some cases, the discretization of the conduction band
 leads to errors that are computationally very expensive to
 eliminate by varying the parameters in a single calculation.
 The problem usually revolves around the need to choose a
-larger value of the discretization parameter $\Lambda$ in
+smaller value of the discretization parameter $\Lambda$ in
 order to improve the calculation in one way or another: this
 forces one to impose a larger multiplet cutoff to obtain
 converged calculations, which in turn increases the
 computational cost of the calculation exponentially. 
-The $`z`$-averaging procedures provides a way around this
+The $z$-averaging procedures provides a way around this
 problem by introducing a way to take several calculations
-with different values of $`z`$ into account, which increases
+with different values of $z$ into account, which increases
 the computational cost linearly with the number of
 calculations.
 
 In the calculation of thermodynamic functions, the use of a
 large value of $\Lambda$ introduces spurious oscillations in
 the thermodynamic functions. These can be eliminated by
-averaging over several values of $`z`$, which makes it
+averaging over several values of $z$, which makes it
 possible to obtain smooth curves with a lower cutoff
-requirement. See Phys. Rev. B 49, 11986.
+requirement (see Phys. Rev. B 49, 11986). This should not be
+needed for most cases, however, since the program averages
+over even and odd calculations by default, which
+automatically eliminates most of these oscillations.
 
 In the calculation of spectral functions, the problem with
-picking a large value of $\Lambda$ is two fold: on the one
+picking a large value of $\Lambda$ is twofold: on the one
 hand, the resolution of the spectral function is very poor
 for large energy ranges in the linear scale; on the other
 hand, a larger broadening has to be chosen in
 order to include contributions in broader energy windows.
-The $`z`$-averaging improves the resolution because by
+The $z$-averaging improves the resolution because by
 providing a different energy grid for each calculation. On
 top of that, it works with broadening parameters of the
-order of $`\eta\approx 1/N_{z}`$, where $`N_{z}`$ is the number of
-values of $`z`$, because the energy windows from different $`z`$
-"patch" together to cover the whole spectrum.
+order of $\eta\approx 1/N_{z}$, where $N_{z}$ is the number
+of values of $z$, because the energy windows from different
+$z$ "patch" together to cover the whole spectrum.
 
 
 ## Parallelization<a name="parallelization"></a>
 
-The $`z`$-averaging procedure is where parallelization can be
-exploited most optimally. Since calculations for each $`z`$ are
-completely independent from each other, the linear increase
-in computational time introduced by the method can be
-greatly reduced, if not almost eliminated, by running
-calculations for different $`z`$ in parallel.
+The $z$-averaging procedure is where parallelization can be
+exploited most optimally. Since calculations for each $z$
+are completely independent from each other, the linear
+increase in computational time introduced by the method can
+be greatly reduced, if not almost eliminated, by running
+calculations for different $z$ in parallel.
 
 Parallelization is implement using the tools in the
 `Distributed` Julia package, which is documented in the
-[Julia docs](https://docs.julialang.org/en/v1/manual/distributed-computing/).
-This package has to be loaded including the `using
-Distributed` line and adding the processors with the
-`addprocs` function. All the modules and variables
-have to be loaded in the various processes using the
-`@everywhere` macro. Parallel processes can then spanned
-using a `@distributed` for loop, with the added `@sync` macro 
-to ensure that the code waits until every process
-is completed.
+[Julia
+docs](https://docs.julialang.org/en/v1/manual/distributed-computing/).
 
-For thermodynamic calculations, $`z`$-averaging can be simply
-achieved by first running calculations for various $`z`$ without the
+For thermodynamic calculations, $z$-averaging can be simply
+achieved by first running calculations for various $z$ without the
 impurity (`calculation="CLEAN"`) and then calculations
 with the impurity (`calculation="IMP"`). The code has the
 following structure:
@@ -708,15 +716,15 @@ following structure:
 
     rmprocs(number_of_processes)
 
-The variable `Z` is a vector containing `Nz` values of $`z`$
+The variable `Z` is a vector containing `Nz` values of $z$
 and is constructed in this example by the function
-`generate_Z`, included in the module `modules/zavg.jl`.
+`generate_Z`, which is provided by `PointGroupNRG`.
 The `@distributed` macro instructs the program to run the
 various `nrg_full` calculations in parallel, and the `@sync`
 macro ensures that the program waits until every calculation
 is completed before proceding. Finally, the `zavg_thermo`
-function, also part of the `modules/zavg.jl` module,
-averages over thermodynamic calculations for every $`z`$
+function, also included in `PointGroupNRG`,
+averages over thermodynamic calculations for every $z$
 value in `Z` for the system labeled as
 [`label`](#label).
 
@@ -741,7 +749,9 @@ The `zavg_spectral` function takes the additional optional
 argument `orbitalresolved_number::Float64=0`. Its default
 value `0` is used when the calculation is not
 orbital-resolved. For orbital-resolved calculations, the
-number of orbitals `number_of_orbitals` has to be provided.
+number of orbitals `number_of_orbitals` has to be provided
+and it must be equal to the number of orbitals in the
+impurity.
 
 # Template scripts and workflow<a name="templates"></a>
 

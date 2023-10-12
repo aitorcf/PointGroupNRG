@@ -9,11 +9,6 @@
 
 # Overview<a name="overview"></a>
 
-The necessary dependencies can be found in the file
-`dependencies.jl`. In order to install them, run
-
-    julia dependencies.jl
-
 A calculation typically consists of four steps.
 
 1. Compute the multiplet states for a given symmetry and
@@ -68,7 +63,7 @@ in the `nrg_TEMPLATE.jl` file and defining the input
 parameters that have not yet been defined:
 `epsilon_symparams` and `u_symparams`. Then we run the
 script and we read the spectrum in the output. The spectrum
-is formatted in two column: the first column specifies the
+is formatted in two columns: the first column specifies the
 multiplet (in the format described in the [previous
 section](#2mults) and the second column specifies the energy:
 
