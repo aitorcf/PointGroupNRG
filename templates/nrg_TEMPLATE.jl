@@ -1,8 +1,9 @@
 #!/usr/bin/env julia
 
 # load modules
-moduledir = "/path/to/modules/"
-include( "$(moduledir)/modules.jl" )
+package_dir = "/home/aitor/Bulegoa/PointGroupNRG"
+import Pkg; Pkg.activate(package_dir)
+using PointGroupNRG.NRGCalculator
 
 # choose what to calculate
 run = "run_choice"
