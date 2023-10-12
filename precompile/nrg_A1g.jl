@@ -1,13 +1,13 @@
 #!/usr/bin/env julia
 
-# load package
+## load package
 package_dir = "."
 import Pkg; Pkg.activate(package_dir)
-using PointGroupNRG
+using PointGroupNRG.NRGCalculator
 
 # input necessary for run=="multiplets"
-cg_o_dir = "precompilescripts/clebschgordan"
-multiplets_dir = "precompilescripts/multiplets"
+cg_o_dir = "precompile/clebschgordan"
+multiplets_dir = "precompile/multiplets"
 atom_config = Dict{String,Int64}( "A1g" => 1 )
 identityrep = "A1g"
 
