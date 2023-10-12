@@ -663,7 +663,7 @@ function cut_off!(
             #kept = map( x->x[1] , mm[1:cutoff] )
 
             mm_kept = filter( x->(x[2]<=cutoff_energy || (safeguard && isapprox(x[2],cutoff_energy;atol=safeguard_tol))) , mm ) 
-            mm_discarded = mm[(length(mm_kept+1)):end]
+            mm_discarded = mm[(length(mm_kept)+1):end]
 
             kept      = map( x->x[1] , mm_kept )
             discarded = map( x->x[1] , mm_discarded )
@@ -844,7 +844,8 @@ function NRG( label::String ,
               combinations_uprima::Dict{NTuple{3,Int64}, Vector{NTuple{3,NTuple{4,Int64}}}},
               betabar::Float64 ,
               oindex2dimensions::Vector{Int64} ,
-              channels_codiagonals::Vector{Dict{Int64,Vector{Float64}}};
+              channels_codiagonals::Vector{Dict{Int64,Vector{Float64}}},
+              max_spin2::Int64;
               verbose::Bool=false ,
               distributed::Bool=false ,
               minmult::Int64=0 , 
@@ -1005,6 +1006,13 @@ function NRG( label::String ,
                 conduction_diagonals=channels_diagonals[n] );
         # information
         maximum_spin2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
+        if maximum_spin2>max_spin2
+            error( """
+                ERROR: max_spin2 too low!
+                max_spin2 = $max_spin2
+                maximum spin2 found in calculation = $maximum_spin2
+            """)
+        end
         maximum_spin2_all_iterations = maximum([ maximum_spin2 , maximum_spin2_all_iterations ])
         maximum_eigenenergy_after_diagonalization = maximum([ maximum(E) for (_,(E,_)) in irrEU ])
         println( "DIAGONALIZATION" )

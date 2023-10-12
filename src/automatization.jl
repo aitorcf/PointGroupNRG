@@ -1289,8 +1289,7 @@ function nrg_full(
     println( ":::::::::::::::::::::" )
     println()
     if !spectral
-        nrg = NRG( 
-                   label ,
+        nrg = NRG( label ,
                    calculation ,
                    iterations,
                    cutoff_type,
@@ -1312,7 +1311,8 @@ function nrg_full(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
-                   channels_codiagonals ;
+                   channels_codiagonals ,
+                   max_spin2 ;
                    mine=mine ,
                    distributed=distributed ,
                    z=z ,
@@ -1347,7 +1347,8 @@ function nrg_full(
                    combinations_uprima,
                    betabar,
                    oindex2dimensions,
-                   channels_codiagonals ;
+                   channels_codiagonals ,
+                   max_spin2 ;
                    mine=mine ,
                    distributed=distributed ,
                    z=z ,
