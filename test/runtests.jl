@@ -1,0 +1,5 @@
+include("multiplets_A1g.jl")
+include("nrg_A1g.jl")
+rm("thermodata";recursive=true)
+rm("spectral";recursive=true)
+rm("multiplets";recursive=true)
