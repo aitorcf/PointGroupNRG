@@ -12,10 +12,26 @@ be installed using the standard
 
     julia> using Pkg; Pkg.add("PointGroupNRG")
 
-procedure. Instead, the code has to be downloaded. To use
-it, activate the project and load the package with
+procedure. Instead, the code has to be downloaded/cloned. To
+install it, (i) create an environment where `PointGroupNRG`
+and all its depenencies are going to be installed (optional,
+but recommended), (ii) add the `PointGroupNRG`
+package, and (iii) test it (also optional, but recommended).
+As an example, one could do the following:
 
-    julia> using Pkg; Pkg.activate("<path_to_PointGroupNRG>")
+    bash> mkdir NRGCalculations
+    bash> cd NRGCalculations
+    bash> julia
+
+    julia> ]activate .
+    julia> ]add "<path_to_PointGroupNRG>"
+    julia> ]test PointGroupNRG
+
+(Note that `]` is the prefix to enter `Pkg` mode.) To use
+the package, (i) load the environment where it is installed
+and (ii) include the `using` sentence:
+
+    julia> activate NRGCalculations
     julia> using PointGroupNRG
 
 # Precompilation
@@ -25,13 +41,15 @@ in order to precompile the necessary functions into sysimage
 files. To use them, run the following commands from the
 shell in the package directory (`<PGNRG>`):
 
-    > julia <PGNRG>/precompilescripts/precompile_multiplets.jl
-    > julia <PGNRG>/precompilescripts/precompile_nrgcalculator.jl
+    bash> pwd
+        <PGNRG>
+    > julia precompilescripts/precompile_multiplets.jl
+    > julia precompilescripts/precompile_nrgcalculator.jl
 
-These commands will generate the files
+These commands will generate the sysimage files
 `<PGNRG>/PointGroupNRGMultiplets.so` and
 `<PGNRG>/PointGroupNRGCalculator.so`, respectively.
-These can then be used to run the multiplet calculations
+They can then be used to run the multiplet calculations
 with 
 
     > julia -J <PGNRG>/PointGroupNRGMultiplets.so <script>
