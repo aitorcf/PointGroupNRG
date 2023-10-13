@@ -1,8 +1,6 @@
 #!/usr/bin/env julia 
 
 # load package
-package_dir = "."
-import Pkg; Pkg.activate(package_dir)
 using PointGroupNRG.MultipletCalculator
 
 # path to clebsch-gordan coefficients for the chosen orblets
