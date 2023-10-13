@@ -1,8 +1,9 @@
 #!/usr/bin/env julia
 
-# load modules
-package_dir = "/home/aitor/Bulegoa/PointGroupNRG"
-import Pkg; Pkg.activate(package_dir)
+# activate environment where PointGroupNRG is installed
+# (if necessary) and load module
+environment_pointgroupnrg = "<path_to_environment>"
+import Pkg; Pkg.activate(environment_pointgroupnrg)
 using PointGroupNRG.NRGCalculator
 
 # choose what to calculate

@@ -1,18 +1,19 @@
 #!/usr/bin/env julia 
 
-# load multiplet module
-package_dir = "/home/aitor/Bulegoa/PointGroupNRG"
-import Pkg; Pkg.activate(package_dir)
+# activate environment where PointGroupNRG is installed
+# (if necessary) and load module
+environment_pointgroupnrg = "<path_to_environment>"
+import Pkg; Pkg.activate(environment_pointgroupnrg)
 using PointGroupNRG.MultipletCalculator
 
 # path to clebsch-gordan coefficients for the chosen orbital
-cg_path = "path/to/clebsch/gordan/coefficients"
+cg_path = "<path/to/clebsch/gordan/coefficients>"
 
 # orbital irrep for which to compute the multiplets.
-orbital = "orbital_irrep"
+orbital = "<orbital_irrep>"
 
 # directory where multiplet folder will be stored
-multiplets_path =  "path/to/multiplet/folder"
+multiplets_path =  "<path/to/multiplet/folder>"
 
 # Compute multiplet states.
 compute_multiplets( orbital , cg_path , multiplets_path ; verbose=true )
