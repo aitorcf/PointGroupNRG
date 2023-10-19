@@ -1,8 +1,8 @@
 #!/usr/bin/env julia 
 
 # load multiplet module
-moduledir = "../../modules"
-include( "$(moduledir)/multiplets.jl" )
+import Pkg; Pkg.activate("../..")
+using PointGroupNRG.MultipletCalculator
 
 # path to clebsch-gordan coefficients for the chosen orbital
 cg_path = "../clebschgordan"
