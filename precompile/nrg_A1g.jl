@@ -49,23 +49,6 @@ impurity_spectrum(
     u_symparams
 )
 
-nrg_full( 
-    label ,
-    "IMP" ,
-    L ,
-    iterations ,
-    cutoff_type ,
-    cutoff_magnitude ,
-    cg_o_dir ,
-    multiplets_dir ,
-    atom_config ,
-    shell_config ,
-    identityrep ,
-    epsilon_symparams ,
-    u_symparams ,
-    hop_symparams
-)
-
 for calculation in ["CLEAN","IMP"]
 
     nrg_full( 
@@ -82,26 +65,8 @@ for calculation in ["CLEAN","IMP"]
         identityrep ,
         epsilon_symparams ,
         u_symparams ,
-        hop_symparams
+        hop_symparams ;
+        spectral= (calculation=="IMP") ? true : false
     )
 
 end
-
-nrg_full( 
-    label ,
-    "IMP" ,
-    L ,
-    iterations ,
-    cutoff_type ,
-    cutoff_magnitude ,
-    cg_o_dir ,
-    multiplets_dir ,
-    atom_config ,
-    shell_config ,
-    identityrep ,
-    epsilon_symparams ,
-    u_symparams ,
-    hop_symparams ;
-    spectral=true ,
-    K_factor=K_factor
-)
