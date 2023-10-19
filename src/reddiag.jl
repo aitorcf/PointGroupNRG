@@ -2075,7 +2075,7 @@ function matdiag_redmat(
     
 
     # < i || f^\dagger_a || j >
-    pcgred_iaj_full= compute_pcgred_iaj_full_new( multiplets_a_block, 
+    pcgred_iaj_full::Dict{NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } = compute_pcgred_iaj_full_new( multiplets_a_block, 
                                                   Csum_o_array,
                                                   Csum_s_array,
                                                   pcgred_block,
@@ -2395,7 +2395,7 @@ function compute_pcgred_iaj_full_new(
                 Csum_s_array::Array{ComplexF64,6} ,
                 pcgred_block::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} },
                 combinations_uprima::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}}} ,
-                irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } )
+                irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } )::Dict{NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }
 
     # G => multiplicity of G
     #
@@ -2448,8 +2448,6 @@ function compute_pcgred_iaj_full_new(
             U_v = irrEU[G_v][2][1:R_v_precutoff,1:R_v_postcutoff] 
             tmp = tmp_full[1:R_u_precutoff,1:R_v_postcutoff]
         end
-        # temporary matrix for transformation
-        tmp .= zero(ComplexF64)
 
         # G_a iteration
         for (G_a,R_a) in G2R_a
@@ -2479,7 +2477,7 @@ function compute_pcgred_iaj_full_new(
                 #@inbounds C = Csum_o_array[I_u,I_v,I_ij,I_mu,I_nu,I_a]*
                 #              Csum_s_array[sidx...]
                 C = Csum_o_array[I_u,I_v,I_ij,I_mu,I_nu,I_a]*
-                              Csum_s_array[sidx...]
+                    Csum_s_array[sidx...]
                 C==zero(C) && continue
 
                 # < G_mu || f^\dagger_{G_a} || G_j >
