@@ -24,7 +24,7 @@ As an example, one could do the following:
     bash> julia
 
     julia> ]activate .
-    julia> ]add "<path_to_PointGroupNRG>"
+    julia> ]add <path_to_PointGroupNRG>
     julia> ]test PointGroupNRG
 
 (Note that `]` is the prefix to enter `Pkg` mode.) To use
