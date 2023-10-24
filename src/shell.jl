@@ -668,6 +668,7 @@ function cut_off!(
             #kept = map( x->x[1] , mm[1:cutoff] )
 
             mm_kept = filter( x->(x[2]<=cutoff_energy || (safeguard && isapprox(x[2],cutoff_energy;atol=safeguard_tol))) , mm ) 
+            length(mm_kept)>(cutoff+safeguard_max) && (mm_kept=mm_kept[1:(cutoff+safeguard_max)])
             mm_discarded = mm[(length(mm_kept)+1):end]
 
             kept      = map( x->x[1] , mm_kept )
