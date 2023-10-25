@@ -14,7 +14,11 @@ function generate_Zlaps( Z , number_of_cores )
 end
 
 # average thermodynamic calculations over values of z
-function zavg_thermo( label::String , Z::Vector{Float64} )
+function zavg_thermo( label::String , 
+                      Z::Vector{Float64} ;
+                      average_from::String="evenodd" )
+
+    source_label = average_from=="evenodd" ? label*"_evenodd" : label
 
     # data from all z
     thermo_data_clean_all_z = Matrix{Float64}[]
@@ -25,17 +29,17 @@ function zavg_thermo( label::String , Z::Vector{Float64} )
     for z in Z
 
         # clean
-        thermo_clean_z_filename = thermo_filename_one_z( label , "clean" , z )
+        thermo_clean_z_filename = thermo_filename_one_z( source_label , "clean" , z )
         thermo_clean_z = readdlm( thermo_clean_z_filename , skipstart=1 ) 
         push!( thermo_data_clean_all_z , thermo_clean_z )
 
         # imp
-        thermo_imp_z_filename = thermo_filename_one_z( label , "imp" , z )
+        thermo_imp_z_filename = thermo_filename_one_z( source_label , "imp" , z )
         thermo_imp_z   = readdlm( thermo_imp_z_filename , skipstart=1 ) 
         push!( thermo_data_imp_all_z , thermo_imp_z )
 
         # diff
-        thermo_diff_z_filename = thermo_filename_one_z( label , "diff" , z )
+        thermo_diff_z_filename = thermo_filename_one_z( source_label , "diff" , z )
         thermo_diff_z = readdlm( thermo_diff_z_filename , skipstart=1 )
         push!( thermo_data_diff_all_z , thermo_diff_z )
 

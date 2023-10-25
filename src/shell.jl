@@ -886,6 +886,7 @@ function NRG( label::String ,
     # thermodynamic information from even and odd iterations
     thermo_even = zeros( Float64 , 0 , 8 )
     thermo_odd  = zeros( Float64 , 0 , 8 )
+    thermo_evenodd  = zeros( Float64 , 0 , 8 )
 
     impspins       = []
     impnums        = []
@@ -1074,6 +1075,7 @@ function NRG( label::String ,
         else
             thermo_odd  = vcat( thermo_odd , thermodynamic_matrix )
         end
+        thermo_evenodd = vcat( thermo_evenodd , thermodynamic_matrix )
         # information
         println( "THERMODYNAMICS" )
         @printf "  %s = %.3e\n" "temperature" temperature
@@ -1203,6 +1205,7 @@ function NRG( label::String ,
 
         # thermodynamic data for this given value of z
         write_thermodata_onez( thermo_average , calculation , label , z )
+        write_thermodata_onez( thermo_evenodd , calculation , label*"_evenodd" , z )
 
         # impurity contribution (diff)
         if calculation=="IMP"
