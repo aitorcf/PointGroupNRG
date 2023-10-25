@@ -586,7 +586,7 @@ function interpolate_thermo_matrix(
 
         # interpolate column
         interpolator = linear_interpolation( old_temperatures , column , extrapolation_bc=Line() )
-        column_interpolated = [interpolator(t) for t in new_temperatures]
+        column_interpolated = map( interpolator , new_temperatures )
 
         # store interpolation in new matrix
         new_matrix = hcat( new_matrix , column_interpolated )

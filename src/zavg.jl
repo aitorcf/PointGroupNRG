@@ -1,6 +1,7 @@
 # generate Nz values of Z
 function generate_Z( Nz::Int64 )
-    return Float64[ ( i/Nz - 0.5 + 1.0/(2*Nz) ) for i in 0:(Nz-1) ]
+    #return Float64[ ( i/Nz - 0.5 + 1.0/(2*Nz) ) for i in 0:(Nz-1) ]
+    return Float64[ (i/Nz)  for i in 0:(Nz-1) ]
 end
 
 # generate laps of Z containing number_of_cores z values
@@ -16,7 +17,7 @@ end
 # average thermodynamic calculations over values of z
 function zavg_thermo( label::String , 
                       Z::Vector{Float64} ;
-                      average_from::String="evenodd" )
+                      average_from::String="" )
 
     source_label = average_from=="evenodd" ? label*"_evenodd" : label
 

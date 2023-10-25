@@ -1144,6 +1144,7 @@ function NRG( label::String ,
     # reverse thermodynamic matrices for interpolation
     reverse!( thermo_even , dims=1 )
     reverse!( thermo_odd  , dims=1 )
+    reverse!( thermo_evenodd , dims=1 )
     # collect temperatures from even and odd
     temperatures_even = thermo_even[:,1]
     temperatures_odd  = thermo_odd[:,1]
@@ -1214,6 +1215,7 @@ function NRG( label::String ,
             if length(glob(thermo_clean_filename))!==0 
                 println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
                 write_thermodiff( label , z )
+                write_thermodiff( label*"_evenodd" , z )
             end
         end
 
