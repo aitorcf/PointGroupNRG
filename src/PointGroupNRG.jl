@@ -36,6 +36,7 @@ include( "thermo.jl" )
 include( "reddiag.jl" )
 include( "automatization.jl" )
 include( "zavg.jl" )
+include( "molecule.jl" )
 end
 
 using .MultipletCalculator

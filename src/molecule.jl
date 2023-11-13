@@ -1,4 +1,4 @@
-function nrg_butterfly( 
+function nrg_molecule( 
             label::String ,
             calculation::String ,
             L::Float64 ,
@@ -319,7 +319,7 @@ function nrg_butterfly(
 
     # rescale spectrum 
     irrEU = Dict{ClearIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}}(
-        G=>( @.rescale(E,L,z,scale) , U ) for (G,(E,U)) in irrEU )
+        G=>( @.rescale(E,L,z,scale) , U ) for (G,(E,U)) in irrEU
     )
 
     println( "RESCALED IMPURITY HAMILTONIAN" )
