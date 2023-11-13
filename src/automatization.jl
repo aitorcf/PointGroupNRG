@@ -234,7 +234,7 @@ function get_irrEU_initial(
         print_dict( irrEU_imp )
         println()
     end
-    irrEU_imp = normalize_irrEU( irrEU_imp )
+    irrEU_imp = gormalize_irrEU( irrEU_imp )
     return irrEU_imp
 end
 # CLEAN method
