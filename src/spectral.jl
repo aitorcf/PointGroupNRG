@@ -791,7 +791,6 @@ function redM2A_orbitalresolved(
     # ground multiplet 
     #G0::NTuple{3,Int64} = first(collect( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) ))
     GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) )
-    @show GG0
 
     if verbose 
         println( "ground irreps: $GG0")
