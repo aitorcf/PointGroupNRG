@@ -22,6 +22,7 @@ function nrg_molecule(
             K_factor::Float64=2.0 ,
             etafac::Float64=1.0 ,
             orbitalresolved::Bool=false,
+            only_j_diagonalization::Bool=false ,
             compute_impmults::Bool=false ) where {R<:Real}
 
     # strict defaults
@@ -639,6 +640,7 @@ function nrg_molecule(
             collect(irrEU)
         )[1][1]
         ground_multiplet = (ground_irrep...,1)
+        @show ground_multiplet
         J = compute_J_matrix( Mred , 
                               irrEU_notrescaled , 
                               ground_multiplet , 
@@ -687,6 +689,7 @@ function nrg_molecule(
 
         end
         println( "-----------------------------" )
+        only_j_diagonalization && return
 
         Mo_tot = length(oirreps2indices) 
         II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_imp )]))
@@ -834,7 +837,6 @@ function nrg_molecule(
                    max_spin2 ;
                    mine=mine ,
                    z=z ,
-                   discretization=discretization ,
                    spectral=true ,
                    spectral_broadening=etafac ,
                    K_factor=K_factor ,
@@ -845,9 +847,9 @@ function nrg_molecule(
                    Karray_spin=Karray_spin ,
                    multiplets_atomhop=collect(multiplets_a_imp) ,
                    compute_impmults=compute_impmults,
+                   mm_i=mm_i,
                    mult2index=mult2index,
                    orbital_multiplets=omults,
-                   mm_i=mm_i,
                    channels_diagonals=channels_diagonals )
     else
         nrg = NRG( label ,
@@ -875,10 +877,10 @@ function nrg_molecule(
                    channels_codiagonals,
                    max_spin2;
                    z=z ,
-                   discretization=discretization ,
                    verbose=false ,
                    spectral=false ,
                    compute_impmults=compute_impmults,
+                   mm_i=mm_i,
                    mult2index=mult2index,
                    orbital_multiplets=omults,
                    channels_diagonals=channels_diagonals)
@@ -1107,8 +1109,10 @@ function read_rotation_input( file_name::String ,
 
     end
 
-    return rotation_matrix
+    # if there is no rotation input, return identity
+    all(iszero.(rotation_matrix)) && return ComplexF64.(diagm(map(x->1,1:number_of_impurity_orbitals)))
 
+    return rotation_matrix
 end
 
 function slater_state( slater_string::String ,
