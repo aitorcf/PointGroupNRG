@@ -857,7 +857,6 @@ function NRG( label::String ,
               minmult::Int64=0 , 
               mine::Float64=0.0 ,
               z::Float64=0.0 ,
-              discretization::String="campo2005" ,
               spectral::Bool=false ,
               K_factor::Float64=2.0 ,
               spectral_method::String="sakai1989",
@@ -869,7 +868,6 @@ function NRG( label::String ,
               Karray_spin::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) ,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
               scale::Float64=1.0 ,
-              eta::Function=x->1.0 ,
               precompute_iaj::Bool=true ,
               compute_impmults::Bool=false ,
               mult2index::Dict{ClearMultiplet,Int64}=Dict{ClearMultiplet,Int64}() ,
@@ -907,7 +905,7 @@ function NRG( label::String ,
     cutoff_eigenenergy_all_iterations = 0.0
     maximum_spin2s = Int64[]
     maximum_spin2_all_iterations = 0
-    
+
     # kept state ratios
     kept_discarded_ratios = Float64[]
 
