@@ -857,11 +857,11 @@ function redM2A_orbitalresolved(
             if !psector
 
                 A[m_u,m_a][2] .+= [w/partition,0.0]
-                
+
             elseif psector
 
                 A[m_v,m_a][2] .+= [0.0,w/partition]
-                
+
             end
         end
     end
@@ -1346,13 +1346,14 @@ function compute_spectral_function_Sakai1989(
         )
     end
 
+    omega_positive_rescaled = +K_factor
+    omega_negative_rescaled = -K_factor
+    eta_rescaled = spectral_broadening
     for (i,N) in enumerate(odd_iterator)
 
         # energy at which to compute the spectral function
         omega_positive = -omegas_odd[i]
         omega_negative =  omegas_odd[i]
-        omega_positive_rescaled = +K_factor
-        omega_negative_rescaled = -K_factor
 
         # energy scale for step N
         omegaN = omega_positive/K_factor
@@ -1363,7 +1364,6 @@ function compute_spectral_function_Sakai1989(
 
         # rescaled broadening
         eta = spectral_broadening*omegaN
-        eta_rescaled = spectral_broadening
 
         if !orbitalresolved
             for (m,(eigenenergy,coeffs)) in A
@@ -1371,14 +1371,14 @@ function compute_spectral_function_Sakai1989(
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
-                contribution = coeffs[1]*P(Delta_positive,eta)
+                #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
                 spectral_odd[end-(i-1)] += contribution
 
                 # negative energy range
                 Delta_negative = omega_negative + eigenenergy*omegaN
-                Delta_negative_rescaled = omega_negative_rescaled + eigenenergy*omegaN
-                contribution = coeffs[2]*P(Delta_negative,eta)
+                Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
+                #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
                 spectral_odd[i] += contribution
 
@@ -1389,15 +1389,18 @@ function compute_spectral_function_Sakai1989(
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
-                contribution = coeffs[1]*P(Delta_positive,eta)
-                contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)
+                #contribution = coeffs[1]*P(Delta_positive,eta)
+                contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
+                if contribution>0.01
+                    @show Delta_positive_rescaled, coeffs[1], contribution
+                end
                 spectral_odd[excitation_multiplet][end-(i-1)] += contribution
 
                 # negative energy range
                 Delta_negative = omega_negative + eigenenergy*omegaN
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
-                contribution = coeffs[2]*P(Delta_negative,eta)
-                contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)
+                #contribution = coeffs[2]*P(Delta_negative,eta)
+                contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
                 spectral_odd[excitation_multiplet][i] += contribution
 
             end
@@ -1410,8 +1413,6 @@ function compute_spectral_function_Sakai1989(
         # energy at which to compute the spectral function
         omega_positive = -omegas_even[i]
         omega_negative =  omegas_even[i]
-        omega_positive_rescaled = +K_factor
-        omega_negative_rescaled = -K_factor
 
         # energy scale for step N
         omegaN = omega_positive/K_factor
@@ -1422,7 +1423,6 @@ function compute_spectral_function_Sakai1989(
 
         # rescaled broadening
         eta = spectral_broadening*omegaN
-        eta_rescaled = spectral_broadening
 
         if !orbitalresolved
             for (_,(eigenenergy,coeffs)) in A
@@ -1430,32 +1430,35 @@ function compute_spectral_function_Sakai1989(
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
-                contribution = coeffs[1]*P(Delta_positive,eta)
+                #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
                 spectral_even[end-(i-1)] += contribution
 
                 # negative energy range
                 Delta_negative = omega_negative + eigenenergy*omegaN
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
-                contribution = coeffs[2]*P(Delta_negative,eta)
+                #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
                 spectral_even[i] += contribution
 
             end
         elseif orbitalresolved
             for ((_,excitation_multiplet),(eigenenergy,coeffs)) in A
-                
+
                 # positive energy range
                 Delta_positive = omega_positive - eigenenergy*omegaN
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
-                contribution = coeffs[1]*P(Delta_positive,eta)
+                #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
+                if contribution>0.01
+                    @show Delta_positive_rescaled, coeffs[1], contribution
+                end
                 spectral_even[excitation_multiplet][end-(i-1)] += contribution
 
                 # negative energy range
                 Delta_negative = omega_negative + eigenenergy*omegaN
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
-                contribution = coeffs[2]*P(Delta_negative,eta)
+                #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
                 spectral_even[excitation_multiplet][i] += contribution
 
@@ -1864,7 +1867,7 @@ function update_redmat_AA_CGsummethod(
     #            cg_o_fullmatint ,
     #            cg_s_fullmatint )
     Mred = update_blockredmat( 
-                collect(multiplets_a),
+                multiplets_a,
                 Karray_orbital ,
                 Karray_spin ,
                 Mred,
@@ -1887,7 +1890,7 @@ function update_redmat_AA_CGsummethod(
         AA,
         redM2A( 
             Mred,
-            collect(multiplets_a),
+            multiplets_a,
             cg_o_fullmatint,
             cg_s_fullmatint,
             irrEU,
@@ -1918,7 +1921,7 @@ function update_redmat_AA_CGsummethod_orbitalresolved(
             verbose=false )
 
     Mred = update_blockredmat( 
-                collect(multiplets_a),
+                multiplets_a,
                 Karray_orbital ,
                 Karray_spin ,
                 Mred,
@@ -1951,7 +1954,7 @@ function update_redmat_AA_CGsummethod_orbitalresolved(
         AA,
         redM2A_orbitalresolved(
                 Mred,
-                collect(multiplets_a),
+                multiplets_a,
                 cg_o_fullmatint,
                 cg_s_fullmatint,
                 irrEU,
