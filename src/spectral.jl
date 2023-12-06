@@ -737,8 +737,6 @@ function redM2A(
         cg = sum(abs2.(cgomat))*
              sum(abs2.(cgsmat))/
              (dim_Ia*dim_Sa)
-        @show partition_u = dim_Iu*dim_Su
-        @show partition_v = dim_Iv*dim_Sv
 
 
         # iterate over multiplets in irrep combination
@@ -757,6 +755,125 @@ function redM2A(
 
             # coefficient from reduced matrix element
             redmatel = abs2(redmat[rrr])
+
+            # total contribution 
+            w = cg*redmatel
+
+            # insert in A
+            if (nsector && r_v==1)
+
+                A[m_u][2] .+= [w/partition,0.0]
+
+            end
+            if (psector && r_u==1)
+
+                A[m_v][2] .+= [0.0,w/partition]
+
+            end
+        end
+    end
+
+    return A
+end
+function redM2A_selfenergy( 
+        Mred::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+        Mred_se::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+        multiplets_a::Vector{NTuple{4,Int64}} ,
+        cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+        irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+        partition::Int64 ;
+        verbose=false )
+
+    if verbose 
+        println( "~~~~~~~~~~~~~~~~~~" )
+        println( "COMPUTING A MATRIX" )
+        println( "~~~~~~~~~~~~~~~~~~" )
+        println()
+    end
+
+    # m => ( E_m , [ weight- , weight+ ] )
+    A::Dict{ IntMultiplet , Tuple{Float64,Vector{Float64}} } = 
+        Dict( (G...,r)=>(E[r],[0.0,0.0]) 
+              for (G,(E,U)) in irrEU 
+              for r in 1:length(E) )
+
+    # ground multiplet 
+    #G0::NTuple{3,Int64} = first(collect( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) ))
+    GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if iszero(E[1]) )
+    println( "A matrix" )
+    @show GG0
+
+    if verbose 
+        println( "ground irreps: $GG0")
+        println()
+    end
+
+    # iterate over irreducible matrices
+    if verbose 
+        println( "iterating over reduced matrix..." )
+        println()
+    end
+    for ((G_u,G_a,G_v),redmat) in Mred 
+
+        haskey( Mred_se , (G_u,G_a,G_v) ) || continue
+        redmat_se = Mred_se[G_u,G_a,G_v]
+
+        # sector: negative=false, positive=true
+        #if ((G_u in GG0) && !(G_v in GG0))
+        #    psector = true
+        #elseif ((G_v in GG0) && !(G_u in GG0))
+        #    psector = false 
+        #else
+        #    continue
+        #end
+        psector = ((G_u in GG0) && (G_u!==G_v))
+        nsector = ((G_v in GG0) && (G_v!==G_u))
+        (psector || nsector) || continue
+
+        if verbose 
+            Gcomb = (G_u,G_a,G_v)
+            sector = psector ? "positive" : "negative"
+            println( "$Gcomb ==> $sector sector" )
+            println()
+        end
+
+        # irrep quantum numbers
+        (N_u,I_u,S_u) = G_u 
+        (N_a,I_a,S_a) = G_a
+        (N_v,I_v,S_v) = G_v
+
+        ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
+        ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
+
+        # clebsch-gordan contribution and partition function
+        @views begin
+            cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
+            cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
+        end
+        dim_Ia,dim_Iv,dim_Iu = size(cgomat)
+        dim_Sa,dim_Sv,dim_Su = size(cgsmat)
+        cg = sum(abs2.(cgomat))*
+             sum(abs2.(cgsmat))/
+             (dim_Ia*dim_Sa)
+
+
+        # iterate over multiplets in irrep combination
+        for rrr in CartesianIndices(redmat)
+
+            # outer multiplicities
+            (r_u,r_a,r_v) = Tuple(rrr)
+
+            # exclude non-contributing elements
+            #((!psector && r_v==1) || ( psector && r_u==1)) || continue
+
+            # multiplets
+            m_u = (G_u...,r_u)
+            m_a = (G_a...,r_a)
+            m_v = (G_v...,r_v)
+
+            # coefficient from reduced matrix element
+            redmatel = conj(redmat_se[rrr])*redmat[rrr]
 
             # total contribution 
             w = cg*redmatel
@@ -1165,7 +1282,8 @@ function compute_spectral_function(
             label::String="" ,
             z::Float64=0.0 ,
             K_factor::Float64=2.0 ,
-            orbitalresolved::Bool=false )
+            orbitalresolved::Bool=false ,
+            triple_excitation::Bool=false )
 
 
     # currently working
@@ -1180,7 +1298,8 @@ function compute_spectral_function(
                 z ,
                 K_factor=K_factor ,
                 orbitalresolved=orbitalresolved ,
-                broadening_distribution=broadening_distribution
+                broadening_distribution=broadening_distribution ,
+                triple_excitation=triple_excitation
         )
     # probably remove?
     elseif method=="fullrange"
@@ -1329,7 +1448,8 @@ function compute_spectral_function_Sakai1989(
             broadening_distribution::String="gaussian",
             K_factor::Float64=2.0 ,
             orbitalresolved::Bool=false ,
-            width_two::Bool=false )
+            width_two::Bool=false ,
+            triple_excitation::Bool=false )
 
     # even and odd iteration ranges
     even_iterator = 2:2:iterations
@@ -1586,22 +1706,41 @@ function compute_spectral_function_Sakai1989(
 
     # write even, odd, average and spline-interpolated spectral data
     if !orbitalresolved
-        write_spectral_function( 
-            spectral_filename(label,z=z,tail="_even") ,
-            [omegas_even spectral_even]
-        )
-        write_spectral_function(
-            spectral_filename(label,z=z,tail="_odd") ,
-            [omegas_odd spectral_odd]
-        )
-        write_spectral_function(
-            spectral_filename(label,z=z) ,
-            [omegas_evenodd spectral_evenodd]
-        )
-        write_spectral_function(
-            spectral_filename(label,z=z,tail="_splined") ,
-            [omegas_evenodd_spline spectral_evenodd_spline]
-        )
+        if triple_excitation
+            write_spectral_function( 
+                spectral_filename(label,z=z,tail="_triple_even") ,
+                [omegas_even spectral_even]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_triple_odd") ,
+                [omegas_odd spectral_odd]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_triple") ,
+                [omegas_evenodd spectral_evenodd]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_triple_splined") ,
+                [omegas_evenodd_spline spectral_evenodd_spline]
+            )
+        else
+            write_spectral_function( 
+                spectral_filename(label,z=z,tail="_even") ,
+                [omegas_even spectral_even]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_odd") ,
+                [omegas_odd spectral_odd]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z) ,
+                [omegas_evenodd spectral_evenodd]
+            )
+            write_spectral_function(
+                spectral_filename(label,z=z,tail="_splined") ,
+                [omegas_evenodd_spline spectral_evenodd_spline]
+            )
+        end
     elseif orbitalresolved
         for (orbital_idx,multiplet) in enumerate(collect(excitation_multiplets))
             orbital_header = "# Excitation multiplet: $multiplet , index=$orbital_idx\n"
@@ -1790,6 +1929,63 @@ function setup_redmat_AA(
     return (Mred,AA) 
 
 end
+function setup_selfenergy( 
+            Mred ,
+            matdict ,
+            multiplets_atom ,
+            multiplets_operator ,
+            cg_o_fullmatint ,
+            cg_s_fullmatint ,
+            irrEU ,
+            oindex2dimensions ;
+            verbose=false )
+
+    # reduced matrix
+    Mred_se = get_redmat3( matdict ,
+                           multiplets_atom ,
+                           multiplets_operator ,
+                           cg_o_fullmatint ,
+                           cg_s_fullmatint ;
+                           verbose=verbose)
+
+    if verbose
+        println( "M reduced" )
+        print_dict( Mred )
+        println()
+    end
+
+    # spectral thermo 
+    GG0 = [G for (G,(E,e)) in irrEU for e in E if iszero(e)]
+    part0 = sum(map( G->oindex2dimensions[G[2]]*(G[3]+1) , GG0 ))
+    if verbose 
+        @show part0
+        println()
+    end
+
+    # normalize irrEU just in case
+    irrEU = normalize_irrEU( irrEU )
+
+    # spectral info
+    A_se = redM2A_selfenergy( 
+                Mred,
+                Mred_se ,
+                collect(multiplets_operator),
+                cg_o_fullmatint,
+                cg_s_fullmatint,
+                irrEU,
+                part0;
+                verbose=verbose)
+    print_dict(A_se)
+
+    if verbose
+        @show A_se 
+        println()
+    end
+    AA_se = [A_se]
+
+    return (Mred_se,AA_se) 
+
+end
 function setup_redmat_AA_orbitalresolved(
             matdict ,
             multiplets_atom ,
@@ -1964,6 +2160,62 @@ function update_redmat_AA_CGsummethod(
     end
 
     return ( Mred , AA )
+
+end
+function update_selfenergy_CGsummethod(
+            Mred::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+            Mred_se::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} } ,
+            irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
+            combinations_uprima::Dict{ NTuple{3,Int64} , Vector{NTuple{3,NTuple{4,Int64}}} },
+            multiplets_a::Vector{NTuple{4,Int64}} ,
+            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+            cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
+            Karray_orbital::Array{ComplexF64,6} , 
+            Karray_spin::Array{ComplexF64,6} , 
+            AA_se::Vector{Dict{NTuple{4,Int64},Tuple{Float64,Vector{Float64}}}} ,
+            oindex2dimensions::Vector{Int64} ;
+            verbose=false )
+
+    Mred_se = update_blockredmat( 
+                multiplets_a,
+                Karray_orbital ,
+                Karray_spin ,
+                Mred_se,
+                combinations_uprima ,
+                irrEU )
+
+    if verbose 
+        println( "M_se" )
+        print_dict( Mred_se ) 
+    end
+
+    # spectral thermo 
+    G0 = [G for (G,(E,U)) in irrEU if E[1]==0][1]
+    I0,S0 = G0[2:3]
+    D0s = S0+1
+    D0o = oindex2dimensions[I0]
+    part0 = D0o*D0s
+
+    push!(
+        AA_se,
+        redM2A_selfenergy( 
+            Mred,
+            Mred_se,
+            multiplets_a,
+            cg_o_fullmatint,
+            cg_s_fullmatint,
+            irrEU,
+            part0;
+            verbose=false
+        ) 
+    )
+
+    if verbose 
+        println( "AA_se" )
+        print_dict( AA_se )
+    end
+
+    return ( Mred_se , AA_se )
 
 end
 function update_redmat_AA_CGsummethod_orbitalresolved(

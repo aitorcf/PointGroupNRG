@@ -27,7 +27,8 @@ function nrg_molecule(
             only_j_diagonalization::Bool=false ,
             compute_impmults::Bool=false ,
             band_width::Float64=1.0 ,
-            scale_asymptotic=false ) where {R<:Real}
+            scale_asymptotic=false ,
+            compute_selfenergy::Bool=false ) where {R<:Real}
 
     # strict defaults
     precompute_iaj::Bool=true
@@ -563,6 +564,24 @@ function nrg_molecule(
 
         atom_creops = symcreops_imp
         pcg_atomic_excitations = Dict()
+        pcg_triple_excitations = Dict()
+        if compute_selfenergy
+            pcg_triple_excitations = Dict()
+            for (qbra,sbra) in symstates_imp,
+                (qket,sket) in symstates_imp,
+                (qa,oa)     in atom_creops 
+
+                qa_inversespin = (qa[1:4]...,-qa[5],qa[6])
+                ca = oa
+                ca_inversespin = atom_creops[qa_inversespin]
+                aa_inversespin = adjoint(ca_inversespin)
+                c = sbra*(ca_inversespin*aa_inversespin*ca)*sket 
+                if !isapprox( abs2(c) , 0.0 )
+                    pcg_triple_excitations[(qbra,qa,qket)] = c 
+                end
+
+            end
+        end
         if operator=="particle"
             for (qbra,sbra) in symstates_imp,
                 (qket,sket) in symstates_imp,
@@ -626,6 +645,11 @@ function nrg_molecule(
              convert_to_int(k[2],oirreps2indices),
              convert_to_int(k[3],oirreps2indices))=>v
              for (k,v) in pcg_atomic_excitations )
+        pcg_triple_excitations = Dict( 
+            (convert_to_int(k[1],oirreps2indices),
+             convert_to_int(k[2],oirreps2indices),
+             convert_to_int(k[3],oirreps2indices))=>v
+             for (k,v) in pcg_triple_excitations )
         multiplets_a_imp = Set()
         if operator=="particle"
             multiplets_a_imp = Set(
@@ -657,6 +681,18 @@ function nrg_molecule(
                         irrEU ,
                         oindex2dimensions ;
                         verbose=false )
+            if compute_selfenergy 
+                Mred_se, AA_se = setup_selfenergy(
+                            Mred ,
+                            pcg_triple_excitations ,
+                            multiplets_block ,
+                            multiplets_a_imp ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            irrEU ,
+                            oindex2dimensions ;
+                            verbose=false )
+            end
         end
         #G0 = (2,1,2)
         #GM = (1,1,1)
@@ -854,6 +890,22 @@ function nrg_molecule(
                         AA ,
                         oindex2dimensions ;
                         verbose=false )
+            if compute_selfenergy
+                Mred_se, AA_se = update_selfenergy_CGsummethod(
+                            Mred ,
+                            Mred_se ,
+                            irrEU ,
+                            combinations_uprima ,
+                            collect(multiplets_a_imp) ,
+                            cg_o_fullmatint ,
+                            cg_s_fullmatint ,
+                            Karray_orbital ,
+                            Karray_spin ,
+                            AA_se ,
+                            oindex2dimensions ;
+                            verbose=false )
+
+            end
         end
     end
 
@@ -866,49 +918,96 @@ function nrg_molecule(
     println( ":::::::::::::::::::::" )
     println()
     if spectral
-        nrg = NRG( 
-                   label ,
-                   calculation ,
-                   iterations ,
-                   cutoff_type ,
-                   cutoff_magnitude ,
-                   L ,
-                   hop_symparams_int ,
-                   irrEU ,
-                   multiplets_shell ,
-                   cg_o_fullmatint ,
-                   cg_s_fullmatint ,
-                   keys_as_dict_o ,
-                   keys_as_dict_s ,
-                   Csum_o_array ,
-                   Csum_s_array ,
-                   Bsum_o_array ,
-                   Bsum_s_array ,
-                   pcgred_shell ,
-                   collect(multiplets_a_shell_int) , 
-                   combinations_uprima ,
-                   betabar ,
-                   oindex2dimensions ,
-                   channels_codiagonals ,
-                   max_spin2 ;
-                   mine=mine ,
-                   z=z ,
-                   spectral=true ,
-                   spectral_broadening=etafac ,
-                   broadening_distribution=broadening_distribution,
-                   K_factor=K_factor ,
-                   orbitalresolved=orbitalresolved,
-                   M=Mred ,
-                   AA=AA , 
-                   Karray_orbital=Karray_orbital ,
-                   Karray_spin=Karray_spin ,
-                   multiplets_atomhop=collect(multiplets_a_imp) ,
-                   compute_impmults=compute_impmults,
-                   mm_i=mm_i,
-                   mult2index=mult2index,
-                   orbital_multiplets=omults,
-                   channels_diagonals=channels_diagonals ,
-                   scale=scale)
+        if !compute_selfenergy
+            nrg = NRG( label ,
+                       calculation ,
+                       iterations ,
+                       cutoff_type ,
+                       cutoff_magnitude ,
+                       L ,
+                       hop_symparams_int ,
+                       irrEU ,
+                       multiplets_shell ,
+                       cg_o_fullmatint ,
+                       cg_s_fullmatint ,
+                       keys_as_dict_o ,
+                       keys_as_dict_s ,
+                       Csum_o_array ,
+                       Csum_s_array ,
+                       Bsum_o_array ,
+                       Bsum_s_array ,
+                       pcgred_shell ,
+                       collect(multiplets_a_shell_int) , 
+                       combinations_uprima ,
+                       betabar ,
+                       oindex2dimensions ,
+                       channels_codiagonals ,
+                       max_spin2 ;
+                       mine=mine ,
+                       z=z ,
+                       spectral=true ,
+                       spectral_broadening=etafac ,
+                       broadening_distribution=broadening_distribution,
+                       K_factor=K_factor ,
+                       orbitalresolved=orbitalresolved,
+                       M=Mred ,
+                       AA=AA , 
+                       Karray_orbital=Karray_orbital ,
+                       Karray_spin=Karray_spin ,
+                       multiplets_atomhop=collect(multiplets_a_imp) ,
+                       compute_impmults=compute_impmults,
+                       mm_i=mm_i,
+                       mult2index=mult2index,
+                       orbital_multiplets=omults,
+                       channels_diagonals=channels_diagonals ,
+                       scale=scale )
+        else
+            nrg = NRG( label ,
+                       calculation ,
+                       iterations ,
+                       cutoff_type ,
+                       cutoff_magnitude ,
+                       L ,
+                       hop_symparams_int ,
+                       irrEU ,
+                       multiplets_shell ,
+                       cg_o_fullmatint ,
+                       cg_s_fullmatint ,
+                       keys_as_dict_o ,
+                       keys_as_dict_s ,
+                       Csum_o_array ,
+                       Csum_s_array ,
+                       Bsum_o_array ,
+                       Bsum_s_array ,
+                       pcgred_shell ,
+                       collect(multiplets_a_shell_int) , 
+                       combinations_uprima ,
+                       betabar ,
+                       oindex2dimensions ,
+                       channels_codiagonals ,
+                       max_spin2 ;
+                       mine=mine ,
+                       z=z ,
+                       spectral=true ,
+                       spectral_broadening=etafac ,
+                       broadening_distribution=broadening_distribution,
+                       K_factor=K_factor ,
+                       orbitalresolved=orbitalresolved,
+                       M=Mred ,
+                       AA=AA , 
+                       Karray_orbital=Karray_orbital ,
+                       Karray_spin=Karray_spin ,
+                       multiplets_atomhop=collect(multiplets_a_imp) ,
+                       compute_impmults=compute_impmults,
+                       mm_i=mm_i,
+                       mult2index=mult2index,
+                       orbital_multiplets=omults,
+                       channels_diagonals=channels_diagonals ,
+                       scale=scale ,
+                       compute_selfenergy=true ,
+                       Mred_se=Mred_se ,
+                       AA_se=AA_se )
+        end
     else
         nrg = NRG( label ,
                    calculation ,
