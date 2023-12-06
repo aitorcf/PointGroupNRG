@@ -640,13 +640,13 @@ end
 # broadened deltas
 function P( w_pm_E::N , 
             eta::N ; 
-            distribution="Gaussian" , 
+            distribution="gaussian" , 
             omega=0.0 , 
             E=0.0 ) where {N<:Real}
 
-    if distribution=="Gaussian" 
+    if distribution=="gaussian" 
         return P_Gaussian( w_pm_E , eta ) 
-    elseif distribution=="LogGaussian" 
+    elseif distribution=="loggaussian" 
         return P_LogGaussian( w_pm_E , eta , omega , E )
     end
 end
@@ -654,6 +654,7 @@ function P_Gaussian( w_pm_E::N , eta::N ) where {N<:Real}
     return exp(-(w_pm_E/eta)^2) / (eta*sqrt(pi))
 end
 function P_LogGaussian( w_pm_E::N , eta::N , omega::N , E::N ) where {N<:Real}
+    iszero(E) && (return 0.0)
     return exp(-eta^2/4.0)/(eta*E*sqrt(pi)) * exp(-(log(abs(omega)/E)/eta)^2)
 end
 
@@ -683,7 +684,9 @@ function redM2A(
 
     # ground multiplet 
     #G0::NTuple{3,Int64} = first(collect( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) ))
-    GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) )
+    GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if iszero(E[1]) )
+    println( "A matrix" )
+    @show GG0
 
     if verbose 
         println( "ground irreps: $GG0")
@@ -698,13 +701,16 @@ function redM2A(
     for ((G_u,G_a,G_v),redmat) in Mred 
 
         # sector: negative=false, positive=true
-        if ((G_u in GG0) && !(G_v in GG0))
-            psector = true
-        elseif ((G_v in GG0) && !(G_u in GG0))
-            psector = false 
-        else
-            continue
-        end
+        #if ((G_u in GG0) && !(G_v in GG0))
+        #    psector = true
+        #elseif ((G_v in GG0) && !(G_u in GG0))
+        #    psector = false 
+        #else
+        #    continue
+        #end
+        psector = ((G_u in GG0) && (G_u!==G_v))
+        nsector = ((G_v in GG0) && (G_v!==G_u))
+        (psector || nsector) || continue
 
         if verbose 
             Gcomb = (G_u,G_a,G_v)
@@ -720,10 +726,20 @@ function redM2A(
 
         ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
         ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
-        
-        # clebsch-gordan contribution 
-        cg = sum(abs2.(cg_o_fullmatint[(I_a,I_v,I_u)]))*
-             sum(abs2.(cg_s_fullmatint[(S_a,S_v,S_u)]))
+
+        # clebsch-gordan contribution and partition function
+        @views begin
+            cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
+            cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
+        end
+        dim_Ia,dim_Iv,dim_Iu = size(cgomat)
+        dim_Sa,dim_Sv,dim_Su = size(cgsmat)
+        cg = sum(abs2.(cgomat))*
+             sum(abs2.(cgsmat))/
+             (dim_Ia*dim_Sa)
+        @show partition_u = dim_Iu*dim_Su
+        @show partition_v = dim_Iv*dim_Sv
+
 
         # iterate over multiplets in irrep combination
         for rrr in CartesianIndices(redmat)
@@ -732,7 +748,7 @@ function redM2A(
             (r_u,r_a,r_v) = Tuple(rrr)
 
             # exclude non-contributing elements
-            ((!psector && r_v==1) || ( psector && r_u==1)) || continue
+            #((!psector && r_v==1) || ( psector && r_u==1)) || continue
 
             # multiplets
             m_u = (G_u...,r_u)
@@ -746,11 +762,12 @@ function redM2A(
             w = cg*redmatel
 
             # insert in A
-            if !psector
+            if (nsector && r_v==1)
 
                 A[m_u][2] .+= [w/partition,0.0]
 
-            elseif psector
+            end
+            if (psector && r_u==1)
 
                 A[m_v][2] .+= [0.0,w/partition]
 
@@ -829,8 +846,15 @@ function redM2A_orbitalresolved(
         ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
         
         # clebsch-gordan contribution 
+        @views begin
+            cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
+            cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
+        end
+        d_Ia,d_Iv,d_Iu = size(cgomat)
+        d_Sa,d_Sv,d_Su = size(cgsmat)
         cg = sum(abs2.(cg_o_fullmatint[(I_a,I_v,I_u)]))*
-             sum(abs2.(cg_s_fullmatint[(S_a,S_v,S_u)]))
+             sum(abs2.(cg_s_fullmatint[(S_a,S_v,S_u)]))/
+             (d_Ia*d_Sa)
 
         # iterate over multiplets in irrep combination
         for rrr in CartesianIndices(redmat)
@@ -1136,6 +1160,7 @@ function compute_spectral_function(
             iterations ,
             first_asymptotic_hopping_amplitude ;
             spectral_broadening::Float64=1.0 ,
+            broadening_distribution::String="gaussian",
             method::String="sakai1989" ,
             label::String="" ,
             z::Float64=0.0 ,
@@ -1154,7 +1179,8 @@ function compute_spectral_function(
                 label ,
                 z ,
                 K_factor=K_factor ,
-                orbitalresolved=orbitalresolved
+                orbitalresolved=orbitalresolved ,
+                broadening_distribution=broadening_distribution
         )
     # probably remove?
     elseif method=="fullrange"
@@ -1300,8 +1326,10 @@ function compute_spectral_function_Sakai1989(
             spectral_broadening::Float64 ,
             label::String ,
             z::Float64 ;
+            broadening_distribution::String="gaussian",
             K_factor::Float64=2.0 ,
-            orbitalresolved::Bool=false )
+            orbitalresolved::Bool=false ,
+            width_two::Bool=false )
 
     # even and odd iteration ranges
     even_iterator = 2:2:iterations
@@ -1372,6 +1400,11 @@ function compute_spectral_function_Sakai1989(
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
                 #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
+                isnan(contribution) && error( "nan 1: $contribution")
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[1])
+                    contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_positive_rescaled)/omegaN
+                    isnan(contribution) && error( "nan 2: $contribution")
+                end
                 spectral_odd[end-(i-1)] += contribution
 
                 # negative energy range
@@ -1379,6 +1412,11 @@ function compute_spectral_function_Sakai1989(
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
                 #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
+                isnan(contribution) && error( "nan 3: $contribution")
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[2])
+                    contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_negative_rescaled)/omegaN
+                    isnan(contribution) && error( "nan 4: $contribution")
+                end
                 spectral_odd[i] += contribution
 
             end
@@ -1390,8 +1428,8 @@ function compute_spectral_function_Sakai1989(
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
                 #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
-                if contribution>0.01
-                    @show Delta_positive_rescaled, coeffs[1], contribution
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[1])
+                    contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_positive_rescaled)/omegaN
                 end
                 spectral_odd[excitation_multiplet][end-(i-1)] += contribution
 
@@ -1400,6 +1438,9 @@ function compute_spectral_function_Sakai1989(
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
                 #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[2])
+                    contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_negative_rescaled)/omegaN
+                end
                 spectral_odd[excitation_multiplet][i] += contribution
 
             end
@@ -1431,6 +1472,11 @@ function compute_spectral_function_Sakai1989(
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
                 #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
+                isnan(contribution) && error( "nan 5: $contribution")
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[1])
+                    contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_positive_rescaled)/omegaN
+                    isnan(contribution) && error( "nan 6: $contribution")
+                end
                 spectral_even[end-(i-1)] += contribution
 
                 # negative energy range
@@ -1438,6 +1484,11 @@ function compute_spectral_function_Sakai1989(
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
                 #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
+                isnan(contribution) && error( "nan 7: $contribution")
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[2])
+                    contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_negative_rescaled)/omegaN
+                    isnan(contribution) && error( "nan 8: $contribution $eigenenergy")
+                end
                 spectral_even[i] += contribution
 
             end
@@ -1449,8 +1500,8 @@ function compute_spectral_function_Sakai1989(
                 Delta_positive_rescaled = omega_positive_rescaled - eigenenergy
                 #contribution = coeffs[1]*P(Delta_positive,eta)
                 contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled)/omegaN
-                if contribution>0.01
-                    @show Delta_positive_rescaled, coeffs[1], contribution
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[1])
+                    contribution = coeffs[1]*P(Delta_positive_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_positive_rescaled)/omegaN
                 end
                 spectral_even[excitation_multiplet][end-(i-1)] += contribution
 
@@ -1459,6 +1510,9 @@ function compute_spectral_function_Sakai1989(
                 Delta_negative_rescaled = omega_negative_rescaled + eigenenergy
                 #contribution = coeffs[2]*P(Delta_negative,eta)
                 contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled)/omegaN
+                if broadening_distribution=="loggaussian" && !iszero(coeffs[2])
+                    contribution = coeffs[2]*P(Delta_negative_rescaled,eta_rescaled;distribution="loggaussian",E=eigenenergy,omega=omega_negative_rescaled)/omegaN
+                end
                 spectral_even[excitation_multiplet][i] += contribution
 
             end
@@ -1470,9 +1524,18 @@ function compute_spectral_function_Sakai1989(
     #
     # collect energy (omega) values
     omegas_evenodd = sort(vcat(omegas_even,omegas_odd))
-    filter!( x->(abs(x)<=1.0) , omegas_evenodd )
-    omegas_evenodd[1]!==-1.0  && insert!( omegas_evenodd , 1 , -1.0 )
-    omegas_evenodd[end]!==1.0 && push!( omegas_evenodd , 1.0 )
+    if width_two
+        filter!( x->(abs(x)<=1.0) , omegas_evenodd )
+        omegas_evenodd[1]!==-1.0  && insert!( omegas_evenodd , 1 , -1.0 )
+        omegas_evenodd[end]!==1.0 && push!( omegas_evenodd , 1.0 )
+    else
+        max_energy = minimum((maximum(abs.(omegas_even)),maximum(abs.(omegas_odd))))
+        min_energy = maximum((minimum(abs.(omegas_even)),minimum(abs.(omegas_odd))))
+        filter!( x->abs(x)<=max_energy , omegas_evenodd )
+        filter!( x->abs(x)>=min_energy , omegas_evenodd )
+        omegas_evenodd[1]>-max_energy && insert!( omegas_evenodd , 1 , -max_energy )
+        omegas_evenodd[end]<max_energy && push!( omegas_evenodd , max_energy )
+    end
     # interpolate even and odd spectral functions to new omegas
     if !orbitalresolved
         spectral_even_interpolated = linear_interpolate_spectral_function( 
@@ -1700,11 +1763,8 @@ function setup_redmat_AA(
     end
 
     # spectral thermo 
-    G0 = [G for (G,(E,U)) in irrEU if E[1]==0][1]
-    I0,S0 = G0[2:3]
-    D0s = S0+1
-    D0o = oindex2dimensions[I0]
-    part0 = D0o*D0s
+    GG0 = [G for (G,(E,e)) in irrEU for e in E if iszero(e)]
+    part0 = sum(map( G->oindex2dimensions[G[2]]*(G[3]+1) , GG0 ))
     if verbose 
         @show part0
         println()
@@ -2500,9 +2560,6 @@ function update_blockredmat(
         N_u,I_u,S_u = G_u
         N_v,I_v,S_v = G_v
 
-        # early discard 
-        N_u==(N_v+1) || continue
-
         # multiplicities
         R_u= G2R_uv[G_u]
         R_v= G2R_uv[G_v]
@@ -2521,11 +2578,14 @@ function update_blockredmat(
 
             # irrep quantum numbers
             N_a,I_a,S_a = G_a
-            
+
+            # early discard 
+            N_u==(N_v+N_a) || continue
+
             # < G_u || f^\dagger_{G_a} || G_v >
             @views uav_matrix = uav_matrix_full[1:R_u,1:R_a,1:R_v]
             uav_matrix .= zero(ComplexF64)
-            
+
             # G_i,G_mu,G_j,G_nu iteration
             for ((G_i,G_mu),uimumults) in GiGmu2uimumults,
                 ((G_j,G_nu),vjnumults) in GjGnu2vjnumults
@@ -2539,8 +2599,8 @@ function update_blockredmat(
                 sign = (-1)^N_munu
 
                 # early discard
-                G_mu==G_nu   || continue
-                N_i==(N_j+1) || continue
+                G_mu==G_nu     || continue
+                N_i==(N_j+N_a) || continue
 
                 # clebsch-gordan sum
                 @inbounds K = Ksum_o_array[I_u,I_v,I_a,I_munu,I_i,I_j]*
