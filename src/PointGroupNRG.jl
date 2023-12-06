@@ -15,6 +15,7 @@ module MultipletCalculator
 export compute_multiplets
 include( "multiplets.jl" )
 end
+using .MultipletCalculator
 
 # NRG calculation submodule
 module NRGCalculator
@@ -25,6 +26,8 @@ export generate_Z
 export generate_Zlaps
 export zavg_thermo 
 export zavg_spectral
+export discretization_default
+export tridiagonalization_default
 include( "symbols.jl" )
 include( "numericals.jl" )
 include( "compoundoperators.jl" )
@@ -38,8 +41,14 @@ include( "automatization.jl" )
 include( "zavg.jl" )
 include( "molecule.jl" )
 end
-
-using .MultipletCalculator
 using .NRGCalculator
+
+# DMFT submodule (experimental)
+module DMFT
+using ..NRGCalculator
+include( "dmft.jl" )
+end
+using .DMFT
+
 
 end # module PointGroupNRG
