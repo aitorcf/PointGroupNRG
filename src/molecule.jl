@@ -19,11 +19,15 @@ function nrg_molecule(
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
+            operator::String="particle", # particle / spin_excitation
             K_factor::Float64=2.0 ,
             etafac::Float64=1.0 ,
+            broadening_distribution::String="gaussian",
             orbitalresolved::Bool=false,
             only_j_diagonalization::Bool=false ,
-            compute_impmults::Bool=false ) where {R<:Real}
+            compute_impmults::Bool=false ,
+            band_width::Float64=1.0 ,
+            scale_asymptotic=false ) where {R<:Real}
 
     # strict defaults
     precompute_iaj::Bool=true
@@ -219,50 +223,23 @@ function nrg_molecule(
     # largest among the first asymptotic codiagonal coupling terms, is just 
     # 1.0 because for the sake of generality we do not assume the asymptotic
     # form (yet?).
-    scale::Float64 = 1.0 
+    scale::Float64 = 1.0 * band_width
+    if scale_asymptotic
+        codiagonals_first = channels_codiagonals[10][1][1]
+        scale = codiagonals_first * band_width
+        channels_codiagonals = [
+            # n (iterations) loop
+            Dict(# I_o loop
+                I_o => [# r_o loop
+                    r_o_multiplet_codiagonals[n]/codiagonals_first
+                    for (r_o,(_,r_o_multiplet_codiagonals)) in enumerate(I_o_multiplets_couplings)
+                ]
+                for (I_o,I_o_multiplets_couplings) in channels_tridiagonal_int
+            )
+            for n in 1:(iterations-1)
+        ]
+    end
 
-    ##   ------------   #
-    ##%% channel etas %%#
-    ##   ------------   #
-    #channel_etas = Dict{String,Vector{Function}}( k=>Function[x->0.5 for i in 1:size(v)[1]]
-    #    for (k,v) in hop_symparams )
-
-    ## symmetry-wise channel structure 
-    ##       irrep => [ ϵ , ̄ϵ , ξ ]
-    #channel_symstructure = Dict{String,Vector{Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Float64}}}( 
-    #        k=>[get_hoppings(iterations,L,z,coupling)
-    #            for coupling in couplings]
-    #        for (k,couplings) in channel_etas
-    #)
-
-    ## symmetry-wise etabar 
-    #etabar_sym = Dict{String,Vector{Float64}}( 
-    #        k=>[s[4] for s in v]
-    #        for (k,v) in channel_symstructure 
-    #)
-    #@show etabar_sym
-    #println()
-
-    ## scale parameter: first asymptotic hopping element 
-    ##       irrep => [ ̄ϵ[1] ]
-    #scale_symparams = Dict{String,Vector{Float64}}( 
-    #        k=>[h[2][1] for h in s] 
-    #        for (k,s) in channel_symstructure 
-    #)
-    #@show scale_symparams
-    #println()
-    #scale::Float64 = maximum([v for (k,V) in scale_symparams for v in V])
-    #factor_symparams = Dict{String,Vector{Float64}}( k=>v./scale for (k,v) in scale_symparams )
-    #@show factor_symparams
-    #println()
-
-    ## hopping parameters: ξ = ϵ / ̄ϵ
-    ##       irrep => [ ξ ]
-    #xi_symparams::Dict{Int64,Vector{Vector{ComplexF64}}} = Dict( 
-    #        oirreps2indices[k]=>[ComplexF64.(h[3].*factor_symparams[k][i]) for (i,h) in enumerate(s)] 
-    #        for (k,s) in channel_symstructure
-    #)
-    #@show xi_symparams;
 
     ##   =================== #
     ##&& INITIAL HAMILTONIAN #
@@ -466,22 +443,41 @@ function nrg_molecule(
     # diagonal shell parameters 
     #   [ iteration -> { G_mu => [ r_mu -> [ I_o -> [ r_o -> diagonal_element ]]] } ]
     channels_diagonals::Vector{Dict{ IntIrrep , Vector{Float64} }} = [
-        # n (iteration) loop 
-        Dict(# G_mu loop
-            G_mu => [# r_mu loop
-                        sum(# I_o loop
-                            sum(# r_o loop
-                                r_o_couplings[n]*r_mu_multiplet_occupations[I_o][r_o] 
-                                for (r_o,(r_o_couplings,_)) in enumerate(I_o_multiplets_couplings)
+            # n (iteration) loop 
+            Dict(# G_mu loop
+                G_mu => [# r_mu loop
+                            sum(# I_o loop
+                                sum(# r_o loop
+                                    r_o_couplings[n]*r_mu_multiplet_occupations[I_o][r_o] 
+                                    for (r_o,(r_o_couplings,_)) in enumerate(I_o_multiplets_couplings)
+                                )
+                                for (I_o,I_o_multiplets_couplings) in channels_tridiagonal_int
                             )
-                            for (I_o,I_o_multiplets_couplings) in channels_tridiagonal_int
-                        )
-                        for r_mu_multiplet_occupations in G_mu_multiplets_occupations
-                    ]
-            for (G_mu,G_mu_multiplets_occupations) in shell_sym_occupations
-        )
-        for n in 1:iterations
-    ]
+                            for r_mu_multiplet_occupations in G_mu_multiplets_occupations
+                        ]
+                for (G_mu,G_mu_multiplets_occupations) in shell_sym_occupations
+            )
+            for n in 1:iterations
+        ]
+    if scale_asymptotic
+        channels_diagonals = [
+            # n (iteration) loop 
+            Dict(# G_mu loop
+                G_mu => [# r_mu loop
+                            sum(# I_o loop
+                                sum(# r_o loop
+                                    r_o_couplings[n]*r_mu_multiplet_occupations[I_o][r_o]/codiagonals_first
+                                    for (r_o,(r_o_couplings,_)) in enumerate(I_o_multiplets_couplings)
+                                )
+                                for (I_o,I_o_multiplets_couplings) in channels_tridiagonal_int
+                            )
+                            for r_mu_multiplet_occupations in G_mu_multiplets_occupations
+                        ]
+                for (G_mu,G_mu_multiplets_occupations) in shell_sym_occupations
+            )
+            for n in 1:iterations
+        ]
+    end
 
     #   ------------------------ #
     ##% conversion to int format #
@@ -567,26 +563,80 @@ function nrg_molecule(
 
         atom_creops = symcreops_imp
         pcg_atomic_excitations = Dict()
-        for (qbra,sbra) in symstates_imp,
-            (qket,sket) in symstates_imp,
-            (qa,oa)     in atom_creops 
+        if operator=="particle"
+            for (qbra,sbra) in symstates_imp,
+                (qket,sket) in symstates_imp,
+                (qa,oa)     in atom_creops 
 
-            c = sbra*oa*sket 
-            if !isapprox( abs2(c) , 0.0 )
-                pcg_atomic_excitations[(qbra,qa,qket)] = c 
+                c = sbra*oa*sket 
+                if !isapprox( abs2(c) , 0.0 )
+                    pcg_atomic_excitations[(qbra,qa,qket)] = c 
+                end
+
             end
+        elseif operator=="spin_excitation"
+            qtriplet = (2,"A1g",1.0,1,1.0,1)
+            qa = (0,"A1g",1.0,1,1.0,1)
+            qsinglet = (2,"A1g",0.0,1,0.0,1)
+            pcg_atomic_excitations[(qtriplet,qa,qsinglet)] = 1.0
+        elseif operator=="spin_excitation_complete" # not working
+            qa_register = Set()
+            for (qa1,oa1) in atom_creops,
+                (qa2,oa2) in atom_creops
 
+                # quantum numbers
+                m1 = qa1[5]
+                m2 = qa2[5]
+                m1==m2 && continue
+                r1 = qa1[end]
+                r2 = qa2[end]
+                r2>r1 && continue
+                m = m1-m2
+                co1 = oa1
+                ao2 = adjoint(oa2)
+                # same orbital, opposite spin, adjoint
+                ao1_spininverted = adjoint(atom_creops[qa2[1:4]...,-qa2[5],qa2[end]])
+                co2_spininverted = atom_creops[qa1[1:4]...,-qa1[5],qa2[end]]
+                oa = co1*ao2+co2_spininverted*ao1_spininverted
+
+                # outer multiplicity
+                qa = (0,"A1g",1.0,1,m,1)
+                if qa in qa_register
+                    rmax = maximum([
+                        qa_reg[end] for qa_reg in qa_register 
+                        if qa_reg[1:5]==qa[1:5]
+                    ])
+                    qa = (qa[1:5]...,rmax+1)
+                end
+                push!( qa_register , qa )
+
+                for (qbra,sbra) in symstates_imp,
+                    (qket,sket) in symstates_imp
+
+                    c = sbra*oa*sket 
+                    if !isapprox( abs2(c) , 0.0 )
+                        pcg_atomic_excitations[(qbra,qa,qket)] = c 
+                    end
+
+                end
+            end
         end
         pcg_atomic_excitations = Dict( 
             (convert_to_int(k[1],oirreps2indices),
              convert_to_int(k[2],oirreps2indices),
              convert_to_int(k[3],oirreps2indices))=>v
              for (k,v) in pcg_atomic_excitations )
-
-        multiplets_a_imp = Set(
-            (convert_to_int(q,oirreps2indices)[1:3]...,q[6]) 
-            for q in keys(atom_creops)
-        )
+        multiplets_a_imp = Set()
+        if operator=="particle"
+            multiplets_a_imp = Set(
+                (convert_to_int(q,oirreps2indices)[1:3]...,q[6]) 
+                for q in keys(atom_creops)
+           )
+        elseif operator=="spin_excitation"
+            multiplets_a_imp = Set([ 
+                (q_a[1:3]...,q_a[end]) for (qbra,q_a,qket) in keys(pcg_atomic_excitations)
+            ])
+        end
         if orbitalresolved 
             Mred, AA = setup_redmat_AA_orbitalresolved(
                         pcg_atomic_excitations ,
@@ -635,61 +685,65 @@ function nrg_molecule(
         #println()
 
 
-        ground_irrep = filter( 
-            x->iszero(x[2][1][1]) ,
-            collect(irrEU)
-        )[1][1]
-        ground_multiplet = (ground_irrep...,1)
-        @show ground_multiplet
-        J = compute_J_matrix( Mred , 
-                              irrEU_notrescaled , 
-                              ground_multiplet , 
-                              number_of_impurity_orbitals )
-        jj,U = diagonalize_J( J )
-        V2 = abs2.(diag(collect(hop_symparams)[1][2]))
-        jjV2 = jj[1:number_of_shell_orbitals].*V2
-        rhoJ = 0.5*(sum(filter(x->x>0,jjV2)))
-        first_excited_energy = minimum(filter( 
-            x->x>0 ,
-            [E[1] for (E,U) in values(irrEU_notrescaled)]
-        ))
-        kondotemp = 0.4*
-                    first_excited_energy*
-                    sqrt(abs(rhoJ))*
-                    exp(-ground_multiplet[3]/rhoJ)
-        println( "-----------------------------" )
-        println( "Magnetic coupling constants:" )
-        print( "j = ")
-        println( jj )
-        print( "rhoJ = ")
-        println( rhoJ )
-        print( "estimated Kondo temperature: ")
-        println( kondotemp )
-        println( "-----------------------------" )
-        println( "Unitary matrix U" )
-        for i in 1:size(U,1)
+        if (operator=="particle" && only_j_diagonalization)
+            ground_irrep = filter( 
+                x->iszero(x[2][1][1]) ,
+                collect(irrEU)
+            )[1][1]
+            ground_multiplet = (ground_irrep...,1)
+            @show ground_multiplet
+            J = compute_J_matrix( Mred , 
+                                  irrEU_notrescaled , 
+                                  ground_multiplet , 
+                                  number_of_impurity_orbitals )
+            jj,U = diagonalize_J( J )
+            V2 = abs2.(diag(collect(hop_symparams)[1][2]))
+            jjV2 = jj[1:number_of_shell_orbitals].*V2
+            rhoJ = 0.5*(sum(filter(x->x>0,jjV2)))
+            first_excited_energy = minimum(filter( 
+                x->x>0 ,
+                [E[1] for (E,U) in values(irrEU_notrescaled)]
+            ))
+            kondotemp = 0.4*
+                        first_excited_energy*
+                        sqrt(abs(rhoJ))*
+                        exp(-ground_multiplet[3]/rhoJ)
+            println( "-----------------------------" )
+            println( "Magnetic coupling constants:" )
+            print( "j = ")
+            println( jj )
+            print( "V2*j = ")
+            println( jjV2 )
+            print( "rhoJ = ")
+            println( rhoJ )
+            print( "estimated Kondo temperature: ")
+            println( kondotemp )
+            println( "-----------------------------" )
+            println( "Unitary matrix U" )
+            for i in axes(U,1)
 
-            for j in 1:size(U,2)
-                print( " " )
-                print( real(U[i,j]) )
+                for j in axes(U,2)
+                    print( " " )
+                    print( real(U[i,j]) )
+                end
+                println()
+
             end
+            println( "-----------------------------" )
             println()
+            println( "Input orbital rotation" )
+            for i in 1:size(U,1)
 
-        end
-        println( "-----------------------------" )
-        println()
-        println( "Input orbital rotation" )
-        for i in 1:size(U,1)
+                for j in 1:size(U,2)
+                    print( " " )
+                    print( real(orbital_rotation[i,j]) )
+                end
+                println()
 
-            for j in 1:size(U,2)
-                print( " " )
-                print( real(orbital_rotation[i,j]) )
             end
-            println()
-
+            println( "-----------------------------" )
+            only_j_diagonalization && return
         end
-        println( "-----------------------------" )
-        only_j_diagonalization && return
 
         Mo_tot = length(oirreps2indices) 
         II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_imp )]))
@@ -697,6 +751,7 @@ function nrg_molecule(
         Ms_shellspin = maximum([m[3] for m in multiplets_shell]) 
         Ms_tot = Int64(maximum((max_spin2,Ms_atomspin,Ms_shellspin)))
         Ms_shell = Int64(maximum((Ms_atomspin,Ms_shellspin)))
+        SS_a = collect(Set([G[3] for G in get_irreps( multiplets_a_imp )]))
         Karray_orbital,Karray_spin = 
                     compute_Ksum_arrays(
                         oindex2dimensions,
@@ -705,7 +760,8 @@ function nrg_molecule(
                         Mo_tot ,
                         II_a ,
                         Ms_tot ,
-                        Ms_shell )
+                        Ms_shell ;
+                        SS_a=SS_a)
 
         println()
     end
@@ -839,6 +895,7 @@ function nrg_molecule(
                    z=z ,
                    spectral=true ,
                    spectral_broadening=etafac ,
+                   broadening_distribution=broadening_distribution,
                    K_factor=K_factor ,
                    orbitalresolved=orbitalresolved,
                    M=Mred ,
@@ -850,7 +907,8 @@ function nrg_molecule(
                    mm_i=mm_i,
                    mult2index=mult2index,
                    orbital_multiplets=omults,
-                   channels_diagonals=channels_diagonals )
+                   channels_diagonals=channels_diagonals ,
+                   scale=scale)
     else
         nrg = NRG( label ,
                    calculation ,
@@ -883,7 +941,8 @@ function nrg_molecule(
                    mm_i=mm_i,
                    mult2index=mult2index,
                    orbital_multiplets=omults,
-                   channels_diagonals=channels_diagonals)
+                   channels_diagonals=channels_diagonals,
+                   scale=scale)
     end
 
     println()
