@@ -112,7 +112,8 @@ end
 function zavg_spectral( 
             label::String ,
             Z::Vector{Float64} ;
-            orbitalresolved_number::Int64=0 )
+            orbitalresolved_number::Int64=0 ,
+            width_two::Bool=false )
 
     orbitalresolved = orbitalresolved_number>0
 
@@ -120,13 +121,21 @@ function zavg_spectral(
     if !orbitalresolved
 
         data_all_z = Vector{Matrix{Float64}}()
-        
+
+        max_energy = 10000
+        min_energy = 0
+
         # gather spectral data
         for z in Z
 
             # read data
             filename = spectral_filename( label , z=z )
             data = readdlm( filename , skipstart=1 )
+
+            min_energy_z = minimum(abs.(data[:,1]))
+            max_energy_z = maximum(abs.(data[:,1]))
+            max_energy>max_energy_z && (max_energy=max_energy_z)
+            min_energy<min_energy_z && (min_energy=min_energy_z)
 
             # store data
             push!( data_all_z , data )
@@ -139,7 +148,8 @@ function zavg_spectral(
         data_all_z_interpolated = Matrix{Float64}[]
         # collect energy values
         omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
-        filter!( x->(abs(x)<=1.0) , omegas_average )
+        filter!( x->(abs(x)<=max_energy) , omegas_average )
+        filter!( x->(abs(x)>=min_energy) , omegas_average )
         min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
         filter!( x->(abs(x)>=min_omega) , omegas_average )
         sort!( omegas_average )
@@ -163,7 +173,7 @@ function zavg_spectral(
             
         # remove duplicates
         spectral_zavg_noduplicates = [spectral_zavg[1,:]]
-        for i in 1:size(spectral_zavg,1)
+        for i in axes(spectral_zavg,1)
             row = spectral_zavg[i,:]
             duplicate = false
             for j in 1:length(spectral_zavg_noduplicates)
@@ -228,7 +238,9 @@ function zavg_spectral(
             data_all_z_interpolated = Matrix{Float64}[]
             # collect energy values
             omegas_average = sort(vcat(collect( data[:,1] for data in data_all_z )...))
-            filter!( x->(abs(x)<=1.0) , omegas_average )
+            if width_two
+                filter!( x->(abs(x)<=1.0) , omegas_average )
+            end
             min_omega = maximum([ minimum(abs.(data[:,1])) for data in data_all_z ])
             filter!( x->(abs(x)>=min_omega) , omegas_average )
             # interpolate
