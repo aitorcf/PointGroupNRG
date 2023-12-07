@@ -861,6 +861,7 @@ function NRG( label::String ,
               K_factor::Float64=2.0 ,
               spectral_method::String="sakai1989",
               spectral_broadening::Float64=1.0 ,
+              broadening_distribution::String="gauss",
               orbitalresolved::Bool=false ,
               M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
               AA::Vector{T}=[] ,
@@ -874,7 +875,10 @@ function NRG( label::String ,
               orbital_multiplets::Vector{ClearMultiplet}=ClearMultiplet[] ,
               mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
               write_spectrum::Bool=false ,
-              channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[]) where {T}
+              channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[] ,
+              compute_selfenergy::Bool=false ,
+              Mred_se::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
+              AA_se::Vector{T}=[] ) where {T}
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -1117,6 +1121,23 @@ function NRG( label::String ,
                             AA ,
                             oindex2dimensions ;
                             verbose=false )
+
+                if compute_selfenergy
+                    Mred_se, AA_se = update_selfenergy_CGsummethod(
+                                M ,
+                                Mred_se ,
+                                irrEU ,
+                                combinations_uprima ,
+                                collect(multiplets_atomhop) ,
+                                cg_o_fullmatint ,
+                                cg_s_fullmatint ,
+                                Karray_orbital ,
+                                Karray_spin ,
+                                AA_se ,
+                                oindex2dimensions ;
+                                verbose=false )
+
+                end
             end
 
             # information
@@ -1166,9 +1187,26 @@ function NRG( label::String ,
             label=label ,
             z=z ,
             K_factor=K_factor ,
-            orbitalresolved=orbitalresolved
+            orbitalresolved=orbitalresolved ,
+            broadening_distribution=broadening_distribution
         )
 
+        if compute_selfenergy
+            compute_spectral_function(
+                AA_se ,
+                L ,
+                iterations ,
+                scale ;
+                spectral_broadening=spectral_broadening,
+                method=spectral_method,
+                label=label ,
+                z=z ,
+                K_factor=K_factor ,
+                orbitalresolved=orbitalresolved ,
+                broadening_distribution=broadening_distribution,
+                triple_excitation=true
+            )
+        end
     end
 
     # print summary information
