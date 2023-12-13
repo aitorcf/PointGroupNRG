@@ -667,7 +667,9 @@ function redM2A(
         cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
         irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} },
         partition::Int64 ;
-        verbose=false )
+        verbose=false ,
+        density_matrix::Dict{IntIrrep,Matrix{Float64}}=Dict{IntIrrep,Matrix{Float64}}() ,
+        multiplets_kept::Set{IntMultiplet}=Set{IntMultiplet}() )
 
     if verbose 
         println( "~~~~~~~~~~~~~~~~~~" )
@@ -676,17 +678,17 @@ function redM2A(
         println()
     end
 
+    use_density_matrix = length(density_matrix)!==0
+
+    irreps_kept = Set( m[1:3] for m in multiplets_kept )
+
     # m => ( E_m , [ weight- , weight+ ] )
-    A::Dict{ IntMultiplet , Tuple{Float64,Vector{Float64}} } = 
-        Dict( (G...,r)=>(E[r],[0.0,0.0]) 
+    A = Dict( (G...,r)=>[E[r],[0.0,0.0]]
               for (G,(E,U)) in irrEU 
               for r in 1:length(E) )
 
     # ground multiplet 
-    #G0::NTuple{3,Int64} = first(collect( G for (G,(E,U)) in irrEU if isapprox( E[1] , zero(E[1]) ) ))
     GG0::Set{NTuple{3,Int64}} = Set( G for (G,(E,U)) in irrEU if iszero(E[1]) )
-    println( "A matrix" )
-    @show GG0
 
     if verbose 
         println( "ground irreps: $GG0")
@@ -698,77 +700,141 @@ function redM2A(
         println( "iterating over reduced matrix..." )
         println()
     end
-    for ((G_u,G_a,G_v),redmat) in Mred 
+    if !use_density_matrix
+        for ((G_u,G_a,G_v),redmat) in Mred 
 
-        # sector: negative=false, positive=true
-        #if ((G_u in GG0) && !(G_v in GG0))
-        #    psector = true
-        #elseif ((G_v in GG0) && !(G_u in GG0))
-        #    psector = false 
-        #else
-        #    continue
-        #end
-        psector = ((G_u in GG0) && (G_u!==G_v))
-        nsector = ((G_v in GG0) && (G_v!==G_u))
-        (psector || nsector) || continue
+            psector = ((G_u in GG0) && (G_u!==G_v))
+            nsector = ((G_v in GG0) && (G_v!==G_u))
+            (psector || nsector) || continue
 
-        if verbose 
-            Gcomb = (G_u,G_a,G_v)
-            sector = psector ? "positive" : "negative"
-            println( "$Gcomb ==> $sector sector" )
-            println()
-        end
-
-        # irrep quantum numbers
-        (N_u,I_u,S_u) = G_u 
-        (N_a,I_a,S_a) = G_a
-        (N_v,I_v,S_v) = G_v
-
-        ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
-        ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
-
-        # clebsch-gordan contribution and partition function
-        @views begin
-            cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
-            cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
-        end
-        dim_Ia,dim_Iv,dim_Iu = size(cgomat)
-        dim_Sa,dim_Sv,dim_Su = size(cgsmat)
-        cg = sum(abs2.(cgomat))*
-             sum(abs2.(cgsmat))/
-             (dim_Ia*dim_Sa)
-
-
-        # iterate over multiplets in irrep combination
-        for rrr in CartesianIndices(redmat)
-
-            # outer multiplicities
-            (r_u,r_a,r_v) = Tuple(rrr)
-
-            # exclude non-contributing elements
-            #((!psector && r_v==1) || ( psector && r_u==1)) || continue
-
-            # multiplets
-            m_u = (G_u...,r_u)
-            m_a = (G_a...,r_a)
-            m_v = (G_v...,r_v)
-
-            # coefficient from reduced matrix element
-            redmatel = abs2(redmat[rrr])
-
-            # total contribution 
-            w = cg*redmatel
-
-            # insert in A
-            if (nsector && r_v==1)
-
-                A[m_u][2] .+= [w/partition,0.0]
-
+            if verbose 
+                Gcomb = (G_u,G_a,G_v)
+                sector = psector ? "positive" : "negative"
+                println( "$Gcomb ==> $sector sector" )
+                println()
             end
-            if (psector && r_u==1)
 
-                A[m_v][2] .+= [0.0,w/partition]
+            # irrep quantum numbers
+            (N_u,I_u,S_u) = G_u 
+            (N_a,I_a,S_a) = G_a
+            (N_v,I_v,S_v) = G_v
 
+            ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
+            ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
+
+            # clebsch-gordan contribution and partition function
+            @views begin
+                cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
+                cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
+            end
+            dim_Ia,dim_Iv,dim_Iu = size(cgomat)
+            dim_Sa,dim_Sv,dim_Su = size(cgsmat)
+            cg = sum(abs2.(cgomat))*
+                 sum(abs2.(cgsmat))/
+                 (dim_Ia*dim_Sa)
+
+
+            # iterate over multiplets in irrep combination
+            for rrr in CartesianIndices(redmat)
+
+                # outer multiplicities
+                (r_u,r_a,r_v) = Tuple(rrr)
+
+                # multiplets
+                m_u = (G_u...,r_u)
+                m_a = (G_a...,r_a)
+                m_v = (G_v...,r_v)
+
+                # coefficient from reduced matrix element
+                redmatel = abs2(redmat[rrr])
+
+                # total contribution 
+                w = cg*redmatel
+
+                # insert in A
+                if (nsector && r_v==1)
+
+                    A[m_u][2] .+= [w/partition,0.0]
+
+                end
+                if (psector && r_u==1)
+
+                    A[m_v][2] .+= [0.0,w/partition]
+
+                end
+            end
+        end
+    elseif use_density_matrix
+        for ((G_u,G_a,G_v),redmat) in Mred
+
+            # irrep quantum numbers
+            (_,I_u,S_u) = G_u 
+            (_,I_a,S_a) = G_a
+            (_,I_v,S_v) = G_v
+
+            ((I_a,I_v,I_u) in keys(cg_o_fullmatint)) || continue
+            ((S_a,S_v,S_u) in keys(cg_s_fullmatint)) || continue
+            Gu_is_ground = haskey(density_matrix,G_u)
+            Gv_is_ground = haskey(density_matrix,G_v)
+            (Gu_is_ground || Gv_is_ground) || continue
+
+            Gu_is_ground && (@views dm_u=density_matrix[G_u])
+            Gv_is_ground && (@views dm_v=density_matrix[G_v])
+
+            Ru_kept = Gu_is_ground ? size(dm_u,1) : 0
+            Rv_kept = Gv_is_ground ? size(dm_v,1) : 0
+
+            @show Gu_is_ground, Ru_kept
+            @show Gv_is_ground, Rv_kept
+            @show size(redmat)
+            println()
+
+            # clebsch-gordan contribution and partition function
+            @views begin
+                cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
+                cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
+            end
+            dim_Ia,dim_Iv,dim_Iu = size(cgomat)
+            dim_Sa,dim_Sv,dim_Su = size(cgsmat)
+            cg = (dim_Iu*dim_Su)/(dim_Ia*dim_Sa)
+
+            # iterate over multiplets in irrep combination
+            for r1_u in axes(redmat,1),
+                r1_v in axes(redmat,3),
+                r2_u in axes(redmat,1),
+                r2_v in axes(redmat,3),
+                r_a  in axes(redmat,2)
+
+                # multiplets
+                m_u = (G_u...,r1_u)
+                m_v = (G_v...,r1_v)
+
+                # insert in A
+                # G_v as the kept "ground" multiplet, G_u discarded
+                if Gv_is_ground && (r1_u==r2_u) && r1_u>Ru_kept && r1_v<=Rv_kept && r2_v<=Rv_kept
+
+                    # reduced excitation matrix element product
+                    redmatel = conj(redmat[r1_u,r_a,r1_v])*redmat[r1_u,r_a,r2_v]
+                    w = cg*redmatel
+                    @show redmatel
+                    @show length(irrEU[G_u][1]),r1_u
+                    @show length(irrEU[G_v][1]),r1_v,r2_v
+
+                    A[m_u][1] = irrEU[G_u][1][r1_u] - 0.5*(irrEU[G_v][1][r1_v]+irrEU[G_v][1][r2_v])
+                    A[m_u][2] .+= [w*dm_v[r1_v,r2_v],0.0]
+
+                end
+                # G_u as the kept "ground" multiplet, G_v discarded
+                if Gu_is_ground && (r1_v==r2_v) && r1_v>Rv_kept  && r1_u<=Ru_kept && r2_u<=Ru_kept
+
+                    # reduced excitation matrix element product
+                    redmatel = redmat[r1_u,r_a,r1_v]*conj(redmat[r2_u,r_a,r1_v])
+                    w = cg*redmatel
+
+                    A[m_v][1] = irrEU[G_v][1][r1_v] - 0.5*(irrEU[G_u][1][r1_u]+irrEU[G_u][1][r2_u])
+                    A[m_v][2] .+= [0.0,w*dm_u[r1_u,r2_u]]
+
+                end
             end
         end
     end
@@ -967,11 +1033,9 @@ function redM2A_orbitalresolved(
             cgomat = cg_o_fullmatint[(I_a,I_v,I_u)]
             cgsmat = cg_s_fullmatint[(S_a,S_v,S_u)]
         end
-        d_Ia,d_Iv,d_Iu = size(cgomat)
-        d_Sa,d_Sv,d_Su = size(cgsmat)
-        cg = sum(abs2.(cg_o_fullmatint[(I_a,I_v,I_u)]))*
-             sum(abs2.(cg_s_fullmatint[(S_a,S_v,S_u)]))/
-             (d_Ia*d_Sa)
+        d_Ia,_,d_Iu = size(cgomat)
+        d_Sa,_,d_Su = size(cgsmat)
+        cg = d_Iu*d_Su*d_Iu*d_Su*d_Ia*d_Sa
 
         # iterate over multiplets in irrep combination
         for rrr in CartesianIndices(redmat)
@@ -1299,8 +1363,7 @@ function compute_spectral_function(
                 K_factor=K_factor ,
                 orbitalresolved=orbitalresolved ,
                 broadening_distribution=broadening_distribution ,
-                triple_excitation=triple_excitation
-        )
+                triple_excitation=triple_excitation )
     # probably remove?
     elseif method=="fullrange"
         return compute_spectral_function_FullRange(
@@ -2108,19 +2171,12 @@ function update_redmat_AA_CGsummethod(
             cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
             Karray_orbital::Array{ComplexF64,6} , 
             Karray_spin::Array{ComplexF64,6} , 
-            AA::Vector{Dict{NTuple{4,Int64},Tuple{Float64,Vector{Float64}}}} ,
+            AA ,
             oindex2dimensions::Vector{Int64} ;
-            verbose=false )
+            verbose=false ,
+            density_matrix::Dict{IntIrrep,Matrix{Float64}}=Dict{IntIrrep,Matrix{Float64}}() ,
+            multiplets_kept::Set{IntMultiplet}=Set{IntMultiplet}() )
 
-    #Mred = get_new_blockredmat_CGsummethod3( 
-    #            Mred,
-    #            collect(multiplets_a),
-    #            combinations_uprima ,
-    #            irrEU ,
-    #            Karray_orbital ,
-    #            Karray_spin ,
-    #            cg_o_fullmatint ,
-    #            cg_s_fullmatint )
     Mred = update_blockredmat( 
                 multiplets_a,
                 Karray_orbital ,
@@ -2150,7 +2206,9 @@ function update_redmat_AA_CGsummethod(
             cg_s_fullmatint,
             irrEU,
             part0;
-            verbose=false
+            verbose=false,
+            density_matrix=density_matrix,
+            multiplets_kept=multiplets_kept
         ) 
     )
 
@@ -2907,4 +2965,82 @@ function is_matrix_zero( matrix::SubArray{ComplexF64,3} )
         s > zero(s) && return false
     end
     return true
+end
+
+# ------ #
+# DM-NRG #
+# ------ #
+function backwards_dm_reduced(
+        dm::Dict{IntIrrep,Matrix{Float64}} ,
+        diagonalizers::Dict{IntIrrep,Matrix{ComplexF64}} ,
+        combinations_uprima::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}} } ,
+        oindex2dimensions::Vector{Int64} ,
+        multiplets_kept::Set{IntMultiplet} )
+
+    combinations_uprima_modified = Dict(
+        G_u => comb 
+        for (G_u,comb) in combinations_uprima
+        if haskey(dm,G_u)
+    )
+
+    GG_i = Set( 
+        m_i[1:3] 
+        for (G_u,combs_u) in combinations_uprima
+        for (_,_,m_i) in combs_u
+    )
+    G2mm_i = Dict( 
+        G_i=>Set(
+            m_i 
+            for (G_u,combs_u) in combinations_uprima for 
+            (_,_,m_i) in combs_u
+            if m_i[1:3]==G_i
+        )
+        for G_i in GG_i
+    )
+    G2multiplicity_i = Dict( G_i=>length(mm_i) for (G_i,mm_i) in G2mm_i )
+
+    dm_back::Dict{IntIrrep,Matrix{Float64}} = Dict(
+        G_i=>zeros(Float64,multiplicity_G_i,multiplicity_G_i)
+        for (G_i,multiplicity_G_i) in G2multiplicity_i
+    )
+
+    for (G_u,combinations_G_u) in combinations_uprima_modified
+
+        # diagonalization matrices and DM from next step
+        du = dm[G_u]
+        u = diagonalizers[G_u]
+
+        _,I_u,S_u = G_u
+
+        for (m_u,m_mu,m_i) in combinations_G_u,
+            (m_v,m_nu,m_j) in combinations_G_u
+
+            G_ij = m_i[1:3]
+
+            # trace over mu and symmetry of the DM
+            m_mu==m_nu     || continue
+            G_ij==m_j[1:3] || continue
+
+            # quantum numbers
+            r_u = m_u[4]
+            r_v = m_v[4]
+            _,I_ij,S_ij,r_i = m_i
+            r_j = m_j[4]
+
+            dim_i = oindex2dimensions[I_ij]*(S_ij+1)
+            dim_u = oindex2dimensions[I_u]*(S_u+1)
+            cgsum = dim_u/dim_i
+
+            contrib = dot(u[r_u,1:size(du,1)],du,conj.(u[r_v,1:size(du,1)]))
+
+            dm_back[G_ij][r_i,r_j] += real(cgsum*contrib)
+
+        end
+
+    end
+    println()
+
+    dm_back = Dict( G=>m for (G,m) in dm_back if !isapprox(norm(m),0.0;atol=1e-6) )
+
+    return dm_back
 end
