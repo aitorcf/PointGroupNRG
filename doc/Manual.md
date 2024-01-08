@@ -269,37 +269,33 @@ function.
 The function is defined as follows:
 
     function nrg_full( 
-        label::String ,
-        calculation::String ,
-        L::Float64 ,
-        iterations::Int64 ,
-        cutoff_type::String ,
-        cutoff_magnitude::R ,
-        cg_o_dir::String ,
-        asym_dir::String ,
-        atom_config::Dict{String,Int64} ,
-        shell_config::Dict{String,Int64} ,
-        identityrep::String ,
-        epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
-        u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
-        hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
-        distributed::Bool=false,
-        z::Float64=0.0 ,
-        max_spin2::Int64=10 ,
-        channels_dos::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
-        discretization::String="campo2005" ,
-        tridiagonalization::String="chen1995" ,
-        enforce_particle_hole_symmetry::Bool=true ,
-        channel_etas::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
-        discretization::String="campo2005" ,
-        mine::Float64=0.0 ,
-        betabar::Float64=1.0 ,
-        spectral::Bool=false ,
-        spectral_broadening::Float64=1.0 ,
-        K_factor=2.0 ,
-        orbitalresolved::Bool=false,
-        compute_impmults::Bool=false 
-    ) where {R<:Real}
+                label::String ,
+                calculation::String ,
+                L::Float64 ,
+                iterations::Int64 ,
+                cutoff_type::String ,
+                cutoff_magnitude::R ,
+                cg_o_dir::String ,
+                multiplets_dir::String ,
+                impurity_config::Dict{String,Int64} ,
+                shell_config::Dict{String,Int64} ,
+                identityrep::String ,
+                epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
+                u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
+                hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
+                z::Float64=0.0 ,
+                max_spin2::Int64=10 ,
+                channels_dos::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
+                discretization::String="campo2005" ,
+                mine::Float64=0.0 ,
+                tridiagonalization::String="chen1995" ,
+                enforce_particle_hole_symmetry::Bool=true,
+                betabar::Float64=1.0 ,
+                spectral::Bool=false ,
+                spectral_broadening::Float64=0.5 ,
+                broadening_distribution::String="loggaussian" ,
+                K_factor::Float64=2.0 ,
+                compute_impmults::Bool=false ) where {R<:Real}
 
 The mandatory input parameters are:
 
@@ -367,15 +363,6 @@ $$
 
 The optional input parameters are:
 
-* `distributed::Bool=false`: Whether to perform the
-diagonalization at each NRG step in parallel
-(`distributed=true`) or not (`distributed=false`).
-Parallelization is implemented using the `@distributed` 
-macro provided by the `Distributed` package. As of
-now, serial calculations have been found to be faster 
-for every test performed and therefore it has not been
-extensively used or tested. It is adivised to leave it to
-its default value `distributed=false`.
 * `z::Float64=0.0`<a name="z"></a>: 
 Value of the twisting parameter $z$ used for averaging over
 various discretization grids in order to improve smoothness
@@ -413,28 +400,26 @@ thermodynamic calculations (see Phys. Rev. B 21, 1003). It
 defines the temperature for each NRG iteration.
 * `spectral::Bool=false`: Whether to compute spectral
 functions (`spectral=true`) or not (`spectral=false`).
-* `spectral_broadening::Float64=1.0`<a
+* `spectral_broadening::Float64=0.5`<a
 name="broadening"></a>: 
-Broadening factor applied to the Gaussian broadening of
-spectral functions. The default value is recommended unless
-the $z$-averaging is used (see [corresponding
-section](#z-averaging)), in which case the
-broadening should be around $1/N_{z}$, where $N_{z}$ is the
-number of $z$ values. This reduction allows to reduce
-overbroadening errors.
+Broadening factor applied in the smoothing of
+spectral functions. It should be selected according to the
+parameters of the system, the [broadening kernel](#broadening_distribution) 
+used and the number of $z$ values in the interleaved scheme 
+(see [corresponding section](#z-averaging)). The default
+value if generally a good choice for $\Lambda=2.0$ (`L`) and
+a log-gaussian broadening.
+* `broadening_distribution::String="loggaussian"`<a
+name="broadening_distribution"></a>:
+Broadening kernel used in the smoothing of spectral
+functions. The available options are `"gaussian"`,
+`"loggaussian"`, and `"lorentzian"`.
 * `K_factor::Float64=2.0`<a name="K"></a>: 
 Parameter $K$ used in spectral function calculations to
 define the energy $\omega$ for which to compute the spectral
 function at each NRG iteration, which is defined as
 $\omega=K\omega_{N}$, where $\omega_{N}$ is the energy scale
 associated to the $N$-th iteration.
-* `orbitalresolved::Bool=false`<a name="orbitalresolved"></a>: 
-Whether to compute orbital-resolved spectral functions
-(`orbitalresolved=true`) or not
-(`orbitalresolved=false`). In orbital-resolved
-calculations, the spectral function is computed
-separately for excitations belonging to each
-one-electron impurity multiplet.
 * `compute_impmults::Bool=false`: Whether to compute the
 thermodynamic weights $W_{m}(T)$ for each impurity multiplet
 $`m`$. This quantity is defined as
@@ -583,16 +568,14 @@ energy.
 
 The spectral function is computed when `spectral=true`. The
 calculations are performed as in J. Phys. Soc. Jpn. 58, pp.
-3666-3678, and a Gaussian broadening kernel is used to
-obtain smooth spectra. The parameters that affect the 
+3666-3678. The parameters that affect the 
 calculation of spectral functions are
-[`spectral_broadening`](#broadening), [`K_factor`](#K), and 
+[`spectral_broadening`](#broadening),
+[broadening_distribution](#broadening_distribution), [`K_factor`](#K), and 
 [`orbitalresolved`](#orbitalresolved).
 
-In orbital-resolved calculations, results for one-electron
-excitations are grouped by multiplets: excitations
-$f_\alpha^{(\dagger)}$ belonging to the multiplet
-$m_\alpha$, 
+Results for one-electron excitations are grouped by multiplets: excitations
+$f_\alpha^{(\dagger)}$ belonging to the multiplet $m_\alpha$, 
 
 $$
 \langle F | f_\alpha^{(\dagger)} | I \rangle,
