@@ -11,10 +11,10 @@ import Base.imag
 import Base.:-
 import Base.iszero
 
-const integral_steps::Int64 = 100000
-const delta::Float64 = 1e-4
-const integral_tolerance::Float64 = 1e-10
-const convergence_tolerance::Float64 = 1e-1
+const integral_steps = 100000
+const delta = 1e-4
+const integral_tolerance = 1e-10
+const convergence_tolerance = 1e-1
 
 
 # ------------- #
