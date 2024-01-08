@@ -19,15 +19,18 @@ function nrg_molecule(
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
+            spectral_temperature::Float64=0.0 ,
+            extra_iterations::Int64=0 ,
             operator::String="particle", # particle / spin_excitation
             K_factor::Float64=2.0 ,
-            etafac::Float64=1.0 ,
+            spectral_broadening::Float64=1.0 ,
             broadening_distribution::String="gaussian",
             orbitalresolved::Bool=false,
             only_j_diagonalization::Bool=false ,
+            dmnrg::Bool=false ,
             compute_impmults::Bool=false ,
             band_width::Float64=1.0 ,
-            scale_asymptotic=false ,
+            scale_asymptotic::Bool=true ,
             compute_selfenergy::Bool=false ) where {R<:Real}
 
     # strict defaults
@@ -559,6 +562,8 @@ function nrg_molecule(
     #%% excitation matrix %%#
     #   -----------------   #
 
+    impurity_operators = Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}()
+    spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}()
     if spectral
         print( "Computing excitation matrix... ") 
 
@@ -661,39 +666,80 @@ function nrg_molecule(
                 (q_a[1:3]...,q_a[end]) for (qbra,q_a,qket) in keys(pcg_atomic_excitations)
             ])
         end
-        if orbitalresolved 
-            Mred, AA = setup_redmat_AA_orbitalresolved(
-                        pcg_atomic_excitations ,
-                        multiplets_block ,
-                        multiplets_a_imp ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        irrEU ,
-                        oindex2dimensions ;
-                        verbose=false )
-        else 
-            Mred, AA = setup_redmat_AA(
-                        pcg_atomic_excitations ,
-                        multiplets_block ,
-                        multiplets_a_imp ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        irrEU ,
-                        oindex2dimensions ;
-                        verbose=false )
-            if compute_selfenergy 
-                Mred_se, AA_se = setup_selfenergy(
-                            Mred ,
-                            pcg_triple_excitations ,
-                            multiplets_block ,
-                            multiplets_a_imp ,
-                            cg_o_fullmatint ,
-                            cg_s_fullmatint ,
-                            irrEU ,
-                            oindex2dimensions ;
-                            verbose=false )
-            end
-        end
+
+        impurity_operators["particle"] = get_redmat3( 
+            pcg_atomic_excitations ,
+            multiplets_imp ,
+            multiplets_a_imp ,
+            cg_o_fullmatint ,
+            cg_s_fullmatint 
+        )
+        GG_a  = Set(G_a for (_,G_a,_) in keys(impurity_operators["particle"]))
+        G2R_a = Dict( 
+            G_a=>size(mat,2)
+            for G_a in GG_a
+            for ((_,Ga,_),mat) in impurity_operators["particle"]
+            if G_a==Ga 
+        )
+
+        extra_iterations = (dmnrg || iszero(spectral_temperature)) ? 0 : extra_iterations
+        spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}(
+            "spectral"=>Dict(
+            (G_a...,r_a)=>reduce(vcat,sort([[sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
+                for (G_a,R_a) in G2R_a for r_a in 1:R_a
+            )
+        )
+
+        add_correlation_contribution!(
+            spectral_functions["spectral"],
+            impurity_operators["particle"],
+            impurity_operators["particle"],
+            oindex2dimensions,
+            irrEU,
+            0 ,
+            broadening_distribution ,
+            spectral_broadening ,
+            iterscale(scale,L,0) ,
+            K_factor ; 
+            correlation_type="spectral",
+            T=spectral_temperature ,
+            limit_shell = iterations==0 ,
+            extra_iterations=extra_iterations
+        )
+
+        #if orbitalresolved 
+        #    Mred, AA = setup_redmat_AA_orbitalresolved(
+        #                pcg_atomic_excitations ,
+        #                multiplets_block ,
+        #                multiplets_a_imp ,
+        #                cg_o_fullmatint ,
+        #                cg_s_fullmatint ,
+        #                irrEU ,
+        #                oindex2dimensions ;
+        #                verbose=false )
+        #else 
+        #    Mred, AA = setup_redmat_AA(
+        #                pcg_atomic_excitations ,
+        #                multiplets_block ,
+        #                multiplets_a_imp ,
+        #                cg_o_fullmatint ,
+        #                cg_s_fullmatint ,
+        #                irrEU ,
+        #                oindex2dimensions ;
+        #                verbose=false )
+        #    if compute_selfenergy 
+        #        Mred_se, AA_se = setup_selfenergy(
+        #                    Mred ,
+        #                    pcg_triple_excitations ,
+        #                    multiplets_block ,
+        #                    multiplets_a_imp ,
+        #                    cg_o_fullmatint ,
+        #                    cg_s_fullmatint ,
+        #                    irrEU ,
+        #                    oindex2dimensions ;
+        #                    verbose=false )
+        #    end
+        #end
         #G0 = (2,1,2)
         #GM = (1,1,1)
         #GM_map = Dict(
@@ -728,22 +774,24 @@ function nrg_molecule(
             )[1][1]
             ground_multiplet = (ground_irrep...,1)
             @show ground_multiplet
-            J = compute_J_matrix( Mred , 
+            J = compute_J_matrix( impurity_operators["particle"] , 
                                   irrEU_notrescaled , 
                                   ground_multiplet , 
                                   number_of_impurity_orbitals )
             jj,U = diagonalize_J( J )
             V2 = abs2.(diag(collect(hop_symparams)[1][2]))
             jjV2 = jj[1:number_of_shell_orbitals].*V2
+            positivejjV2 = filter( x->x>0 , jjV2 )
             rhoJ = 0.5*(sum(filter(x->x>0,jjV2)))
             first_excited_energy = minimum(filter( 
                 x->x>0 ,
                 [E[1] for (E,U) in values(irrEU_notrescaled)]
             ))
+            kondotemps = 0.4 * first_excited_energy .* sqrt.(abs.(0.5.*positivejjV2)) .* exp.(-ground_multiplet[3]./(2.0 .* positivejjV2))
             kondotemp = 0.4*
                         first_excited_energy*
                         sqrt(abs(rhoJ))*
-                        exp(-ground_multiplet[3]/rhoJ)
+                        exp(-ground_multiplet[3]/(2*rhoJ))
             println( "-----------------------------" )
             println( "Magnetic coupling constants:" )
             print( "j = ")
@@ -754,6 +802,8 @@ function nrg_molecule(
             println( rhoJ )
             print( "estimated Kondo temperature: ")
             println( kondotemp )
+            println( "separate Kondo temperatures: ")
+            @show kondotemps
             println( "-----------------------------" )
             println( "Unitary matrix U" )
             for i in axes(U,1)
@@ -768,11 +818,24 @@ function nrg_molecule(
             println( "-----------------------------" )
             println()
             println( "Input orbital rotation" )
-            for i in 1:size(U,1)
+            for i in axes(U,1)
 
                 for j in 1:size(U,2)
                     print( " " )
                     print( real(orbital_rotation[i,j]) )
+                end
+                println()
+
+            end
+            println( "-----------------------------" )
+            println()
+            println( "Combined rotation" )
+            c = orbital_rotation*U
+            for i in axes(c,1)
+
+                for j in axes(c,2)
+                    print( " " )
+                    print( real(c[i,j]) )
                 end
                 println()
 
@@ -862,51 +925,75 @@ function nrg_molecule(
     end
 
     if spectral
-        if orbitalresolved
-            Mred, AA = update_redmat_AA_CGsummethod_orbitalresolved(
-                        Mred ,
-                        irrEU ,
-                        combinations_uprima ,
-                        collect(multiplets_a_imp) ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        Karray_orbital ,
-                        Karray_spin ,
-                        AA ,
-                        oindex2dimensions ;
-                        verbose=false )
-            print_A( AA[end] )
+        impurity_operators["particle"] = update_operator( 
+            impurity_operators["particle"], 
+            collect(multiplets_a_imp) ,
+            Karray_orbital ,
+            Karray_spin ,
+            combinations_uprima ,
+            irrEU 
+        )
+        add_correlation_contribution!(
+            spectral_functions["spectral"],
+            impurity_operators["particle"],
+            impurity_operators["particle"],
+            oindex2dimensions,
+            irrEU,
+            1 ,
+            broadening_distribution ,
+            spectral_broadening ,
+            iterscale(scale,L,1) ,
+            K_factor ; 
+            correlation_type="spectral",
+            T=spectral_temperature ,
+            limit_shell = iterations==1 ,
+            extra_iterations=extra_iterations
+        )
+        #if orbitalresolved
+        #    Mred, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+        #                Mred ,
+        #                irrEU ,
+        #                combinations_uprima ,
+        #                collect(multiplets_a_imp) ,
+        #                cg_o_fullmatint ,
+        #                cg_s_fullmatint ,
+        #                Karray_orbital ,
+        #                Karray_spin ,
+        #                AA ,
+        #                oindex2dimensions ;
+        #                verbose=false )
+        #    print_A( AA[end] )
 
-        else
-            Mred, AA = update_redmat_AA_CGsummethod(
-                        Mred ,
-                        irrEU ,
-                        combinations_uprima ,
-                        collect(multiplets_a_imp) ,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        Karray_orbital ,
-                        Karray_spin ,
-                        AA ,
-                        oindex2dimensions ;
-                        verbose=false )
-            if compute_selfenergy
-                Mred_se, AA_se = update_selfenergy_CGsummethod(
-                            Mred ,
-                            Mred_se ,
-                            irrEU ,
-                            combinations_uprima ,
-                            collect(multiplets_a_imp) ,
-                            cg_o_fullmatint ,
-                            cg_s_fullmatint ,
-                            Karray_orbital ,
-                            Karray_spin ,
-                            AA_se ,
-                            oindex2dimensions ;
-                            verbose=false )
+        #else
+        #    Mred, AA = update_redmat_AA_CGsummethod(
+        #                Mred ,
+        #                irrEU ,
+        #                combinations_uprima ,
+        #                collect(multiplets_a_imp) ,
+        #                cg_o_fullmatint ,
+        #                cg_s_fullmatint ,
+        #                Karray_orbital ,
+        #                Karray_spin ,
+        #                AA ,
+        #                oindex2dimensions ;
+        #                verbose=false )
+        #    if compute_selfenergy
+        #        Mred_se, AA_se = update_selfenergy_CGsummethod(
+        #                    Mred ,
+        #                    Mred_se ,
+        #                    irrEU ,
+        #                    combinations_uprima ,
+        #                    collect(multiplets_a_imp) ,
+        #                    cg_o_fullmatint ,
+        #                    cg_s_fullmatint ,
+        #                    Karray_orbital ,
+        #                    Karray_spin ,
+        #                    AA_se ,
+        #                    oindex2dimensions ;
+        #                    verbose=false )
 
-            end
-        end
+        #    end
+        #end
     end
 
     #   =============== #
@@ -946,12 +1033,16 @@ function nrg_molecule(
                        mine=mine ,
                        z=z ,
                        spectral=true ,
-                       spectral_broadening=etafac ,
+                       spectral_functions=spectral_functions ,
+                       impurity_operators=impurity_operators ,
+                       spectral_temperature=spectral_temperature ,
+                       spectral_broadening=spectral_broadening ,
                        broadening_distribution=broadening_distribution,
                        K_factor=K_factor ,
-                       orbitalresolved=orbitalresolved,
-                       M=Mred ,
-                       AA=AA , 
+                       orbitalresolved=orbitalresolved ,
+                       extra_iterations=extra_iterations ,
+                       #M=Mred ,
+                       #AA=AA , 
                        Karray_orbital=Karray_orbital ,
                        Karray_spin=Karray_spin ,
                        multiplets_atomhop=collect(multiplets_a_imp) ,

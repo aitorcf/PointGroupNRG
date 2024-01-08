@@ -720,7 +720,7 @@ function construct_custom_orbital_space(
     return (basis,multiplets,symstates_total)
 
 end
-        
+
 function nrg_full( 
             label::String ,
             calculation::String ,
@@ -736,7 +736,7 @@ function nrg_full(
             epsilon_symparams::Dict{ String , Vector{ComplexF64} } ,
             u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
             hop_symparams::Dict{ String , Matrix{ComplexF64} } ;
-            distributed::Bool=false,
+            distributed::Bool=false ,
             z::Float64=0.0 ,
             max_spin2::Int64=10 ,
             channels_dos::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
@@ -746,10 +746,15 @@ function nrg_full(
             mine::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
-            spectral_broadening::Float64=1.0 ,
+            spectral_broadening::Float64=0.5 ,
+            broadening_distribution::String="loggaussian" ,
             K_factor::Float64=2.0 ,
-            orbitalresolved::Bool=false,
-            compute_impmults::Bool=false ) where {R<:Real}
+            orbitalresolved::Bool=false ,
+            spectral_temperature::Float64=0.0 ,
+            extra_iterations::Int64=0 ,
+            dmnrg::Bool=false ,
+            compute_impmults::Bool=false ,
+            scale_asymptotic::Bool=true ) where {R<:Real}
 
     # defaults
     precompute_iaj = true
@@ -883,13 +888,40 @@ function nrg_full(
     # largest among the first asymptotic codiagonal coupling terms, is just 
     # 1.0 because for the sake of generality we do not assume the asymptotic
     # form (yet?).
-    scale::Float64 = 1.0 
+    scale::Float64 = 1.0
+    if scale_asymptotic
+        codiagonals_first = channels_codiagonals[10][1][1]
+        scale = codiagonals_first
+        channels_codiagonals = [
+            # n (iterations) loop
+            Dict(# I_o loop
+                I_o => [# r_o loop
+                    r_o_multiplet_codiagonals[n]/codiagonals_first
+                    for (r_o,(_,r_o_multiplet_codiagonals)) in enumerate(I_o_multiplets_couplings)
+                ]
+                for (I_o,I_o_multiplets_couplings) in channels_tridiagonal_int
+            )
+            for n in 1:(iterations-1)
+        ]
+    end
+
+    # adapt iterations to T-dependent spectral function calculation
+    if spectral && !iszero(spectral_temperature) && !dmnrg
+        println()
+        _,n_limit = findmin(abs.([iterscale(scale,L,n) for n in 0:iterations].-betabar*spectral_temperature))
+        if n_limit>iterations
+            error( "Not enough iterations to reach temperature limit. Aborting..." )
+        end
+        println( "Defined T: $spectral_temperature")
+        println( "Iterations cut from $iterations to $n_limit for the effective chain to reach the energy scale $(iterscale(scale,L,n_limit))." )
+        println()
+        iterations = n_limit
+    end
 
     #   ------------------- #
     #%% rescaled parameters #
     #   ------------------- #
     oindices2irreps = Dict( v=>k for (k,v) in oirreps2indices )
-    println()
     epsilon_symparams = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in epsilon_symparams )
     u_symparams       = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in u_symparams )
     A_L = 0.5*(L+1)/(L-1)*log(L)  # correction factor
@@ -1151,30 +1183,77 @@ function nrg_full(
     #   -------- #
     #%% spectral #
     #   -------- #
-    if spectral 
+    impurity_operators = Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}()
+    spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}()
+    if spectral
 
-        M = pcgred_atom 
-        part0 = get_partition0(irrEU,oindex2dimensions)
-        if orbitalresolved 
-            A = redM2A_orbitalresolved( 
-                    M,
-                    collect(multiplets_a_atom),
-                    cg_o_fullmatint,
-                    cg_s_fullmatint,
-                    irrEU,
-                    part0
+        impurity_operators["particle"] = pcgred_atom
+        GG_a  = Set(G_a for (_,G_a,_) in keys(pcgred_atom))
+        G2R_a = Dict( 
+            G_a=>size(mat,2)
+            for G_a in GG_a
+            for ((_,Ga,_),mat) in impurity_operators["particle"]
+            if G_a==Ga 
+        )
+
+        extra_iterations = (dmnrg || iszero(spectral_temperature)) ? 0 : extra_iterations
+        spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}(
+            "spectral"=>Dict(
+            (G_a...,r_a)=>reduce(vcat,sort([[sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
+                for (G_a,R_a) in G2R_a for r_a in 1:R_a
             )
-        else
-            A = redM2A( 
-                    M,
-                    collect(multiplets_a_atom),
-                    cg_o_fullmatint,
-                    cg_s_fullmatint,
-                    irrEU,
-                    part0
-            )
-        end
-        AA = [A]
+        )
+
+        add_correlation_contribution!(
+            spectral_functions["spectral"],
+            impurity_operators["particle"],
+            impurity_operators["particle"],
+            oindex2dimensions,
+            irrEU,
+            0 ,
+            broadening_distribution ,
+            spectral_broadening ,
+            iterscale(scale,L,0) ,
+            K_factor ; 
+            correlation_type="spectral",
+            T=spectral_temperature ,
+            limit_shell = iterations==0 ,
+            extra_iterations=extra_iterations
+        )
+        #compute_correlation_peaks(
+        #    impurity_operators["particle"],
+        #    impurity_operators["particle"],
+        #    oindex2dimensions,
+        #    irrEU,
+        #    z,
+        #    0 ;
+        #    correlation_type="spectral",
+        #    T=spectral_temperature,
+        #    iteration_scale=iterscale(scale,L,0)
+        #)
+
+        #M = pcgred_atom 
+        #part0 = get_partition0(irrEU,oindex2dimensions)
+        #if orbitalresolved 
+        #    A = redM2A_orbitalresolved( 
+        #            M,
+        #            collect(multiplets_a_atom),
+        #            cg_o_fullmatint,
+        #            cg_s_fullmatint,
+        #            irrEU,
+        #            part0
+        #    )
+        #else
+        #    A = redM2A( 
+        #            M,
+        #            collect(multiplets_a_atom),
+        #            cg_o_fullmatint,
+        #            cg_s_fullmatint,
+        #            irrEU,
+        #            part0
+        #    )
+        #end
+        #AA = [A]
 
         Mo_tot = length(oirreps2indices) 
         II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_atom )]))
@@ -1250,33 +1329,68 @@ function nrg_full(
     #%% update spectral information # 
     #   --------------------------- #
     if spectral 
-        if orbitalresolved 
-            M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
-                    M,
-                    irrEU ,
-                    combinations_uprima ,
-                    collect(multiplets_a_atom) ,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ,
-                    Karray_orbital ,
-                    Karray_spin ,
-                    AA ,
-                    oindex2dimensions ;
-                    verbose=false )
-        else
-            M, AA = update_redmat_AA_CGsummethod(
-                    M,
-                    irrEU ,
-                    combinations_uprima ,
-                    collect(multiplets_a_atom) ,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ,
-                    Karray_orbital ,
-                    Karray_spin ,
-                    AA ,
-                    oindex2dimensions ;
-                    verbose=false )
-        end
+
+        impurity_operators["particle"] = update_operator( impurity_operators["particle"], 
+                                                          collect(multiplets_a_atom) ,
+                                                          Karray_orbital ,
+                                                          Karray_spin ,
+                                                          combinations_uprima ,
+                                                          irrEU )
+        add_correlation_contribution!(
+            spectral_functions["spectral"],
+            impurity_operators["particle"],
+            impurity_operators["particle"],
+            oindex2dimensions,
+            irrEU,
+            1 ,
+            broadening_distribution ,
+            spectral_broadening ,
+            iterscale(scale,L,1) ,
+            K_factor ; 
+            correlation_type="spectral",
+            T=spectral_temperature ,
+            limit_shell = iterations==1 ,
+            extra_iterations=extra_iterations
+        )
+        #compute_correlation_peaks(
+        #    impurity_operators["particle"],
+        #    impurity_operators["particle"],
+        #    oindex2dimensions,
+        #    irrEU,
+        #    z,
+        #    1 ;
+        #    correlation_type="spectral",
+        #    T=spectral_temperature,
+        #    iteration_scale=iterscale(scale,L,1)
+        #)
+
+        #if orbitalresolved 
+        #    M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+        #            M,
+        #            irrEU ,
+        #            combinations_uprima ,
+        #            collect(multiplets_a_atom) ,
+        #            cg_o_fullmatint ,
+        #            cg_s_fullmatint ,
+        #            Karray_orbital ,
+        #            Karray_spin ,
+        #            AA ,
+        #            oindex2dimensions ;
+        #            verbose=false )
+        #else
+        #    M, AA = update_redmat_AA_CGsummethod(
+        #            M,
+        #            irrEU ,
+        #            combinations_uprima ,
+        #            collect(multiplets_a_atom) ,
+        #            cg_o_fullmatint ,
+        #            cg_s_fullmatint ,
+        #            Karray_orbital ,
+        #            Karray_spin ,
+        #            AA ,
+        #            oindex2dimensions ;
+        #            verbose=false )
+        #end
     end
 
 
@@ -1289,6 +1403,7 @@ function nrg_full(
     println( ":::::::::::::::::::::" )
     println()
     if !spectral
+
         nrg = NRG( label ,
                    calculation ,
                    iterations,
@@ -1322,8 +1437,99 @@ function nrg_full(
                    mult2index=mult2index ,
                    orbital_multiplets=orbital_multiplets ,
                    mm_i=mm_i ,
-                   channels_diagonals )
-    else 
+                   channels_diagonals=channels_diagonals )
+    elseif dmnrg
+
+        nrg = NRG( label ,
+                   calculation ,
+                   iterations,
+                   cutoff_type,
+                   cutoff_magnitude,
+                   L,
+                   hop_symparams_int,
+                   copy(irrEU),
+                   multiplets_shell,
+                   cg_o_fullmatint,
+                   cg_s_fullmatint,
+                   keys_as_dict_o ,
+                   keys_as_dict_s ,
+                   Csum_o_array ,
+                   Csum_s_array ,
+                   Bsum_o_array ,
+                   Bsum_s_array ,
+                   pcgred_shell ,
+                   collect(multiplets_a_shell), 
+                   copy(combinations_uprima),
+                   betabar,
+                   oindex2dimensions,
+                   channels_codiagonals ,
+                   max_spin2 ;
+                   mine=mine ,
+                   distributed=distributed ,
+                   z=z ,
+                   dmnrg=dmnrg ,
+                   dmnrg_run=1 ,
+                   scale=Float64(scale) ,
+                   precompute_iaj=precompute_iaj ,
+                   compute_impmults=compute_impmults ,
+                   mult2index=mult2index ,
+                   orbital_multiplets=orbital_multiplets ,
+                   mm_i=mm_i ,
+                   channels_diagonals=channels_diagonals )
+
+        NRG( label ,
+             calculation ,
+             iterations,
+             cutoff_type,
+             cutoff_magnitude,
+             L,
+             hop_symparams_int,
+             irrEU,
+             multiplets_shell,
+             cg_o_fullmatint,
+             cg_s_fullmatint,
+             keys_as_dict_o ,
+             keys_as_dict_s ,
+             Csum_o_array ,
+             Csum_s_array ,
+             Bsum_o_array ,
+             Bsum_s_array ,
+             pcgred_shell ,
+             collect(multiplets_a_shell), 
+             combinations_uprima,
+             betabar,
+             oindex2dimensions,
+             channels_codiagonals ,
+             max_spin2 ;
+             mine=mine ,
+             distributed=distributed ,
+             z=z ,
+             dmnrg=dmnrg ,
+             dmnrg_run=2 ,
+             density_matrices=nrg.density_matrices ,
+             spectral=true ,
+             spectral_functions=spectral_functions ,
+             spectral_broadening=spectral_broadening ,
+             broadening_distribution=broadening_distribution ,
+             K_factor=K_factor ,
+             orbitalresolved=orbitalresolved ,
+             impurity_operators=impurity_operators ,
+             spectral_temperature=spectral_temperature ,
+             #M=M,
+             #AA=AA , 
+             Karray_orbital=Karray_orbital ,
+             Karray_spin=Karray_spin ,
+             multiplets_atomhop=collect(multiplets_a_atom) ,
+             scale=Float64(scale) ,
+             precompute_iaj=precompute_iaj ,
+             compute_impmults=compute_impmults ,
+             mult2index=mult2index ,
+             orbital_multiplets=orbital_multiplets ,
+             mm_i=mm_i ,
+             channels_diagonals=channels_diagonals )
+
+    elseif spectral
+
         nrg = NRG( label ,
                    calculation ,
                    iterations,
@@ -1353,11 +1559,16 @@ function nrg_full(
                    z=z ,
                    verbose=false ,
                    spectral=true ,
+                   spectral_functions=spectral_functions ,
                    spectral_broadening=spectral_broadening ,
+                   broadening_distribution=broadening_distribution ,
                    K_factor=K_factor ,
                    orbitalresolved=orbitalresolved ,
-                   M=M,
-                   AA=AA , 
+                   impurity_operators=impurity_operators ,
+                   spectral_temperature=spectral_temperature ,
+                   extra_iterations=extra_iterations ,
+                   #M=M,
+                   #AA=AA , 
                    Karray_orbital=Karray_orbital ,
                    Karray_spin=Karray_spin ,
                    multiplets_atomhop=collect(multiplets_a_atom) ,
@@ -1367,7 +1578,7 @@ function nrg_full(
                    mult2index=mult2index ,
                    orbital_multiplets=orbital_multiplets ,
                    mm_i=mm_i ,
-                   channels_diagonals )
+                   channels_diagonals=channels_diagonals )
     end
 
     println()

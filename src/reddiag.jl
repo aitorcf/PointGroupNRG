@@ -61,7 +61,7 @@ function get_redmat3( dictmat ,
         (N_a,I_a,S_a) = G_a
         
         # filter irrep combination
-        N_i==(N_j+1)                  || continue 
+        N_i==(N_j+N_a)                || continue 
         ((I_a,I_j,I_i) in cg_o_combs) || continue
         ((S_a,S_j,S_i) in cg_s_combs) || continue
 
@@ -1477,20 +1477,6 @@ function compute_CG_Csum_orbital(
 
     # orbital sum 
     sum_o::ComplexF64 = zero(ComplexF64)
-    #@inbounds for i_u  in 1:dI_u,
-    #              i_up in 1:dI_u,
-    #              i_v  in 1:dI_v,
-    #              i_ij in 1:dI_ij,
-    #              i_mu in 1:dI_mu,
-    #              i_nu in 1:dI_nu,
-    #              i_a  in 1:dI_a
-
-    #    sum_o += cgomat_avu[i_a,i_v,i_up]*
-    #             conj(cgomat_muiu[i_mu,i_ij,i_u])*
-    #             cgomat_nujv[i_nu,i_ij,i_v]*
-    #             conj(cgomat_anumu[i_a,i_nu,i_mu])
-
-    #end
     @inbounds for i_u  in 1:dI_u,
                   i_v  in 1:dI_v,
                   i_ij in 1:dI_ij,
@@ -1545,20 +1531,6 @@ function compute_CG_Csum_spin(
 
     # spin sum 
     sum_s::ComplexF64 = zero(ComplexF64)
-    #@inbounds for si_u  in 1:dS_u,
-    #              si_up in 1:dS_u,
-    #              si_v  in 1:dS_v,
-    #              si_ij in 1:dS_ij,
-    #              si_mu in 1:dS_mu,
-    #              si_nu in 1:dS_nu,
-    #              si_a  in 1:dS_a
-
-    #    sum_s += cgsmat_avu[si_a,si_v,si_up]*
-    #             conj(cgsmat_muiu[si_mu,si_ij,si_u])*
-    #             cgsmat_nujv[si_nu,si_ij,si_v]*
-    #             conj(cgsmat_anumu[si_a,si_nu,si_mu])
-
-    #end
     @inbounds for si_u  in 1:dS_u,
                   si_v  in 1:dS_v,
                   si_ij in 1:dS_ij,
@@ -1791,20 +1763,6 @@ function compute_Ksum_orbital(
     cgomat_aji  = @view cg_o_fullmatint[(I_a,I_j,I_i)][:,:,:]
 
     osum::ComplexF64 = zero(ComplexF64)
-    #for i_u    in 1:dI_u,
-    #    i_ut   in 1:dI_u,
-    #    i_v    in 1:dI_v,
-    #    i_a    in 1:dI_a,
-    #    i_munu in 1:dI_munu,
-    #    i_i    in 1:dI_i,
-    #    i_j    in 1:dI_j 
-
-    #    osum += cgomat_avu[i_a,i_v,i_ut]*
-    #            conj(cgomat_muiu[i_munu,i_i,i_u])*
-    #            cgomat_nujv[i_munu,i_j,i_v]*
-    #            conj(cgomat_aji[i_a,i_j,i_i])
-    #    
-    #end
     @inbounds for i_u    in 1:dI_u,
                   i_v    in 1:dI_v,
                   i_a    in 1:dI_a,
@@ -1849,20 +1807,6 @@ function compute_Ksum_spin(
     cgsmat_aji  = @view cg_s_fullmatint[(S_a,S_j,S_i)][:,:,:]
 
     ssum::ComplexF64 = zero(ComplexF64)
-    #for si_u    in 1:dS_u,
-    #    si_ut   in 1:dS_u,
-    #    si_v    in 1:dS_v,
-    #    si_a    in 1:dS_a,
-    #    si_munu in 1:dS_munu,
-    #    si_i    in 1:dS_i,
-    #    si_j    in 1:dS_j 
-
-    #    ssum += cgsmat_avu[si_a,si_v,si_ut]*
-    #            conj(cgsmat_muiu[si_munu,si_i,si_u])*
-    #            cgsmat_nujv[si_munu,si_j,si_v]*
-    #            conj(cgsmat_aji[si_a,si_j,si_i])
-    #    
-    #end
     @inbounds for si_u    in 1:dS_u,
                   si_v    in 1:dS_v,
                   si_a    in 1:dS_a,
@@ -1914,9 +1858,8 @@ end
 function compute_Kdict_spin( 
             cg_s_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,3} },
             Ms_tot::Int64 ,
-            Ms_shell::Int64 )
-
-    S_a = 1
+            Ms_shell::Int64 ;
+            SS_a::Vector{Int64}=Int64[1] )
 
     Kdict_spin::Dict{ NTuple{6,Int64} , ComplexF64 } = Dict()
 
@@ -1924,7 +1867,8 @@ function compute_Kdict_spin(
         S_v    in 0:Ms_tot,
         S_i    in 0:Ms_tot,
         S_j    in 0:Ms_tot,
-        S_munu in 0:Ms_shell
+        S_munu in 0:Ms_shell,
+        S_a    in SS_a
 
         Kdict_spin[(S_u,S_v,S_a,S_munu,S_i,S_j)] = 
             compute_Ksum_spin(
@@ -1989,7 +1933,8 @@ function compute_Ksum_arrays(
             Mo_tot::Int64 ,
             II_a::Vector{Int64} ,
             Ms_tot::Int64 ,
-            Ms_shell::Int64 )
+            Ms_shell::Int64 ;
+            SS_a::Vector{Int64}=Int64[1] )
 
     Kdict_orbital = compute_Kdict_orbital(
                         oindex2dimensions ,
@@ -1999,7 +1944,8 @@ function compute_Ksum_arrays(
     Kdict_spin    = compute_Kdict_spin( 
                         cg_s_fullmatint ,
                         Ms_tot ,
-                        Ms_shell )
+                        Ms_shell ;
+                        SS_a=SS_a)
 
     Karray_orbital = Kdict2array_orbital( Kdict_orbital )
     Karray_spin    = Kdict2array_spin( Kdict_spin )

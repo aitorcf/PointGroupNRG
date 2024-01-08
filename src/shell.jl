@@ -630,7 +630,7 @@ function cut_off!(
             minmult::Int64=0 , 
             mine::Float64=-1.0 ,
             verbose::Bool=true ,
-            M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict()) where {T<:Number}
+            M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }()) where {T<:Number}
     # input 
     # - irrEU : G => (E,U)
     # - type : "multiplet" --> keep a limited number of lowest-energy multiplets
@@ -673,21 +673,6 @@ function cut_off!(
 
             kept      = map( x->x[1] , mm_kept )
             discarded = map( x->x[1] , mm_discarded )
-
-            #if safeguard
-
-            #    # append safeguard to kept
-            #    append!( 
-            #        kept , 
-            #        IntMultiplet[ 
-            #            mm[i][1] 
-            #            for i in (cutoff+1):length(cutoff)
-            #            if (isapprox(mm[i][2],mm[cutoff][2];atol=safeguard_tol ) && (cutoff+i)<=safeguard_max)
-            #        ] 
-            #    )
-            #end
-            #discarded = map( x->x[1] , 
-            #                 mm[(cutoff+length(safeguard)+1):end] )
         end
 
     # energy cutoff
@@ -720,9 +705,9 @@ function cut_off!(
             continue
         end
         # U does not need cutoff (multiplets run over)
-        irrEU[G] = ( E[1:N] , U )
+        irrEU[G] = ( E[1:N] , U[:,1:N] )
     end
-    
+
     if length(M)!==0
         for ((G_u,G_a,G_v),uavmat) in M 
             if !(haskey(irrEU,G_u) && haskey(irrEU,G_v)) 
@@ -858,11 +843,15 @@ function NRG( label::String ,
               mine::Float64=0.0 ,
               z::Float64=0.0 ,
               spectral::Bool=false ,
+              spectral_functions::Dict{String,Dict{IntMultiplet,Matrix{Float64}}}=Dict{String,Dict{IntMultiplet,Matrix{Float64}}}() ,
               K_factor::Float64=2.0 ,
               spectral_method::String="sakai1989",
               spectral_broadening::Float64=1.0 ,
               broadening_distribution::String="gauss",
               orbitalresolved::Bool=false ,
+              dmnrg::Bool=false ,
+              dmnrg_run::Int64=1 ,
+              density_matrices::Vector{Dict{IntIrrep,Matrix{Float64}}}=Dict{IntIrrep,Matrix{Float64}}[] ,
               M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
               AA::Vector{T}=[] ,
               Karray_orbital::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) , 
@@ -878,7 +867,10 @@ function NRG( label::String ,
               channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[] ,
               compute_selfenergy::Bool=false ,
               Mred_se::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
-              AA_se::Vector{T}=[] ) where {T}
+              AA_se=[] ,
+              impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}() ,
+              spectral_temperature::Float64=0.0 ,
+              extra_iterations::Int64=0 ) where {T}
 
     println( "=============" )
     println( "NRG PROCEDURE" )
@@ -916,6 +908,11 @@ function NRG( label::String ,
     # create spectral directory
     isdir("spectral") || mkdir("spectral")
 
+    # diagonalization matrices for dm-nrg
+    diagonalizers::Vector{Dict{IntIrrep,Matrix{ComplexF64}}} = Dict{IntIrrep,Matrix{ComplexF64}}[]
+    combinations_uprima_train = []
+    multiplets_kept_train::Vector{Set{IntMultiplet}} = Set{IntMultiplet}[]
+
     # NRG iterations
     nrg_performance = @timed for n in 2:iterations
 
@@ -933,7 +930,8 @@ function NRG( label::String ,
                                                   minmult=minmult ,
                                                   mine=mine ,
                                                   verbose=false ,
-                                                  M=M )
+                                                  M=!iszero(length(impurity_operators)) ? impurity_operators["particle"] : Dict{IntTripleG,Array{ComplexF64,3}}() )
+
         # print info
         number_kept_multiplets = length(multiplets_block)
         number_kept_states = sum( (oindex2dimensions[m[2]]*(m[3]+1)) for m in multiplets_block )
@@ -961,14 +959,6 @@ function NRG( label::String ,
             I_o => diagm(ComplexF64.(channels_codiagonals[n-1][I_o])) 
             for I_o in keys(channels_codiagonals[1])
         )
-        #if discretization=="lanczos"
-        #    hop_symparams = Dict( k=>diagm(ComplexF64.([xi_symparams[k][i][n-1]
-        #                                                for i in 1:length(xi_symparams[k])]))
-        #                          for (k,v) in xi_symparams )
-        #else
-        #    hop_symparams = Dict( k=>ComplexF64.(xi[n-1]*Matrix(LinearAlgebra.I,size(v)...)) # at n=2, we want ξ[1]=ξ_0
-        #                          for (k,v) in hop_symparams )
-        #end
         println( "CONDUCTION COUPLING TERMS" )
         println( "Codiagonals (hoppings)")
         @printf "  %-8s  %-10s  %-s\n" "orbital" "multiplet" "amplitude"
@@ -1033,6 +1023,13 @@ function NRG( label::String ,
 
         # store performance
         push!( diagonalization_performances , diagonalization_performance )
+        push!( combinations_uprima_train , combinations_uprima )
+        push!( multiplets_kept_train , multiplets_block )
+
+        # diagonalization matrices for dm-nrg
+        if (dmnrg && dmnrg_run==1)
+            push!( diagonalizers , Dict( G=>U for (G,(_,U)) in irrEU ) )
+        end
 
         # spectrum 
         if write_spectrum
@@ -1057,11 +1054,6 @@ function NRG( label::String ,
         #
         # iteration temperature
         temperature = compute_temperature_newdiscretization(n,L,betabar,scale)
-        #if discretization!=="lanczos" 
-        #    temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization )
-        #elseif discretization=="lanczos" 
-        #    temperature = compute_temperature( n , L , betabar ; z=z , discretization=discretization , first_asymptotic_hopping_amplitude=ebar[1] )
-        #end
         # compute thermodynamic variables
         magnetic_susceptibility = compute_magnetic_susceptibility( irrEU , betabar , oindex2dimensions )
         entropy = compute_entropy( irrEU , betabar , oindex2dimensions )
@@ -1092,57 +1084,143 @@ function NRG( label::String ,
         # spectral function calculation
         if spectral 
 
-            if orbitalresolved
-
-                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
-                            M ,
-                            irrEU ,
-                            combinations_uprima ,
-                            collect(multiplets_atomhop) ,
-                            cg_o_fullmatint ,
-                            cg_s_fullmatint ,
-                            Karray_orbital ,
-                            Karray_spin ,
-                            AA ,
-                            oindex2dimensions ;
-                            verbose=false )
-
-            else 
-
-                spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod(
-                            M ,
-                            irrEU ,
-                            combinations_uprima ,
-                            collect(multiplets_atomhop) ,
-                            cg_o_fullmatint ,
-                            cg_s_fullmatint ,
-                            Karray_orbital ,
-                            Karray_spin ,
-                            AA ,
-                            oindex2dimensions ;
-                            verbose=false )
-
-                if compute_selfenergy
-                    Mred_se, AA_se = update_selfenergy_CGsummethod(
-                                M ,
-                                Mred_se ,
-                                irrEU ,
-                                combinations_uprima ,
-                                collect(multiplets_atomhop) ,
-                                cg_o_fullmatint ,
-                                cg_s_fullmatint ,
-                                Karray_orbital ,
-                                Karray_spin ,
-                                AA_se ,
-                                oindex2dimensions ;
-                                verbose=false )
-
+            spectral_performance = @timed begin
+                impurity_operators["particle"] = update_operator( impurity_operators["particle"], 
+                                                                  collect(multiplets_atomhop) ,
+                                                                  Karray_orbital ,
+                                                                  Karray_spin ,
+                                                                  combinations_uprima ,
+                                                                  irrEU )
+                multiplets_kept = Set{IntMultiplet}()
+                multiplets_discarded = Set{IntMultiplet}()
+                if dmnrg_run==2
+                    irrEU_copy = copy(irrEU)
+                    cut = n==iterations ? sum( (iszero(e) ? 1 : 0) for (_,(E,_)) in irrEU for e in E ) : cutoff_magnitude
+                    (multiplets_kept,multiplets_discarded) = cut_off!( irrEU ; 
+                                                                       type=cutoff_type , 
+                                                                       cutoff=cut , 
+                                                                       safeguard=(n!==iterations) ,
+                                                                       minmult=minmult ,
+                                                                       mine=mine )
+                    irrEU = irrEU_copy
                 end
+                add_correlation_contribution!(
+                    spectral_functions["spectral"],
+                    impurity_operators["particle"],
+                    impurity_operators["particle"],
+                    oindex2dimensions,
+                    irrEU,
+                    n ,
+                    broadening_distribution ,
+                    spectral_broadening ,
+                    iterscale(scale,L,n) ,
+                    K_factor ; 
+                    correlation_type="spectral",
+                    T=spectral_temperature ,
+                    limit_shell = n==iterations ,
+                    extra_iterations=extra_iterations ,
+                    density_matrix = dmnrg_run==2 ? density_matrices[n] : Dict{IntIrrep,Matrix{Float64}}() ,
+                    multiplets_kept=collect(multiplets_kept) ,
+                    multiplets_discarded=collect(multiplets_discarded) ,
+                    L=L,
+                    scale=scale
+                )
+                #compute_correlation_peaks(
+                #    impurity_operators["particle"],
+                #    impurity_operators["particle"],
+                #    oindex2dimensions,
+                #    irrEU,
+                #    z,
+                #    n;
+                #    correlation_type="spectral",
+                #    T=spectral_temperature,
+                #    iteration_scale=iterscale(scale,L,n),
+                #    use_density_matrix=(dmnrg && dmnrg_run==2)
+                #)
             end
+
+
+            #if orbitalresolved
+
+            #    spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
+            #                M ,
+            #                irrEU ,
+            #                combinations_uprima ,
+            #                collect(multiplets_atomhop) ,
+            #                cg_o_fullmatint ,
+            #                cg_s_fullmatint ,
+            #                Karray_orbital ,
+            #                Karray_spin ,
+            #                AA ,
+            #                oindex2dimensions ;
+            #                verbose=false )
+
+            #else 
+
+            #    if !dmnrg
+
+            #        spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod(
+            #                    M ,
+            #                    irrEU ,
+            #                    combinations_uprima ,
+            #                    collect(multiplets_atomhop) ,
+            #                    cg_o_fullmatint ,
+            #                    cg_s_fullmatint ,
+            #                    Karray_orbital ,
+            #                    Karray_spin ,
+            #                    AA ,
+            #                    oindex2dimensions ;
+            #                    verbose=false )
+
+            #    elseif dmnrg && dmnrg_run==2
+
+            #        irrEU_copy = deepcopy(irrEU)
+            #        multiplets_kept,_ = cut_off!( irrEU ; 
+            #                                      type=cutoff_type , 
+            #                                      cutoff= n==iterations ? 1 : cutoff_magnitude , 
+            #                                      safeguard= n<true ,
+            #                                      minmult=minmult ,
+            #                                      mine=mine )
+
+            #        spectral_performance = @timed M, AA = update_redmat_AA_CGsummethod(
+            #                    M ,
+            #                    irrEU_copy ,
+            #                    combinations_uprima ,
+            #                    collect(multiplets_atomhop) ,
+            #                    cg_o_fullmatint ,
+            #                    cg_s_fullmatint ,
+            #                    Karray_orbital ,
+            #                    Karray_spin ,
+            #                    AA ,
+            #                    oindex2dimensions ;
+            #                    verbose=false ,
+            #                    density_matrix=density_matrices[n-1] ,
+            #                    multiplets_kept=multiplets_kept )
+
+            #    end
+
+
+            #    if compute_selfenergy
+            #        Mred_se, AA_se = update_selfenergy_CGsummethod(
+            #                    M ,
+            #                    Mred_se ,
+            #                    irrEU ,
+            #                    combinations_uprima ,
+            #                    collect(multiplets_atomhop) ,
+            #                    cg_o_fullmatint ,
+            #                    cg_s_fullmatint ,
+            #                    Karray_orbital ,
+            #                    Karray_spin ,
+            #                    AA_se ,
+            #                    oindex2dimensions ;
+            #                    verbose=false )
+
+            #    end
+            #end
 
             # information
             maximum_irrep_spin2 = irreps -> maximum((irreps[1][3],irreps[2][3],irreps[3][3]))
-            maximum_spin2 = maximum([ maximum_irrep_spin2(irreps) for irreps in keys(M) ])
+            maximum_spin2 = maximum([ maximum_irrep_spin2(irreps) for irreps in keys(impurity_operators["particle"]) ])
             maximum_spin2_all_iterations = maximum([ maximum_spin2_all_iterations , maximum_spin2 ])
             println( "EXCITATION MATRIX CALCULATION" )
             println( "  time: $(spectral_performance.time)s" )
@@ -1177,36 +1255,105 @@ function NRG( label::String ,
 
     if spectral 
 
-        compute_spectral_function(
-            AA ,
-            L ,
-            iterations ,
-            scale ;
-            spectral_broadening=spectral_broadening,
-            method=spectral_method,
-            label=label ,
-            z=z ,
-            K_factor=K_factor ,
-            orbitalresolved=orbitalresolved ,
-            broadening_distribution=broadening_distribution
-        )
+        save_correlation_spectral_decomposition(spectral_functions,label,z)
+        #compute_correlation_spectral_decomposition(
+        #    L ,
+        #    iterations ,
+        #    scale ,
+        #    spectral_broadening ,
+        #    label ,
+        #    z ;
+        #    broadening_distribution=broadening_distribution,
+        #    K_factor=K_factor ,
+        #    correlation_type="spectral" ,
+        #    T=spectral_temperature ,
+        #    betabar=betabar 
+        #)
+        #compute_spectral_function(
+        #    dmnrg ? AA[1:end-1] : AA ,
+        #    L ,
+        #    dmnrg ? iterations-1 : iterations ,
+        #    scale ;
+        #    spectral_broadening=spectral_broadening,
+        #    method=spectral_method,
+        #    label=label ,
+        #    z=z ,
+        #    K_factor=K_factor ,
+        #    orbitalresolved=orbitalresolved ,
+        #    broadening_distribution=broadening_distribution
+        #)
 
-        if compute_selfenergy
-            compute_spectral_function(
-                AA_se ,
-                L ,
-                iterations ,
-                scale ;
-                spectral_broadening=spectral_broadening,
-                method=spectral_method,
-                label=label ,
-                z=z ,
-                K_factor=K_factor ,
-                orbitalresolved=orbitalresolved ,
-                broadening_distribution=broadening_distribution,
-                triple_excitation=true
+        #if compute_selfenergy
+        #    compute_spectral_function(
+        #        AA_se ,
+        #        L ,
+        #        iterations ,
+        #        scale ;
+        #        spectral_broadening=spectral_broadening,
+        #        method=spectral_method,
+        #        label=label ,
+        #        z=z ,
+        #        K_factor=K_factor ,
+        #        orbitalresolved=orbitalresolved ,
+        #        broadening_distribution=broadening_distribution,
+        #        triple_excitation=true
+        #    )
+        #end
+    end
+
+    # reduced density matrices for all steps
+    if dmnrg && dmnrg_run==1
+
+        if iszero(spectral_temperature)
+            Z = sum( (iszero(e) ? oindex2dimensions[I]*(S+1) : 0.0)
+                     for ((_,I,S),(E,_)) in irrEU
+                     for e in E )
+            push!( 
+                density_matrices ,
+                Dict(
+                    (N,I,S)=>diagm([ ( iszero(e) ? 1.0/Z : 0.0 ) for e in E ])
+                    for ((N,I,S),(E,_)) in irrEU
+                    if iszero(E[1])
+                )
+            )
+            for i in reverse(eachindex(diagonalizers))
+                diagonalizer = diagonalizers[i]
+                combinations_uprima = combinations_uprima_train[i]
+                multiplets_kept = multiplets_kept_train[i]
+                insert!( 
+                    density_matrices ,
+                    1 ,
+                    backwards_dm_reduced_T0(density_matrices[1],
+                                            diagonalizer,
+                                            combinations_uprima,
+                                            oindex2dimensions) 
+                )
+            end
+            #for (i,dm) in enumerate(density_matrices)
+            #    println( "DM for iteration $(i) with (i+1)=$(i+1)" )
+            #    @show keys(dm)
+            #    tr_plus = sum(  (N>(i+1) ? tr(d) : 0.0) for ((N,_,_),d) in dm )
+            #    tr_minus = sum( (N<(i+1) ? tr(d) : 0.0) for ((N,_,_),d) in dm )
+            #    @show tr_plus,tr_minus
+            #    println()
+            #end
+        else # T!==0
+            Z = sum( exp(-e*iterscale(scale,L,iterations)/T)*oindex2dimensions[I]*(S+1)
+                for ((_,I,S),(E,_)) in irrEU
+                for e in E
+            )
+            push!( 
+                density_matrices ,
+                Dict(
+                    (N,I,S)=>diagm([ exp(-e*iterscale(scale,L,iterations)/T)*oindex2dimensions[I]*(S+1)/Z for e in E ])
+                    for ((N,I,S),(E,_)) in irrEU
+
+                )
             )
         end
+
+
+
     end
 
     # print summary information
@@ -1277,7 +1424,8 @@ function NRG( label::String ,
         thermo = thermo_average ,
         diagonalization_performances = diagonalization_performances ,
         impmults = compute_impmults ? impmults : nothing ,
-        spectral_performances = spectral ? spectral_performances : nothing
+        spectral_performances = spectral ? spectral_performances : nothing ,
+        density_matrices = density_matrices 
     )
 end
 # pcgred method
