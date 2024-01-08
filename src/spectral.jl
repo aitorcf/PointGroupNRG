@@ -3674,44 +3674,45 @@ function add_spectral_contribution_Tnonzero!(
 
                 if limit_shell
                     broad_dist = "lorentzian"
-                    eta_abs = 0.6*iteration_scale
-                        println("-------------")
-                        println()
+                    eta_abs = 1.0*iteration_scale
+                    #println("-------------")
+                    #println()
                     for i in (iteration+1):(iteration+extra_iterations)
-                        extra_iteration_scale = -correlation_matrix[i+1,1]
-                        relative_scale = extra_iteration_scale/iteration_scale
+
+                        extra_iteration_energy = -correlation_matrix[i+1,1]
+                        relative_scale = extra_iteration_energy/(K_factor*iteration_scale)
 
                         if e_diff>0
-                            correlation_matrix[end-i,2] += w*C(K_factor*extra_iteration_scale,
+                            correlation_matrix[end-i,2] += w*C(extra_iteration_energy,
                                                                e_diff*iteration_scale,
-                                                               spectral_broadening*iteration_scale,
-                                                               broadening_distribution)
-                            contribution = C(K_factor*extra_iteration_scale,
+                                                               eta_abs,
+                                                               broad_dist)
+                            contribution = C(extra_iteration_energy,
                                              e_diff*iteration_scale,
-                                             spectral_broadening*iteration_scale,
-                                             broadening_distribution)
-                            @show e_diff
-                            @show relative_scale
-                            @show contribution
-                            println()
+                                             eta_abs,
+                                             broad_dist)
+                            #@show e_diff
+                            #@show relative_scale
+                            #@show contribution
+                            #println()
                             #correlation_matrix[end-i,2] += w*P(K_factor*relative_scale-e_diff)*iteration_scale,
                             #                                   iteration_scale;
                             #                                   distribution="lorentzian",
                             #                                   E=e_diff*iteration_scale,
                             #                                   omega=K_factor*relative_scale*iteration_scale)
                         elseif e_diff<0
-                            correlation_matrix[i+1,2] += w*C(-K_factor*extra_iteration_scale,
+                            correlation_matrix[i+1,2] += w*C(-extra_iteration_energy,
                                                              e_diff*iteration_scale,
-                                                             spectral_broadening*iteration_scale,
-                                                             broadening_distribution)
-                            contribution = C(-K_factor*extra_iteration_scale,
-                                                             e_diff*iteration_scale,
-                                                             spectral_broadening*iteration_scale,
-                                                             broadening_distribution)
-                            @show e_diff
-                            @show relative_scale
-                            @show contribution
-                            println()
+                                                             eta_abs,
+                                                             broad_dist)
+                            contribution = C(-extra_iteration_energy,
+                                              e_diff*iteration_scale,
+                                              eta_abs,
+                                              broad_dist)
+                            #@show e_diff
+                            #@show relative_scale
+                            #@show contribution
+                            #println()
                             #correlation_matrix[i+1,2] += w*P((-K_factor*relative_scale-e_diff)*iteration_scale,
                             #                                 iteration_scale;
                             #                                 distribution="lorentzian",
@@ -3759,6 +3760,7 @@ function add_spectral_contribution_density_matrix_T0!(
         println( "Iteration $(iteration) with (i+1)=$(iteration+1)" )
         println()
         @show keys(density_matrix)
+        @show collect(values(density_matrix))[1]
         tr_plus = sum(  (N>(iteration+1) ? tr(d) : 0.0) for ((N,_,_),d) in density_matrix )
         tr_minus = sum( (N<(iteration+1) ? tr(d) : 0.0) for ((N,_,_),d) in density_matrix )
         @show tr_plus,tr_minus
@@ -3771,6 +3773,9 @@ function add_spectral_contribution_density_matrix_T0!(
         @show mults_discarded_plus,mults_discarded_minus
         println()
     end
+
+    particle_sum = 0.0
+    hole_sum = 0.0
 
     e_limit = 100.0
 
@@ -3789,7 +3794,6 @@ function add_spectral_contribution_density_matrix_T0!(
         (u_ground || v_ground) || continue
         u_ground && (@views dm_u = density_matrix[G_u])
         v_ground && (@views dm_v = density_matrix[G_v])
-
 
         # clebsch-gordan contribution 
         dim_u = oindex2dimensions[I_u]*(S_u+1)
@@ -3837,11 +3841,11 @@ function add_spectral_contribution_density_matrix_T0!(
                         e_u = energies_Gu[r_u]
                         e_diff = e_u-0.5*(e_v1+e_v2) 
 
-                        e_diff>e_limit && continue
+                        #e_diff>e_limit && continue
 
                         # total weight 
                         w = real(cg*redmatel*dmel)
-                        isapprox(w,zero(w)) && continue
+                        iszero(w) && continue
 
                         if iteration==100
                             @show r_u
@@ -3890,6 +3894,13 @@ function add_spectral_contribution_density_matrix_T0!(
                                 (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*correlation_matrix[(end-(i-1)),1]),
                                 broadening_distribution 
                             )
+                            if i==length(iterscales) && iteration==100
+                                particle_sum += w*C( correlation_matrix[(end-(i-1)),1],
+                                    e_diff*iteration_scale,
+                                    (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*correlation_matrix[(end-(i-1)),1]),
+                                    broadening_distribution 
+                                )
+                            end
                         end
                         #correlation_matrix[end-iteration,2] += w*P(
                         #    (K_factor-e_diff)*iteration_scale,
@@ -3930,11 +3941,11 @@ function add_spectral_contribution_density_matrix_T0!(
                         e_v = energies_Gv[r_v]
                         e_diff = 0.5*(e_u1+e_u2) - e_v
 
-                        -e_diff>e_limit && continue
+                        #-e_diff>e_limit && continue
 
                         # total weight 
                         w = cg*redmatel*dmel
-                        isapprox(w,zero(w)) && continue
+                        iszero(w) && continue
 
                         if iteration==100
                             @show r_v
@@ -3972,6 +3983,14 @@ function add_spectral_contribution_density_matrix_T0!(
                                 (broadening_distribution=="loggaussian" ? spectral_broadening : -spectral_broadening*correlation_matrix[i,1]),
                                 broadening_distribution 
                             )
+                            if i==length(iterscales) && iteration==100
+                                hole_sum += w*C( 
+                                    correlation_matrix[i,1],
+                                    e_diff*iteration_scale,
+                                    (broadening_distribution=="loggaussian" ? spectral_broadening : -spectral_broadening*correlation_matrix[i,1]),
+                                    broadening_distribution 
+                                )
+                            end
                         end
 
                     end
@@ -3980,6 +3999,7 @@ function add_spectral_contribution_density_matrix_T0!(
 
         end
     end
+    @show particle_sum,hole_sum
 
 end
 function save_correlation_spectral_decomposition(

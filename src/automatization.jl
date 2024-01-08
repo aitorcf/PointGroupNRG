@@ -1199,7 +1199,7 @@ function nrg_full(
         extra_iterations = (dmnrg || iszero(spectral_temperature)) ? 0 : extra_iterations
         spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}(
             "spectral"=>Dict(
-            (G_a...,r_a)=>reduce(vcat,sort([[sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
+            (G_a...,r_a)=>reduce(vcat,sort([[K_factor*sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
                 for (G_a,R_a) in G2R_a for r_a in 1:R_a
             )
         )
