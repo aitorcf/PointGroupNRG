@@ -72,7 +72,7 @@ elseif run=="imp"
         identityrep ,
         epsilon_symparams ,
         u_symparams ,
-        hop_symparams
+        hop_symparams ;
     )
 
 elseif run=="thermo"
