@@ -112,7 +112,7 @@ end
 function zavg_spectral( 
             label::String ,
             Z::Vector{Float64} ;
-            orbitalresolved_number::Int64=0 ,
+            orbitalresolved_number::Int64=1 ,
             width_two::Bool=false )
 
     orbitalresolved = orbitalresolved_number>0
