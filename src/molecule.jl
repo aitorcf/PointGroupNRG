@@ -87,6 +87,7 @@ function nrg_molecule(
     # read orbital rotation input
     orbital_rotation = read_rotation_input( input_file,
                                             number_of_impurity_orbitals )
+    do_rotation = orbital_rotation!==diagm(map(x->ComplexF64(1.0),axes(orbital_rotation,1)))
 
     #   --------------------- #
     #%% atomic symstate basis #
@@ -141,14 +142,14 @@ function nrg_molecule(
         [u,d] for (u,d) in zip(impurity_creation_operators_up,impurity_creation_operators_do)
     ])
     # transformed operators c^\dagger_\alpha, old basis
-    impurity_creation_operators_up_rotated = map( 
+    impurity_creation_operators_up_rotated = do_rotation ? map( 
         operator->transform_creation_operator(operator,impurity_creation_operators_up,orbital_rotation) ,
         impurity_creation_operators_up
-    )
-    impurity_creation_operators_do_rotated = map( 
+    ) : impurity_creation_operators_up
+    impurity_creation_operators_do_rotated = do_rotation ? map( 
         operator->transform_creation_operator(operator,impurity_creation_operators_do,orbital_rotation) ,
         impurity_creation_operators_do
-    )
+    ) : impurity_creation_operators_do
     impurity_creation_operators_rotated = reduce(vcat,[
         [u,d] for (u,d) in zip(impurity_creation_operators_up_rotated,impurity_creation_operators_do_rotated)
     ])
@@ -782,7 +783,7 @@ function nrg_molecule(
             V2 = abs2.(diag(collect(hop_symparams)[1][2]))
             jjV2 = jj[1:number_of_shell_orbitals].*V2
             positivejjV2 = filter( x->x>0 , jjV2 )
-            rhoJ = 0.5*(sum(filter(x->x>0,jjV2)))
+            rhoJ = (sum(filter(x->x>0,jjV2)))/(2*band_width)
             first_excited_energy = minimum(filter( 
                 x->x>0 ,
                 [E[1] for (E,U) in values(irrEU_notrescaled)]
@@ -1317,7 +1318,7 @@ end
 
 # read lines corresponding to rotation as column matrix
 function read_rotation_input( file_name::String ,
-                              number_of_impurity_orbitals::Int64 )
+                              number_of_impurity_orbitals::Int64 )::Matrix{ComplexF64}
 
 
     rotation_found = false
@@ -1456,8 +1457,8 @@ function compute_J_matrix( lehmann_reduced::Dict{NTuple{3,IntIrrep},Array{Comple
 
     # iterate through lehmann amplitudes and impurity multiplets
     for ((G_1,G_a,G_2),mat) in lehmann_reduced,
-        r_1 in 1:size(mat,1),
-        r_2 in 1:size(mat,3)
+        r_1 in axes(mat,1),
+        r_2 in axes(mat,3)
 
         # multiplet quantum numbers
         M_1 = (G_1...,r_1)
@@ -1471,6 +1472,9 @@ function compute_J_matrix( lehmann_reduced::Dict{NTuple{3,IntIrrep},Array{Comple
         N_c = M_c[1]
         S_c = M_c[3]/2.0
         E_c = irrEU_imp[M_c[1:3]...][1][r_1]
+
+        # skip non-contributing excited multiplets
+        abs(S_c-S_0)==0.5 || continue
 
         # compute spin factor
         spin_factor = compute_spin_factor( S_c , S_0 , N_c , N_0 )
