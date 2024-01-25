@@ -727,7 +727,7 @@ function nrg_full(
             L::Float64 ,
             iterations::Int64 ,
             cutoff_type::String ,
-            cutoff_magnitude::R ,
+            cutoff_magnitude ,
             cg_o_dir::String ,
             multiplets_dir::String ,
             impurity_config::Dict{String,Int64} ,
@@ -754,7 +754,8 @@ function nrg_full(
             extra_iterations::Int64=0 ,
             dmnrg::Bool=false ,
             compute_impmults::Bool=false ,
-            scale_asymptotic::Bool=true ) where {R<:Real}
+            scale_asymptotic::Bool=true ,
+            band_width::Float64=1.0 ) 
 
     # defaults
     precompute_iaj = true
@@ -797,8 +798,8 @@ function nrg_full(
     println( "HYBRIDIZATION PARAMETERS" )
     print_dict( hop_symparams )
     println()
-    
-            
+
+
     # hiztegia
     hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
     merge!( hiztegia , Dict( "u"=>0.5, "d"=>-0.5 ) )
@@ -813,6 +814,9 @@ function nrg_full(
      oirreps2dimensions::Dict{String,Int64},
      oindex2dimensions::Vector{Int64},
      cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}}) = get_cg_o_info( cg_o_dir , atom_orbital_irreps )
+
+    # for dmnrg
+    shell_dimension = reduce( * , [4^(oirreps2dimensions[I]*R) for (I,R) in shell_config] )
 
     # spin symmetry
     cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = get_cg_s_fullmatint( max_spin2 );
@@ -888,10 +892,10 @@ function nrg_full(
     # largest among the first asymptotic codiagonal coupling terms, is just 
     # 1.0 because for the sake of generality we do not assume the asymptotic
     # form (yet?).
-    scale::Float64 = 1.0
+    scale::Float64 = band_width
     if scale_asymptotic
         codiagonals_first = channels_codiagonals[10][1][1]
-        scale = codiagonals_first
+        scale *= codiagonals_first
         channels_codiagonals = [
             # n (iterations) loop
             Dict(# I_o loop
@@ -904,18 +908,23 @@ function nrg_full(
             for n in 1:(iterations-1)
         ]
     end
+    println( "Scale: D(× asymptotic hopping) = $scale")
+    println()
 
     # adapt iterations to T-dependent spectral function calculation
     if spectral && !iszero(spectral_temperature) && !dmnrg
         println()
-        _,n_limit = findmin(abs.([iterscale(scale,L,n) for n in 0:iterations].-betabar*spectral_temperature))
+        #_,n_limit = findmin(abs.([iterscale(scale,L,n) for n in 0:iterations if iterscale(scale,L,n)>betabar*spectral_temperature].-betabar*spectral_temperature))
+        ispositive(x) = x>0
+        _,n_limit = findmin(filter( ispositive , [iterscale(scale,L,n) for n in 0:iterations] .- betabar*spectral_temperature ))
+        n_limit -= 1
         if n_limit>iterations
-            error( "Not enough iterations to reach temperature limit. Aborting..." )
+            println( "WARNING: Not enough iterations to reach temperature limit." )
         end
         println( "Defined T: $spectral_temperature")
         println( "Iterations cut from $iterations to $n_limit for the effective chain to reach the energy scale $(iterscale(scale,L,n_limit))." )
         println()
-        iterations = n_limit
+        iterations = n_limit>iterations ? iterations : n_limit
     end
 
     #   ------------------- #
@@ -1469,6 +1478,8 @@ function nrg_full(
                    z=z ,
                    dmnrg=dmnrg ,
                    dmnrg_run=1 ,
+                   spectral_temperature=spectral_temperature ,
+                   shell_dimension=shell_dimension ,
                    scale=Float64(scale) ,
                    precompute_iaj=precompute_iaj ,
                    compute_impmults=compute_impmults ,
@@ -1526,7 +1537,9 @@ function nrg_full(
              mult2index=mult2index ,
              orbital_multiplets=orbital_multiplets ,
              mm_i=mm_i ,
-             channels_diagonals=channels_diagonals )
+             channels_diagonals=channels_diagonals ,
+             half_weight_idx=nrg.half_weight_idx ,
+             half_weight_energy=nrg.half_weight_energy )
 
     elseif spectral
 
