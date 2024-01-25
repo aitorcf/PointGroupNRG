@@ -228,10 +228,10 @@ function nrg_molecule(
     # largest among the first asymptotic codiagonal coupling terms, is just 
     # 1.0 because for the sake of generality we do not assume the asymptotic
     # form (yet?).
-    scale::Float64 = 1.0 * band_width
+    scale::Float64 = band_width
     if scale_asymptotic
         codiagonals_first = channels_codiagonals[10][1][1]
-        scale = codiagonals_first * band_width
+        scale *= codiagonals_first
         channels_codiagonals = [
             # n (iterations) loop
             Dict(# I_o loop
@@ -244,7 +244,6 @@ function nrg_molecule(
             for n in 1:(iterations-1)
         ]
     end
-
 
     ##   =================== #
     ##&& INITIAL HAMILTONIAN #
@@ -312,7 +311,8 @@ function nrg_molecule(
     println()
     println( "RESCALED IMPURITY HAMILTONIAN" )
     print_spectrum( irrEU )
-    print_dict(hop_symparams)
+    println( "HOPPING PARAMETERS" )
+    print_dict(hop_symparams_int)
 
 
     # ---------- #
@@ -767,7 +767,6 @@ function nrg_molecule(
         #print_dict(Mred)
         #println()
 
-
         if (operator=="particle" && only_j_diagonalization)
             ground_irrep = filter( 
                 x->iszero(x[2][1][1]) ,
@@ -783,6 +782,7 @@ function nrg_molecule(
             V2 = abs2.(diag(collect(hop_symparams)[1][2]))
             jjV2 = jj[1:number_of_shell_orbitals].*V2
             positivejjV2 = filter( x->x>0 , jjV2 )
+            rhoJJ = jjV2./(2*band_width)
             rhoJ = (sum(filter(x->x>0,jjV2)))/(2*band_width)
             first_excited_energy = minimum(filter( 
                 x->x>0 ,
@@ -797,6 +797,8 @@ function nrg_molecule(
             println( "Magnetic coupling constants:" )
             print( "j = ")
             println( jj )
+            print( "ρJ = " )
+            println( rhoJJ )
             print( "V2*j = ")
             println( jjV2 )
             print( "rhoJ = ")
@@ -842,7 +844,7 @@ function nrg_molecule(
 
             end
             println( "-----------------------------" )
-            only_j_diagonalization && return
+            return
         end
 
         Mo_tot = length(oirreps2indices) 
