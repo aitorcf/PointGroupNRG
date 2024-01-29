@@ -234,7 +234,7 @@ function get_irrEU_initial(
         print_dict( irrEU_imp )
         println()
     end
-    irrEU_imp = normalize_irrEU( irrEU_imp )
+    #irrEU_imp = normalize_irrEU( irrEU_imp )
     return irrEU_imp
 end
 # CLEAN method
@@ -1314,12 +1314,12 @@ function nrg_full(
                     verbose=false ,
                     distributed=distributed ,
                     precompute_iaj=precompute_iaj );
-    println( "----------------------------------------------" )
-    println( "SPECTRUM OF ATOM + INNERMOST SHELL" )
+    println( "-----------------------------------------------" )
+    println( "SPECTRUM OF ATOM + INNERMOST SHELL (NORMALIZED)" )
     println()
     print_spectrum( irrEU )
     println()
-    println( "----------------------------------------------" )
+    println( "-----------------------------------------------" )
     println()
 
     #   --------------------------- #

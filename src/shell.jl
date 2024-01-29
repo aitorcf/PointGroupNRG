@@ -851,7 +851,10 @@ function NRG( label::String ,
               orbitalresolved::Bool=false ,
               dmnrg::Bool=false ,
               dmnrg_run::Int64=1 ,
+              shell_dimension::Int64=0 ,
               density_matrices::Vector{Dict{IntIrrep,Matrix{Float64}}}=Dict{IntIrrep,Matrix{Float64}}[] ,
+              half_weight_idx::Int64=0 ,
+              half_weight_energy::Float64=0.0 ,
               M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
               AA::Vector{T}=[] ,
               Karray_orbital::Array{ComplexF64,6}=Array{ComplexF64,6}(undef,0,0,0,0,0,0) , 
@@ -908,10 +911,13 @@ function NRG( label::String ,
     # create spectral directory
     isdir("spectral") || mkdir("spectral")
 
-    # diagonalization matrices for dm-nrg
+    # dmnrg
     diagonalizers::Vector{Dict{IntIrrep,Matrix{ComplexF64}}} = Dict{IntIrrep,Matrix{ComplexF64}}[]
     combinations_uprima_train = []
     multiplets_kept_train::Vector{Set{IntMultiplet}} = Set{IntMultiplet}[]
+    multiplets_disc_train::Vector{Set{IntMultiplet}} = Set{IntMultiplet}[]
+    spectrum_train = Dict{IntIrrep,Vector{Float64}}[]
+    partition_dmnrg::Float64 = 0.0
 
     # NRG iterations
     nrg_performance = @timed for n in 2:iterations
@@ -923,6 +929,7 @@ function NRG( label::String ,
         # cutoff
         #
         # apply cutoff
+        irrEU_uncut = copy(irrEU)
         (multiplets_block, discarded) = cut_off!( irrEU ; 
                                                   type=cutoff_type , 
                                                   cutoff=cutoff_magnitude , 
@@ -948,6 +955,13 @@ function NRG( label::String ,
         println( "  cutoff eigenenergy: $cutoff_eigenenergy" )
         push!( kept_discarded_ratios , kept_discarded_ratio )
 
+        if dmnrg && dmnrg_run==1 && !iszero(spectral_temperature) && !iszero(length(discarded))
+            nn = n-1
+            partition_dmnrg += sum( 
+            oindex2dimensions[I]*(S+1)*exp(-irrEU_uncut[N,I,S][1][r]*iterscale(scale,L,nn)/spectral_temperature)*shell_dimension^(iterations-nn)
+                for (N,I,S,r) in discarded
+            )
+        end
 
         # renormalize by √Λ
         for (G,(E,U)) in irrEU 
@@ -1023,12 +1037,18 @@ function NRG( label::String ,
 
         # store performance
         push!( diagonalization_performances , diagonalization_performance )
-        push!( combinations_uprima_train , combinations_uprima )
-        push!( multiplets_kept_train , multiplets_block )
 
-        # diagonalization matrices for dm-nrg
-        if (dmnrg && dmnrg_run==1)
+        # dmnrg information
+        if dmnrg && dmnrg_run==1
+
+            # info gathered from cutoff to previous state
+            push!( multiplets_kept_train , multiplets_block )
+            push!( multiplets_disc_train , Set(discarded) )
+
+            # info gathered from diagonalization in this step
+            push!( combinations_uprima_train , combinations_uprima )
             push!( diagonalizers , Dict( G=>U for (G,(_,U)) in irrEU ) )
+            push!( spectrum_train , Dict( G=>E for (G,(E,_)) in irrEU ) )
         end
 
         # spectrum 
@@ -1123,7 +1143,9 @@ function NRG( label::String ,
                     multiplets_kept=collect(multiplets_kept) ,
                     multiplets_discarded=collect(multiplets_discarded) ,
                     L=L,
-                    scale=scale
+                    scale=scale,
+                    half_weight_idx=half_weight_idx,
+                    half_weight_energy=half_weight_energy
                 )
                 #compute_correlation_peaks(
                 #    impurity_operators["particle"],
@@ -1305,6 +1327,7 @@ function NRG( label::String ,
     if dmnrg && dmnrg_run==1
 
         if iszero(spectral_temperature)
+
             Z = sum( (iszero(e) ? oindex2dimensions[I]*(S+1) : 0.0)
                      for ((_,I,S),(E,_)) in irrEU
                      for e in E )
@@ -1332,28 +1355,114 @@ function NRG( label::String ,
             #for (i,dm) in enumerate(density_matrices)
             #    println( "DM for iteration $(i) with (i+1)=$(i+1)" )
             #    @show keys(dm)
+            #    trace = sum( tr(d)*oindex2dimensions[I]*(S+1) for ((_,I,S),d) in dm )
             #    tr_plus = sum(  (N>(i+1) ? tr(d) : 0.0) for ((N,_,_),d) in dm )
             #    tr_minus = sum( (N<(i+1) ? tr(d) : 0.0) for ((N,_,_),d) in dm )
             #    @show tr_plus,tr_minus
+            #    @show trace
             #    println()
             #end
         else # T!==0
-            Z = sum( exp(-e*iterscale(scale,L,iterations)/T)*oindex2dimensions[I]*(S+1)
+
+            # add last contribution to partition function
+            partition_dmnrg += sum( 
+                oindex2dimensions[I]*(S+1)*exp(-e*iterscale(scale,L,iterations)/spectral_temperature)
                 for ((_,I,S),(E,_)) in irrEU
                 for e in E
             )
+            Z_last = sum( 
+                oindex2dimensions[I]*(S+1)*exp(-e*iterscale(scale,L,iterations)/spectral_temperature)
+                for ((_,I,S),(E,_)) in irrEU
+                for e in E
+            )
+            Z = partition_dmnrg
+            @show Z
+            @show Z_last
+            @show 
+
+            # set first density matrix for n=iterations
             push!( 
                 density_matrices ,
                 Dict(
-                    (N,I,S)=>diagm([ exp(-e*iterscale(scale,L,iterations)/T)*oindex2dimensions[I]*(S+1)/Z for e in E ])
+                    (N,I,S)=>diagm([ exp(-e*iterscale(scale,L,iterations)/spectral_temperature)/Z for e in E ])
                     for ((N,I,S),(E,_)) in irrEU
-
                 )
             )
+
+            # weights of density matrices for each iteration
+            partial_dm_weight_train = Float64[]
+            for i in eachindex(spectrum_train)
+                n = i+1
+                if n!==iterations
+                    multiplets_disc = multiplets_disc_train[i+1]
+                    if length(multiplets_disc)==0
+                        push!(partial_dm_weight_train,0.0)
+                        continue
+                    end
+                    spectrum = spectrum_train[i]
+                    #@show multiplets_disc
+                    #print_dict(spectrum)
+                    push!( 
+                        partial_dm_weight_train ,
+                        shell_dimension^(iterations-n)/
+                        Z*
+                        sum(oindex2dimensions[I]*(S+1)*exp(-spectrum[N,I,S][r]*iterscale(scale,L,n)/spectral_temperature) for (N,I,S,r) in multiplets_disc)
+                    )
+                else
+                    spectrum = spectrum_train[end]
+                    push!( 
+                        partial_dm_weight_train ,
+                        sum(oindex2dimensions[I]*(S+1)*exp(-e*iterscale(scale,L,n)/spectral_temperature) for ((_,I,S),E) in spectrum for e in E)/Z
+                    )
+                end
+            end
+            @show partial_dm_weight_train
+            max_weight, max_weight_idx = findmax(partial_dm_weight_train)
+            _, half_weight_idx = findmin( abs2.(max_weight/2 .- partial_dm_weight_train[max_weight_idx:end]) )
+            half_weight_idx += max_weight_idx
+            half_weight = partial_dm_weight_train[half_weight_idx]
+            @show max_weight, max_weight_idx
+            @show half_weight, half_weight_idx
+            @show iterscale(scale,L,max_weight_idx+1)
+            @show iterscale(scale,L,half_weight_idx+1)
+            @show spectral_temperature
+            half_weight_idx = max_weight_idx
+            half_weight_energy = iterscale(scale,L,half_weight_idx+1)
+
+            for i in reverse(eachindex(diagonalizers))
+                iteration = i+1
+                diagonalizer = diagonalizers[i]
+                combinations_uprima = combinations_uprima_train[i]
+                multiplets_kept = multiplets_kept_train[i]
+                multiplets_disc = multiplets_disc_train[i]
+                spectrum = i-1<=0 ? nothing : spectrum_train[i-1]
+                @show i-1,length(spectrum_train)
+                insert!( 
+                    density_matrices ,
+                    1 ,
+                    i-1<=0 ? Dict{IntIrrep,Matrix{ComplexF64}}() : backwards_dm_reduced_Tnonzero(
+                        density_matrices[1],
+                        diagonalizer,
+                        combinations_uprima,
+                        oindex2dimensions,
+                        multiplets_kept,
+                        multiplets_disc,
+                        spectral_temperature,
+                        Z,
+                        shell_dimension,
+                        iterations,
+                        iteration,
+                        iterscale(scale,L,iteration),
+                        spectrum
+                    ) 
+                )
+                #for (G,m) in density_matrices[1]
+                #    @show G
+                #    @show m[1,1]
+                #    println()
+                #end
+            end
         end
-
-
-
     end
 
     # print summary information
@@ -1425,7 +1534,9 @@ function NRG( label::String ,
         diagonalization_performances = diagonalization_performances ,
         impmults = compute_impmults ? impmults : nothing ,
         spectral_performances = spectral ? spectral_performances : nothing ,
-        density_matrices = density_matrices 
+        density_matrices = density_matrices ,
+        half_weight_idx = half_weight_idx ,
+        half_weight_energy = half_weight_energy
     )
 end
 # pcgred method
