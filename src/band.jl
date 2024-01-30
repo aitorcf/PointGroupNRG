@@ -74,7 +74,8 @@ end
 # ============= #
 
 # Hybridization as Γ(ϵ)
-function discretize_band( dos::Function ,
+function discretize_band( 
+            dos::Function ,
             L::Float64 ,
             z::Float64 ,
             number_of_shells::Int64 ;
@@ -92,8 +93,11 @@ function discretize_band( dos::Function ,
         println( "particle-hole symmetry enforced? $enforce_particle_hole_symmetry" )
     end
 
+    number_of_shells_needed = number_of_shells
+    number_of_shells_to_compute = number_of_shells<100 ? 100 : number_of_shells
+
     # maximum discretization interval to be considered
-    maximum_j = iseven(number_of_shells) ? number_of_shells÷2 : number_of_shells÷2+1
+    maximum_j = iseven(number_of_shells_to_compute) ? number_of_shells_to_compute÷2 : number_of_shells_to_compute÷2+1
 
     # convert all parameters to BigFloat
     ddooss(x) = BigFloat(dos(x))
@@ -131,8 +135,10 @@ function discretize_band( dos::Function ,
                                        L=LL )
 
     # rescaled parameters
-    diagonals_rescaled   = Float64.(diagonals.*collect( sqrt(L)^(m-2) for m in eachindex(diagonals) ))
-    codiagonals_rescaled = Float64.(codiagonals.*collect( sqrt(L)^(m-1) for m in eachindex(codiagonals) ))
+    #diagonals_rescaled   = Float64.(diagonals.*collect( sqrt(L)^(m-2) for m in eachindex(diagonals) ))
+    #codiagonals_rescaled = Float64.(codiagonals.*collect( sqrt(L)^(m-1) for m in eachindex(codiagonals) ))
+    diagonals_rescaled   = Float64.(diagonals.*collect( sqrt(L)^(m-2) for m in eachindex(diagonals) ))[1:number_of_shells_needed]
+    codiagonals_rescaled = Float64.(codiagonals.*collect( sqrt(L)^(m-1) for m in eachindex(codiagonals) ))[1:number_of_shells_needed-1]
 
     # enforce asymptotic behavior
     if enforce_asymptotic_behavior
