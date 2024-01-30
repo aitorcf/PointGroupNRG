@@ -642,6 +642,7 @@ end
                     excitation_energy::Float64 ,
                     broadening_factor::Float64 ,
                     distribution::String )
+
     if distribution=="gaussian"
 
         return exp(-((spectral_energy-excitation_energy)/broadening_factor)^2) / (broadening_factor*sqrt(pi))
@@ -3067,6 +3068,112 @@ function backwards_dm_reduced_T0(
 
     return dm_back
 end
+function backwards_dm_reduced_Tnonzero(
+        dm::Dict{IntIrrep,Matrix{Float64}} ,
+        diagonalizers::Dict{IntIrrep,Matrix{ComplexF64}} ,
+        combinations_uprima::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}} } ,
+        oindex2dimensions::Vector{Int64} ,
+        multiplets_kept::Set{IntMultiplet} ,
+        multiplets_disc::Set{IntMultiplet} ,
+        T::Float64 ,
+        Z::Float64 ,
+        shell_dimension::Int64 ,
+        iterations::Int64 ,
+        iteration::Int64 ,
+        iteration_scale::Float64 ,
+        spectrum::Dict{IntIrrep,Vector{Float64}} )
+
+    combinations_uprima_modified = Dict(
+        G_u => comb 
+        for (G_u,comb) in combinations_uprima
+        if haskey(dm,G_u)
+    )
+
+    GG_i = Set( 
+        m_i[1:3] 
+        for (G_u,combs_u) in combinations_uprima
+        for (_,_,m_i) in combs_u
+    )
+    G2mm_i = Dict( 
+        G_i=>Set(
+            m_i 
+            for (G_u,combs_u) in combinations_uprima for 
+            (_,_,m_i) in combs_u
+            if m_i[1:3]==G_i
+        )
+        for G_i in GG_i
+    )
+    G2multiplicity_i = Dict( G_i=>length(mm_i) for (G_i,mm_i) in G2mm_i )
+
+    GG_i_disc = Set( m_i[1:3] for m_i in multiplets_disc )
+    G2rr_i_disc = Dict(
+        G=>[m[end] for m in filter(m->m[1:3]==G,multiplets_disc)]
+        for G in GG_i_disc
+    )
+
+    mm_i_all = union(multiplets_kept,multiplets_disc)
+    GG_i_all = Set( m[1:3] for m in mm_i_all )
+    G2mm_i_all = Dict( G=>filter(m->m[1:3]==G,mm_i_all) for G in GG_i_all )
+    G2R_i_all = Dict( G=>length(mm) for (G,mm) in G2mm_i_all )
+
+    dm_back::Dict{IntIrrep,Matrix{Float64}} = Dict(
+        G_i=>zeros(Float64,R_i,R_i)
+        for (G_i,R_i) in G2R_i_all
+    )
+
+    # contribution from next steps
+    for (G_u,combinations_G_u) in combinations_uprima_modified
+
+        # diagonalization matrices and DM from next step
+        du = dm[G_u]
+        u = diagonalizers[G_u]
+
+        _,I_u,S_u = G_u
+
+        for (m_u,m_mu,m_i) in combinations_G_u,
+            (m_v,m_nu,m_j) in combinations_G_u
+
+            G_ij = m_i[1:3]
+
+            # trace over mu and symmetry of the DM
+            m_mu==m_nu     || continue
+            G_ij==m_j[1:3] || continue
+
+            # quantum numbers
+            r_u = m_u[4]
+            r_v = m_v[4]
+            _,I_ij,S_ij,r_i = m_i
+            r_j = m_j[4]
+
+            dim_i = oindex2dimensions[I_ij]*(S_ij+1)
+            dim_u = oindex2dimensions[I_u]*(S_u+1)
+            cgsum = dim_u/dim_i
+
+            contrib = dot(u[r_u,1:size(du,1)],du,conj.(u[r_v,1:size(du,1)]))
+
+            dm_back[G_ij][r_i,r_j] += real(cgsum*contrib)
+
+        end
+
+    end
+
+    # diagonal contribution from discarded states
+    for ((N,I,S),rr_i) in G2rr_i_disc
+
+        @views dm_b = dm_back[N,I,S]
+        @views multiplet_spectrum = spectrum[N,I,S]
+
+        for r_i in rr_i
+
+            dm_b[r_i,r_i] = shell_dimension^(iterations-iteration)*
+                            exp(-multiplet_spectrum[r_i]*iteration_scale/T)/
+                            Z
+
+        end
+    end
+
+    return dm_back
+end
 
 # ----------------------------- #
 # General correlation functions #
@@ -3429,7 +3536,9 @@ function add_correlation_contribution!(
             multiplets_kept::Vector{IntMultiplet}=IntMultiplet[] ,
             multiplets_discarded::Vector{IntMultiplet}=IntMultiplet[] ,
             L::Float64=0.0 ,
-            scale::Float64=0.0 )
+            scale::Float64=0.0 ,
+            half_weight_idx::Int64=0 ,
+            half_weight_energy::Float64=0.0 )
 
     if (correlation_type=="spectral" && A==B)
         add_spectral_contribution!(correlation_dict,
@@ -3448,7 +3557,9 @@ function add_correlation_contribution!(
                                    multiplets_kept=multiplets_kept,
                                    multiplets_discarded=multiplets_discarded,
                                    L=L,
-                                   scale=scale)
+                                   scale=scale,
+                                   half_weight_idx=half_weight_idx,
+                                   half_weight_energy=half_weight_energy)
     end
 
 end
@@ -3469,7 +3580,9 @@ function add_spectral_contribution!(
             multiplets_kept::Vector{IntMultiplet}=IntMultiplet[] ,
             multiplets_discarded::Vector{IntMultiplet}=IntMultiplet[] ,
             L::Float64=0.0 ,
-            scale::Float64=0.0 )
+            scale::Float64=0.0 ,
+            half_weight_idx::Int64=0 ,
+            half_weight_energy::Float64=half_weight_energy )
 
     use_density_matrix = !iszero(length(density_matrix))
 
@@ -3517,6 +3630,24 @@ function add_spectral_contribution!(
                                                          multiplets_discarded,
                                                          L,
                                                          scale)
+        else
+            add_spectral_contribution_density_matrix_Tnonzero!(correlation_dict,
+                                                               A,
+                                                               oindex2dimensions,
+                                                               irrEU,
+                                                               iteration,
+                                                               broadening_distribution,
+                                                               spectral_broadening,
+                                                               iteration_scale,
+                                                               K_factor,
+                                                               density_matrix,
+                                                               multiplets_kept,
+                                                               multiplets_discarded,
+                                                               L,
+                                                               scale,
+                                                               half_weight_idx,
+                                                               half_weight_energy)
+
         end
 
     end
@@ -3674,7 +3805,7 @@ function add_spectral_contribution_Tnonzero!(
 
                 if limit_shell
                     broad_dist = "lorentzian"
-                    eta_abs = 1.0*iteration_scale
+                    eta_abs = 0.3*iteration_scale
                     #println("-------------")
                     #println()
                     for i in (iteration+1):(iteration+extra_iterations)
@@ -3760,7 +3891,7 @@ function add_spectral_contribution_density_matrix_T0!(
         println( "Iteration $(iteration) with (i+1)=$(iteration+1)" )
         println()
         @show keys(density_matrix)
-        @show collect(values(density_matrix))[1]
+        #@show collect(values(density_matrix))[1]
         tr_plus = sum(  (N>(iteration+1) ? tr(d) : 0.0) for ((N,_,_),d) in density_matrix )
         tr_minus = sum( (N<(iteration+1) ? tr(d) : 0.0) for ((N,_,_),d) in density_matrix )
         @show tr_plus,tr_minus
@@ -3816,8 +3947,8 @@ function add_spectral_contribution_density_matrix_T0!(
 
             # particle sum over ground states
             if (v_ground && haskey(G2rr_discarded,G_u))
-                @inbounds for r_v1 in axes(dm_v,3),
-                              r_v2 in axes(dm_v,3)
+                @inbounds for r_v1 in axes(dm_v,2),
+                              r_v2 in axes(dm_v,2)
 
                     # density matrix element
                     dmel = dm_v[r_v2,r_v1]
@@ -3849,45 +3980,13 @@ function add_spectral_contribution_density_matrix_T0!(
 
                         if iteration==100
                             @show r_u
-                            @show e_diff
+                            @show e_diff, e_v1, e_v2, 0.5(e_v1+e_v2)
                             @show redmatel
                             @show w
                             println()
                         end
 
-                        #if iteration==99 
-                        #    @show G_u,e_diff
-                        #    if abs(e_diff-6)<0.01
-                        #        @show G_u,r_u,r_v1,r_v2
-                        #        @show e_diff
-                        #        @show w
-                        #        @show redmatel
-                        #        @show redmat[r_u,r_a,r_v1],redmat[r_u,r_a,r_v2]
-                        #        @show cg
-                        #        @show dmel
-                        #        println()
-                        #    end
-                        #end
-
-                        #contribution_vector .= map( 
-                        #    i_scale->w*P(
-                        #        (K_factor*i_scale-e_diff*iteration_scale),
-                        #        (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
-                        #        distribution=broadening_distribution,
-                        #        E=e_diff*iteration_scale,
-                        #        omega=K_factor*i_scale
-                        #    ) ,
-                        #    iterscales
-                        #)
-                        #correlation_matrix[total_iterations+2:end,2] .+= reverse(contribution_vector)
                         @inbounds for (i,i_scale) in enumerate(iterscales)
-                            #correlation_matrix[end-(i-1),2] += w*P(
-                            #    (K_factor*i_scale-e_diff*iteration_scale),
-                            #    (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*i_scale);
-                            #    distribution=broadening_distribution,
-                            #    E=e_diff*iteration_scale,
-                            #    omega=K_factor*i_scale
-                            #)
                             correlation_matrix[(end-(i-1)),2] += w*C( 
                                 correlation_matrix[(end-(i-1)),1],
                                 e_diff*iteration_scale,
@@ -3902,14 +4001,6 @@ function add_spectral_contribution_density_matrix_T0!(
                                 )
                             end
                         end
-                        #correlation_matrix[end-iteration,2] += w*P(
-                        #    (K_factor-e_diff)*iteration_scale,
-                        #    (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
-                        #    distribution=broadening_distribution,
-                        #    E=e_diff*iteration_scale,
-                        #    omega=K_factor*iteration_scale
-                        #)
-
                     end
                 end
             end
@@ -3955,28 +4046,7 @@ function add_spectral_contribution_density_matrix_T0!(
                             println()
                         end
 
-                        #if iteration==99 
-                        #    @show G_v,e_diff
-                        #    #if abs(6+e_diff)<0.01
-                        #    #    @show G_v,r_v,r_u1,r_u2
-                        #    #    @show e_diff
-                        #    #    @show w
-                        #    #    @show redmatel
-                        #    #    @show redmat[r_v,r_a,r_u1],redmat[r_v,r_a,r_u2]
-                        #    #    @show cg
-                        #    #    @show dmel
-                        #    #    println()
-                        #    #end
-                        #end
-
                         @inbounds for (i,i_scale) in enumerate(iterscales)
-                            #correlation_matrix[i,2] += w*P(
-                            #    (-K_factor*i_scale-e_diff*iteration_scale),
-                            #    (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*i_scale);
-                            #    distribution=broadening_distribution,
-                            #    E=e_diff*iteration_scale,
-                            #    omega=K_factor*i_scale
-                            #)
                             correlation_matrix[i,2] += w*C( 
                                 correlation_matrix[i,1],
                                 e_diff*iteration_scale,
@@ -4002,6 +4072,519 @@ function add_spectral_contribution_density_matrix_T0!(
     @show particle_sum,hole_sum
 
 end
+function add_spectral_contribution_density_matrix_Tnonzero!(
+        correlation_dict::Dict{IntMultiplet,Matrix{Float64}} ,
+        A::Dict{ IntTripleG , Array{ComplexF64,3} } ,
+        oindex2dimensions::Vector{Int64} ,
+        irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+        iteration::Int64 ,
+        broadening_distribution::String ,
+        spectral_broadening::Float64 ,
+        iteration_scale::Float64 ,
+        K_factor::Float64 ,
+        density_matrix::Dict{IntIrrep,Matrix{Float64}} ,
+        multiplets_kept::Vector{IntMultiplet} ,
+        multiplets_discarded::Vector{IntMultiplet} ,
+        L::Float64 ,
+        scale::Float64 ,
+        half_weight_idx::Int64 ,
+        half_weight_energy::Float64 )
+
+    total_iterations = size(collect(values(correlation_dict))[1],1)÷2 - 1
+    iterscales = map( n->iterscale(scale,L,n) , 0:total_iterations )
+    smearing_parameter = iterscales[half_weight_idx]
+
+    negative_energy_mask = map( x->x<=total_iterations+1 , 1:2*(total_iterations+1) )
+    positive_energy_mask = map( x->x>total_iterations+1  , 1:2*(total_iterations+1) )
+
+    high_energy_iterator = 0:half_weight_idx
+    low_energy_iterator  = (half_weight_idx+1):total_iterations
+
+    length(multiplets_discarded)==0 && return
+    GG_kept      = Set( m[1:3] for m in multiplets_kept )
+    GG_discarded = Set( m[1:3] for m in multiplets_discarded )
+    G2rr_kept = Dict(
+        G=>sort([ m[4] for m in multiplets_kept if m[1:3]==G ])
+        for G in GG_kept
+    )
+    G2rr_discarded = Dict(
+        G=>sort([ m[4] for m in multiplets_discarded if m[1:3]==G ])
+        for G in GG_discarded
+    )
+    G2rr_all = mergewith( vcat , G2rr_kept , G2rr_discarded )
+
+    # iterate over irreducible matrices
+    for ((G_u,G_a,G_v),redmat) in A 
+
+        # irrep quantum numbers
+        (_,I_u,S_u) = G_u 
+        (_,I_a,S_a) = G_a
+
+        @views energies_Gu = irrEU[G_u][1]
+        @views energies_Gv = irrEU[G_v][1]
+
+        @views dm_u = density_matrix[G_u]
+        @views dm_v = density_matrix[G_v]
+
+        # clebsch-gordan contribution 
+        dim_u = oindex2dimensions[I_u]*(S_u+1)
+        dim_a = oindex2dimensions[I_a]*(S_a+1)
+        cg = dim_u/dim_a
+
+        # iterate over multiplets in irrep combination
+        for r_a in axes(redmat,2)
+
+            m_a = (G_a...,r_a)
+
+            correlation_matrix = correlation_dict[m_a]
+
+            # particle sum over kept states
+            #
+            # m_v1 in K => m_v2 in K => m_u in D
+            if haskey(G2rr_kept,G_v) && haskey(G2rr_discarded,G_u)
+
+                G2rr_kept_v = G2rr_kept[G_v]
+                G2rr_disc_u = G2rr_discarded[G_u]
+
+                @inbounds for r_v1 in G2rr_kept_v,
+                              r_v2 in G2rr_kept_v
+
+                    # density matrix element
+                    dmel = dm_v[r_v2,r_v1]
+                    iszero(dmel) && continue
+
+                    # energies of the kept ("ground") states
+                    e_v1 = energies_Gv[r_v1]
+                    e_v2 = energies_Gv[r_v2]
+
+                    # iterate over excited (discarded) states
+                    for r_u in G2rr_disc_u
+
+                        redmatel = conj(redmat[r_u,r_a,r_v1])*redmat[r_u,r_a,r_v2]
+                        iszero(redmatel) && continue
+
+                        e_u = energies_Gu[r_u]
+                        e_diff = e_u-0.5*(e_v1+e_v2) 
+                        e_diff_scaled = e_diff*iteration_scale
+
+                        #e_diff>e_limit && continue
+
+                        # total weight 
+                        w = real(cg*redmatel*dmel)
+                        iszero(w) && continue
+
+                        add_excitation_contribution!( 
+                            correlation_matrix ,
+                            w ,
+                            e_diff_scaled ,
+                            high_energy_iterator ,
+                            low_energy_iterator ,
+                            broadening_distribution ,
+                            spectral_broadening ,
+                            half_weight_energy 
+                        )
+                        #correlation_matrix[positive_energy_mask,2] += map( 
+                        #    omega-> omega>=half_weight_energy ? 
+                        #            w*C(omega,
+                        #                e_diff_scaled,
+                        #                (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*e_diff_scaled),
+                        #                broadening_distribution) :
+                        #            w*C(omega,
+                        #                e_diff_scaled,
+                        #                (broadening_distribution=="loggaussian" ? spectral_broadening : half_weight_energy),
+                        #                broadening_distribution),
+                        #    correlation_matrix[positive_energy_mask,1]
+                        #)
+                        #@inbounds for n in high_energy_iterator
+                        #    omega = correlation_matrix[(end-n),1] 
+                        #    correlation_matrix[(end-n),2] += w*C( 
+                        #        omega,
+                        #        e_diff_scaled,
+                        #        (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*omega),
+                        #        broadening_distribution 
+                        #    )
+                        #end
+                        #@inbounds for n in low_energy_iterator
+                        #    omega = correlation_matrix[(end-n),1] 
+                        #    correlation_matrix[(end-n),2] += w*C( 
+                        #        omega,
+                        #        e_diff_scaled,
+                        #        half_weight_energy,
+                        #        "gaussian" 
+                        #    )
+                        #end
+                        #@inbounds for (i,i_scale) in enumerate(iterscales)
+                        #    if n<=half_weight_idx
+                        #        correlation_matrix[(end-(i-1)),2] += w*C( 
+                        #            correlation_matrix[(end-(i-1)),1],
+                        #            e_diff_scaled,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*correlation_matrix[(end-(i-1)),1]),
+                        #            broadening_distribution 
+                        #        )
+                        #    else
+                        #        correlation_matrix[(end-(i-1)),2] += w*C( 
+                        #            correlation_matrix[(end-(i-1)),1],
+                        #            e_diff*iteration_scale,
+                        #            smearing_parameter,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #end
+                    end
+                end
+            end
+            # particle sum over discarded states
+            #
+            # m_v1 in D => m_v2=m_v1 in D => m_u in (K,D)
+            if haskey(G2rr_discarded,G_v)
+
+                G2rr_disc_v = G2rr_discarded[G_v]
+                G2rr_all_u = G2rr_all[G_u]
+
+                @inbounds for r_v in G2rr_disc_v
+
+                    # density matrix element
+                    dmel = dm_v[r_v,r_v]
+                    iszero(dmel) && continue
+
+                    # energies of the "ground" states
+                    e_v = energies_Gv[r_v]
+
+                    # iterate over all intermediate states
+                    for r_u in G2rr_all_u
+
+                        redmatel = abs2(redmat[r_u,r_a,r_v])
+                        iszero(redmatel) && continue
+
+                        e_u = energies_Gu[r_u]
+                        e_diff = e_u-e_v
+                        e_diff_scaled = e_diff*iteration_scale
+
+                        # total weight 
+                        w = real(cg*redmatel*dmel)
+                        iszero(w) && continue
+
+                        add_excitation_contribution!( 
+                            correlation_matrix ,
+                            w ,
+                            e_diff_scaled ,
+                            high_energy_iterator ,
+                            low_energy_iterator ,
+                            broadening_distribution ,
+                            spectral_broadening ,
+                            half_weight_energy 
+                        )
+                        #if sign==1
+                        #    @inbounds for n in high_energy_iterator
+                        #        omega = correlation_matrix[(end-n),1]
+                        #        correlation_matrix[(end-n),2] += w*C( 
+                        #            omega,
+                        #            e_diff*iteration_scale,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*omega),
+                        #            broadening_distribution 
+                        #        )
+                        #    end
+                        #    @inbounds for n in low_energy_iterator
+                        #        omega = correlation_matrix[(end-n),1]
+                        #        correlation_matrix[(end-n),2] += w*C( 
+                        #            omega,
+                        #            e_diff*iteration_scale,
+                        #            half_weight_energy,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #elseif sign==-1
+                        #    @inbounds for n in high_energy_iterator
+                        #        omega = correlation_matrix[n+1,1]
+                        #        correlation_matrix[n+1,2] += w*C( 
+                        #            omega,
+                        #            e_diff*iteration_scale,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*omega),
+                        #            broadening_distribution 
+                        #        )
+                        #    end
+                        #    @inbounds for n in low_energy_iterator
+                        #        omega = correlation_matrix[n+1,1]
+                        #        correlation_matrix[n+1,2] += w*C( 
+                        #            omega,
+                        #            e_diff*iteration_scale,
+                        #            half_weight_energy,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #else
+                        #@inbounds for (i,i_scale) in enumerate(iterscales)
+                        #    n = i-1
+                        #    if n<=half_weight_idx
+                        #        correlation_matrix[(end-(i-1)),2] += w*C( 
+                        #            sign*correlation_matrix[(end-(i-1)),1],
+                        #            e_diff*iteration_scale,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*correlation_matrix[(end-(i-1)),1]),
+                        #            broadening_distribution 
+                        #        )
+                        #    else
+                        #        correlation_matrix[(end-(i-1)),2] += w*C( 
+                        #            sign*correlation_matrix[(end-(i-1)),1],
+                        #            e_diff*iteration_scale,
+                        #            smearing_parameter,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #end
+                    end
+                end
+            end
+
+            # hole sum over kept states
+            if haskey(G2rr_kept,G_u) && haskey(G2rr_discarded,G_v)
+
+                G2rr_kept_u = G2rr_kept[G_u]
+                G2rr_disc_v = G2rr_discarded[G_v]
+
+                @inbounds for r_u1 in G2rr_kept_u,
+                              r_u2 in G2rr_kept_u
+
+                    # density matrix element
+                    dmel = dm_u[r_u2,r_u1]
+                    iszero(dmel) && continue
+
+                    # energies of the kept ("ground") states
+                    e_u1 = energies_Gu[r_u1]
+                    e_u2 = energies_Gu[r_u2]
+
+                    # iterate over excited (discarded) states
+                    for r_v in G2rr_disc_v
+
+                        redmatel = redmat[r_u1,r_a,r_v]*conj(redmat[r_u2,r_a,r_v])
+                        iszero(redmatel) && continue
+
+                        e_v = energies_Gv[r_v]
+                        e_diff = 0.5*(e_u1+e_u2) - e_v
+                        e_diff_scaled = e_diff*iteration_scale
+
+                        # total weight 
+                        w = cg*redmatel*dmel
+                        iszero(w) && continue
+
+                        add_excitation_contribution!( 
+                            correlation_matrix ,
+                            w ,
+                            e_diff_scaled ,
+                            high_energy_iterator ,
+                            low_energy_iterator ,
+                            broadening_distribution ,
+                            spectral_broadening ,
+                            half_weight_energy 
+                        )
+                        #@inbounds for n in high_energy_iterator
+                        #    omega = correlation_matrix[n+1,1]
+                        #    correlation_matrix[n+1,2] += w*C(
+                        #        omega,
+                        #        e_diff_scaled,
+                        #        (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(e_diff_scaled)),
+                        #        broadening_distribution
+                        #    )
+                        #end
+                        #@inbounds for n in low_energy_iterator
+                        #    omega = correlation_matrix[n+1,1]
+                        #    correlation_matrix[n+1,2] += w*C(
+                        #        omega,
+                        #        e_diff_scaled,
+                        #        half_weight_energy,
+                        #        "gaussian"
+                        #    )
+                        #end
+                        #correlation_matrix[negative_energy_mask,2] += map( 
+                        #    omega-> -omega>=half_weight_energy ? 
+                        #            w*C(omega,
+                        #                e_diff_scaled,
+                        #                (broadening_distribution=="loggaussian" ? spectral_broadening : -spectral_broadening*e_diff_scaled),
+                        #                broadening_distribution) :
+                        #            w*C(omega,
+                        #                e_diff_scaled,
+                        #                (broadening_distribution=="loggaussian" ? spectral_broadening : half_weight_energy),
+                        #                broadening_distribution),
+                        #    correlation_matrix[negative_energy_mask,1]
+                        #)
+                        #@inbounds for (i,i_scale) in enumerate(iterscales)
+                        #    n=i-1
+                        #    if n<=half_weight_idx
+                        #        correlation_matrix[i,2] += w*C( 
+                        #            correlation_matrix[i,1],
+                        #            e_diff*iteration_scale,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : -spectral_broadening*correlation_matrix[i,1]),
+                        #            broadening_distribution 
+                        #        )
+                        #    else
+                        #        correlation_matrix[i,2] += w*C( 
+                        #            correlation_matrix[i,1],
+                        #            e_diff*iteration_scale,
+                        #            smearing_parameter,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #end
+
+                    end
+                end
+            end
+            # hole sum over discarded states
+            if haskey(G2rr_discarded,G_u)
+
+                G2rr_disc_u = G2rr_discarded[G_u]
+                G2rr_all_v = G2rr_all[G_v]
+
+                @inbounds for r_u in G2rr_disc_u,
+                              r_u in G2rr_disc_u
+
+                    # density matrix element
+                    dmel = dm_u[r_u,r_u]
+                    iszero(dmel) && continue
+
+                    # energies of the kept ("ground") states
+                    e_u = energies_Gu[r_u]
+
+                    # iterate over excited (discarded) states
+                    for r_v in G2rr_all_v
+
+                        redmatel = abs2(redmat[r_u,r_a,r_v])
+                        iszero(redmatel) && continue
+
+                        e_v = energies_Gv[r_v]
+                        e_diff = e_u - e_v
+                        e_diff_scaled = e_diff*iteration_scale
+
+                        # total weight 
+                        w = cg*redmatel*dmel
+                        iszero(w) && continue
+
+                        add_excitation_contribution!( 
+                            correlation_matrix ,
+                            w ,
+                            e_diff_scaled ,
+                            high_energy_iterator ,
+                            low_energy_iterator ,
+                            broadening_distribution ,
+                            spectral_broadening ,
+                            half_weight_energy 
+                        )
+                        #if sign==-1
+                        #    @inbounds for n in high_energy_iterator
+                        #        omega = correlation_matrix[n+1,1]
+                        #        correlation_matrix[n+1,2] += w*C(
+                        #            omega,
+                        #            e_diff_scaled,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(omega)),
+                        #            broadening_distribution 
+                        #        )
+                        #    end
+                        #    @inbounds for n in low_energy_iterator
+                        #        omega = correlation_matrix[n+1,1]
+                        #        correlation_matrix[n+1,2] += w*C(
+                        #            omega,
+                        #            e_diff_scaled,
+                        #            half_weight_energy,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #elseif sign==1
+                        #    @inbounds for n in high_energy_iterator
+                        #        omega = correlation_matrix[end-n,1]
+                        #        correlation_matrix[end-n,2] += w*C(
+                        #            omega,
+                        #            e_diff_scaled,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(omega)),
+                        #            broadening_distribution 
+                        #        )
+                        #    end
+                        #    @inbounds for n in low_energy_iterator
+                        #        omega = correlation_matrix[end-n,1]
+                        #        correlation_matrix[end-n,2] += w*C(
+                        #            omega,
+                        #            e_diff_scaled,
+                        #            half_weight_energy,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #end
+                        #@inbounds for (i,i_scale) in enumerate(iterscales)
+                        #    n=i-1
+                        #    if n<=half_weight_idx
+                        #        correlation_matrix[i,2] += w*C( 
+                        #            sign*correlation_matrix[i,1],
+                        #            e_diff*iteration_scale,
+                        #            (broadening_distribution=="loggaussian" ? spectral_broadening : -spectral_broadening*correlation_matrix[i,1]),
+                        #            broadening_distribution 
+                        #        )
+                        #    else
+                        #        correlation_matrix[i,2] += w*C( 
+                        #            sign*correlation_matrix[i,1],
+                        #            e_diff*iteration_scale,
+                        #            smearing_parameter,
+                        #            "gaussian" 
+                        #        )
+                        #    end
+                        #end
+                    end
+                end
+            end
+
+        end
+    end
+
+end
+function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
+                                       w ,
+                                       e_diff_scaled::Float64 ,
+                                       high_energy_iterator ,
+                                       low_energy_iterator ,
+                                       broadening_distribution::String ,
+                                       spectral_broadening::Float64 ,
+                                       half_weight_energy::Float64 )
+    open( "spectral/peaks.dat" , "a") do f
+        write( f , "$(e_diff_scaled) $w\n" )
+    end
+
+    if e_diff_scaled>0
+        @inbounds for n in high_energy_iterator
+            omega = correlation_matrix[end-n,1]
+            correlation_matrix[end-n,2] += w*C(
+                omega,
+                e_diff_scaled,
+                (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(e_diff_scaled)),
+                broadening_distribution 
+            )
+        end
+        @inbounds for n in low_energy_iterator
+            omega = correlation_matrix[end-n,1]
+            correlation_matrix[end-n,2] += w*C(
+                omega,
+                e_diff_scaled,
+                half_weight_energy,
+                "gaussian" 
+            )
+        end
+    else
+        @inbounds for n in high_energy_iterator
+            omega = correlation_matrix[n+1,1]
+            correlation_matrix[n+1,2] += w*C(
+                omega,
+                e_diff_scaled,
+                (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(e_diff_scaled)),
+                broadening_distribution 
+            )
+        end
+        @inbounds for n in low_energy_iterator
+            omega = correlation_matrix[n+1,1]
+            correlation_matrix[n+1,2] += w*C(
+                omega,
+                e_diff_scaled,
+                half_weight_energy,
+                "gaussian" 
+            )
+        end
+    end
+end
 function save_correlation_spectral_decomposition(
             spectral_functions::Dict{String,Dict{IntMultiplet,Matrix{Float64}}} ,
             label::String ,
@@ -4012,20 +4595,28 @@ function save_correlation_spectral_decomposition(
     # iterate over excitation multiplets
     for (orbital_idx,(m_a,spectral_a)) in enumerate(spectral_function)
 
-        iterations = size(spectral_a,1)÷2 - 1
+        N = size(spectral_a,1)÷2
+        iterations = N - 1
 
         # even and odd spectral functions
+        start_even = iseven(iterations) ? iterations+3 : iterations+2
+        start_odd  = iseven(iterations) ? iterations+2 : iterations+3
         spectral_function_even = vcat(
             spectral_a[1:2:iterations+1,:],
-            reverse(spectral_a[end:-2:iterations+2,:],dims=1)
+            #reverse(spectral_a[end:-2:iterations+2,:],dims=1)
+            spectral_a[start_even:2:end,:]
         )
         spectral_function_odd = vcat(
             spectral_a[2:2:iterations+1,:],
-            reverse(spectral_a[end-1:-2:iterations+2,:],dims=1)
+            #reverse(spectral_a[end-1:-2:iterations+2,:],dims=1)
+            spectral_a[start_odd:2:end,:]
         )
 
         # interpolation
-        omegas_evenodd = spectral_a[2:end-1,1]
+        omegas_evenodd = vcat(
+            spectral_a[2:iterations,1] ,
+            spectral_a[iterations+3:end-1,1]
+        )
         interpolator_even = linear_interpolation(spectral_function_even[:,1],spectral_function_even[:,2])
         interpolator_odd  = linear_interpolation(spectral_function_odd[:,1] ,spectral_function_odd[:,2])
         spectral_function_evenodd = zeros(Float64,length(omegas_evenodd),length(omegas_evenodd))
@@ -4671,77 +5262,4 @@ function compute_correlation_spectral_decomposition_Tnonzero(
         )
     end
 
-end
-function backwards_dm_reduced_Tnonzero(
-        dm::Dict{IntIrrep,Matrix{Float64}} ,
-        diagonalizers::Dict{IntIrrep,Matrix{ComplexF64}} ,
-        combinations_uprima::Dict{ IntIrrep , Vector{NTuple{3,IntMultiplet}} } ,
-        oindex2dimensions::Vector{Int64} ,
-        multiplets_kept::Set{IntMultiplet} ,
-        T::Float64 )
-
-    combinations_uprima_modified = Dict(
-        G_u => comb 
-        for (G_u,comb) in combinations_uprima
-        if haskey(dm,G_u)
-    )
-
-    GG_i = Set( 
-        m_i[1:3] 
-        for (G_u,combs_u) in combinations_uprima
-        for (_,_,m_i) in combs_u
-    )
-    G2mm_i = Dict( 
-        G_i=>Set(
-            m_i 
-            for (G_u,combs_u) in combinations_uprima for 
-            (_,_,m_i) in combs_u
-            if m_i[1:3]==G_i
-        )
-        for G_i in GG_i
-    )
-    G2multiplicity_i = Dict( G_i=>length(mm_i) for (G_i,mm_i) in G2mm_i )
-
-    dm_back::Dict{IntIrrep,Matrix{Float64}} = Dict(
-        G_i=>zeros(Float64,multiplicity_G_i,multiplicity_G_i)
-        for (G_i,multiplicity_G_i) in G2multiplicity_i
-    )
-
-    for (G_u,combinations_G_u) in combinations_uprima_modified
-
-        # diagonalization matrices and DM from next step
-        du = dm[G_u]
-        u = diagonalizers[G_u]
-
-        _,I_u,S_u = G_u
-
-        for (m_u,m_mu,m_i) in combinations_G_u,
-            (m_v,m_nu,m_j) in combinations_G_u
-
-            G_ij = m_i[1:3]
-
-            # trace over mu and symmetry of the DM
-            m_mu==m_nu     || continue
-            G_ij==m_j[1:3] || continue
-
-            # quantum numbers
-            r_u = m_u[4]
-            r_v = m_v[4]
-            _,I_ij,S_ij,r_i = m_i
-            r_j = m_j[4]
-
-            dim_i = oindex2dimensions[I_ij]*(S_ij+1)
-            dim_u = oindex2dimensions[I_u]*(S_u+1)
-            cgsum = dim_u/dim_i
-
-            contrib = dot(u[r_u,1:size(du,1)],du,conj.(u[r_v,1:size(du,1)]))
-
-            dm_back[G_ij][r_i,r_j] += real(cgsum*contrib)
-
-        end
-
-    end
-    println()
-
-    return dm_back
 end
