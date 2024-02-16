@@ -35,7 +35,7 @@ function nrg_molecule(
 
     # strict defaults
     precompute_iaj::Bool=true
-    
+
     # impmults only with imp
     compute_impmults = compute_impmults && (calculation=="IMP")
 
@@ -244,6 +244,7 @@ function nrg_molecule(
             for n in 1:(iterations-1)
         ]
     end
+    @show scale
 
     ##   =================== #
     ##&& INITIAL HAMILTONIAN #
@@ -267,11 +268,14 @@ function nrg_molecule(
         N,I,S = G
         U = ComplexF64.(diagm(map(x->1,1:rr)))
         if N==N_0
-            irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0 for r in 1:rr],U)
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0 for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r] for r in 1:rr],U)
         elseif N==N_0+1
-            irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0+chemical_potential for r in 1:rr],U)
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0+chemical_potential for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r]+chemical_potential for r in 1:rr],U)
         elseif N==N_0-1
-            irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0-chemical_potential for r in 1:rr],U)
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0-chemical_potential for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r]-chemical_potential for r in 1:rr],U)
         end
     end
     print_dict(irrEU_imp)
@@ -303,7 +307,7 @@ function nrg_molecule(
     )
 
     # rescale spectrum 
-    irrEU_notrescaled = irrEU
+    irrEU_notrescaled = copy(irrEU)
     irrEU = Dict{ClearIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}}(
         G=>( @.rescale(E,L,z,scale) , U ) for (G,(E,U)) in irrEU
     )
@@ -345,6 +349,7 @@ function nrg_molecule(
 
     end #timing
     println()
+    print_dict(pcg_block)
 
 
     #   ----------------------------------- #
@@ -557,7 +562,6 @@ function nrg_molecule(
     println( "PCGRED SHELL" )
     print_dict( pcgred_shell )
     println()
-
 
     #   -----------------   #
     #%% excitation matrix %%#
@@ -1473,7 +1477,7 @@ function compute_J_matrix( lehmann_reduced::Dict{NTuple{3,IntIrrep},Array{Comple
         M_c = M_1==ground_multiplet ? M_2 : M_1
         N_c = M_c[1]
         S_c = M_c[3]/2.0
-        E_c = irrEU_imp[M_c[1:3]...][1][r_1]
+        E_c = irrEU_imp[M_c[1:3]...][1][M_c[end]]
 
         # skip non-contributing excited multiplets
         abs(S_c-S_0)==0.5 || continue
