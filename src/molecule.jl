@@ -772,14 +772,16 @@ function nrg_molecule(
         #println()
 
         if (operator=="particle" && only_j_diagonalization)
+            @show irrEU
             ground_irrep = filter( 
-                x->iszero(x[2][1][1]) ,
-                collect(irrEU)
+                x->x[2][1][1]==E_0 ,
+                collect(irrEU_notrescaled)
             )[1][1]
             ground_multiplet = (ground_irrep...,1)
             @show ground_multiplet
+            irrEU_notrescaled_normalized = Dict( G=>(E.-E_0,U) for (G,(E,U)) in irrEU_notrescaled )
             J = compute_J_matrix( impurity_operators["particle"] , 
-                                  irrEU_notrescaled , 
+                                  irrEU_notrescaled_normalized , 
                                   ground_multiplet , 
                                   number_of_impurity_orbitals )
             jj,U = diagonalize_J( J )
@@ -789,7 +791,7 @@ function nrg_molecule(
             rhoJJ = jjV2./(2*band_width)
             rhoJ = (sum(filter(x->x>0,jjV2)))/(2*band_width)
             first_excited_energy = minimum(filter( 
-                x->x>0 ,
+                x->x>E_0 ,
                 [E[1] for (E,U) in values(irrEU_notrescaled)]
             ))
             kondotemps = 0.4 * first_excited_energy .* sqrt.(abs.(0.5.*positivejjV2)) .* exp.(-ground_multiplet[3]./(2.0 .* positivejjV2))
