@@ -792,7 +792,7 @@ function nrg_molecule(
             rhoJ = (sum(filter(x->x>0,jjV2)))/(2*band_width)
             first_excited_energy = minimum(filter( 
                 x->x>E_0 ,
-                [E[1] for (E,U) in values(irrEU_notrescaled)]
+                [E[1] for (E,U) in values(irrEU_notrescaled_normalized)]
             ))
             kondotemps = 0.4 * first_excited_energy .* sqrt.(abs.(0.5.*positivejjV2)) .* exp.(-ground_multiplet[3]./(2.0 .* positivejjV2))
             kondotemp = 0.4*
