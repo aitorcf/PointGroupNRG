@@ -894,7 +894,7 @@ function nrg_full(
     # form (yet?).
     scale::Float64 = band_width
     if scale_asymptotic
-        codiagonals_first = channels_codiagonals[10][1][1]
+        codiagonals_first = collect(values(channels_codiagonals[10]))[1][1]
         scale *= codiagonals_first
         channels_codiagonals = [
             # n (iterations) loop
