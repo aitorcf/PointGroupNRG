@@ -22,6 +22,7 @@ module NRGCalculator
 export multiplets_2particles
 export impurity_spectrum
 export nrg_full
+export nrg_full_doublegroups
 export generate_Z 
 export generate_Zlaps
 export zavg_thermo 
@@ -40,6 +41,7 @@ include( "reddiag.jl" )
 include( "automatization.jl" )
 include( "zavg.jl" )
 include( "molecule.jl" )
+include( "doublegroups.jl" )
 end
 using .NRGCalculator
 

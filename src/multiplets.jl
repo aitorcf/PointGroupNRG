@@ -45,6 +45,7 @@ abstract type BasisElement end
 # CONSTRUCTORS
 BasisElement( occ::Vector{Int64} ) = OrbitalBasisElement(occ)
 BasisElement( occ::Vector{Char}  ) = SpinBasisElement(occ)
+BasisElement( occ::Vector{Nothing} ) = SpinZeroBasisElement(occ)
 
 # OPERATIONS
 # equality
@@ -70,6 +71,7 @@ abstract type SimpleBasisElement <: BasisElement end
 # |↓ ↑ ) -> not sorted,|2 1) -> not sorted.
 is_ordered( be::T ) where {T<:SimpleBasisElement} = be==sort(be)
 sort( be::T ) where {T<:SimpleBasisElement} = BasisElement( sort(be.occupations) )
+sort( be::SpinZeroBasisElement ) = be
 # length (particle number)
 length( be::T ) where {T<:SimpleBasisElement} = length(be.occupations)
 # getindex
@@ -78,6 +80,9 @@ getindex( be::T , i::Int64 ) where {T<:SimpleBasisElement} = be.occupations[i]
 # DISPLAY
 function string( be::T ) where {T<:SimpleBasisElement}
     return "| " * reduce(*,map(x->"$x ",be.occupations))*")"
+end
+function string( be::T ) where {T<:SpinZeroBasisElement}
+    return "| " * reduce(*,map(x->"- ",be.occupations))*")"
 end
 
 # *********************
@@ -100,10 +105,23 @@ function spinz( sbe::SpinBasisElement )
     return sum(map(x->x=='↑' ? 0.5 : -0.5,[sbe[i] for i in 1:length(sbe)]))
 end
 
+# ********************
+# SPIN-0 BASIS ELEMENT
+# ....................
+struct SpinZeroBasisElement <: SimpleBasisElement
+    occupations::Vector{Nothing}
+end
+
+# *******************************
+# ABSTRACT COMPOUND BASIS ELEMENT
+# ...............................
+abstract type CompoundBasisElementGeneral <: BasisElement end
+
+
 # **********************
 # COMPOUND BASIS ELEMENT
 # ......................
-struct CompoundBasisElement <: BasisElement 
+struct CompoundBasisElement <: CompoundBasisElementGeneral 
     orbital::OrbitalBasisElement
     spin::SpinBasisElement
 end
@@ -125,6 +143,30 @@ function string( be::CompoundBasisElement )
     return opart * spart
 end
 
+# ***********************************
+# DOUBLE-GROUP COMPOUND BASIS ELEMENT
+# ...................................
+struct DoubleGroupCompoundBasisElement <: CompoundBasisElementGeneral 
+    orbital::OrbitalBasisElement
+    spin::SpinZeroBasisElement
+end
+
+# OPERATIONS
+# equality
+(==)( be1::DoubleGroupCompoundBasisElement , be2::DoubleGroupCompoundBasisElement ) =
+    ( be1.orbital==be2.orbital )
+(==)( be_c::DoubleGroupCompoundBasisElement , be_os::Tuple{OrbitalBasisElement,SpinZeroBasisElement} ) =
+    ( be_c.orbital==be_os[1] )
+# order and sorting (see above)
+sort( be::CompoundBasisElement ) = CompoundBasisElement( sort(be.orbital) , be.spin )
+isorted( be::CompoundBasisElement ) = be.orbital==sort(be.orbital)
+
+# DISPLAY
+function string( be::DoubleGroupCompoundBasisElement )
+    opart = "| " * reduce(*,map(x->"$x ",be.orbital.occupations))*")" 
+    spart = "| " * reduce(*,map(x->"- ",be.spin.occupations))*")" 
+    return opart * spart
+end
 
 
 # #########################################################
@@ -215,11 +257,29 @@ function SpinCanonicalBasis( n::Int64 )
     return SpinCanonicalBasis( states )
 end
 
+# **********************
+# SPIN-0 CANONICAL BASIS
+# ......................
+#%%
+struct SpinZeroCanonicalBasis <: SimpleCanonicalBasis
+    states::Vector{SpinZeroBasisElement}
+end
+
+# CONSTRUCTOR
+function SpinZeroCanonicalBasis( n::Int64 )
+    states::Vector{SpinZeroBasisElement} = [SpinZeroBasisElement([nothing for _ in 1:n])]
+    return SpinZeroCanonicalBasis( states )
+end
+
+# ********************************
+# COMPOUND CANONICAL BASIS GENERAL
+# ................................
+abstract type CompoundCanonicalBasisGeneral <: CanonicalBasis end
 
 # ************************
 # COMPOUND CANONICAL BASIS
 # ........................
-struct CompoundCanonicalBasis <: CanonicalBasis 
+struct CompoundCanonicalBasis <: CompoundCanonicalBasisGeneral
     states::Vector{CompoundBasisElement}
 end
 
@@ -245,6 +305,34 @@ function Base.show( io::IO,
     show( ccb )
 end
 
+# *************************************
+# DOUBLE-GROUP COMPOUND CANONICAL BASIS
+# .....................................
+struct DoubleGroupCompoundCanonicalBasis <: CompoundCanonicalBasisGeneral
+    states::Vector{DoubleGroupCompoundBasisElement}
+end
+
+# CONSTRUCTOR
+function DoubleGroupCompoundCanonicalBasis( n , m ) 
+    obasis = OrbitalCanonicalBasis( n , m ) 
+    sbasis = SpinZeroCanonicalBasis( n )
+    cstates = [ DoubleGroupCompoundBasisElement(os,ss) for os in obasis.states 
+                                            for ss in sbasis.states ]
+    return DoubleGroupCompoundCanonicalBasis( cstates )
+end
+
+# DISPLAY
+function Base.show( io::IO, 
+                    ccb::DoubleGroupCompoundCanonicalBasis )
+    for (i,s) in enumerate(ccb.states)
+        println( io , "$i: $(s.orbital)$(s.spin)" )
+    end
+end
+function Base.show( io::IO, 
+                    ::MIME"text/plain", 
+                    ccb::DoubleGroupCompoundCanonicalBasis )
+    show( ccb )
+end
 
 # ######################################
 # STATE
@@ -253,9 +341,9 @@ end
 #   CanonicalBasis as a complex vector.
 #
 # ######################################
-mutable struct State 
+mutable struct State
     vec::Vector{ComplexF64}
-    basis::CanonicalBasis 
+    basis::CanonicalBasis
 end
 
 # CONSTRUCTOR
@@ -293,8 +381,8 @@ function clean_symstates!( symstates::Dict{Tuple{String, Float64, Int64, Float64
 end
 
 # tensor multiplication of an orbital state and a spin state
-function tensormult( s_o::State , 
-                     s_s::State , 
+function tensormult( s_o::State ,
+                     s_s::State ,
                      basis_c::CompoundCanonicalBasis )
 
     s_c = State( zeros(ComplexF64,length(basis_c)) , basis_c )
@@ -309,20 +397,35 @@ function tensormult( s_o::State ,
 
         reftuple = (basis_o[n_o],basis_s[n_s])
 
-        #idx = [i for i in 1:length(basis_c)
-        #         if basis_c[i]==(basis_o[n_o],basis_s[n_s])][1]
         @inbounds for i in 1:length(basis_c) 
             if basis_c[i]==reftuple
                 s_c.vec[i] += e_o*e_s
                 break
             end
-            #basis_c[i]==(basis_o[n_o],basis_s[n_s]) && (idx=i)
         end
-        #idx = findfirst( i->basis_c[i]==(basis_o[n_o],basis_s[n_s]) ,
-        #                 1:length(basis_c) )
+    end
+    return s_c
+end
+function tensormult( s_o::State ,
+                     s_s::State ,
+                     basis_c::DoubleGroupCompoundCanonicalBasis )
 
-        #s_c += e_o*e_s * State( basis_c[idx] , basis_c )
-        #s_c.vec[idx] += e_o*e_s
+    s_c = State( zeros(ComplexF64,length(basis_c)) , basis_c )
+
+    basis_o::OrbitalCanonicalBasis = s_o.basis
+    basis_s::SpinZeroCanonicalBasis = s_s.basis
+
+    for (n_o,e_o) in enumerate(s_o.vec),
+        (n_s,e_s) in enumerate(s_s.vec)
+
+        reftuple = (basis_o[n_o],basis_s[n_s])
+
+        @inbounds for i in 1:length(basis_c) 
+            if basis_c[i]==reftuple
+                s_c.vec[i] += e_o*e_s
+                break
+            end
+        end
     end
     return s_c
 end
@@ -646,18 +749,18 @@ function mul!( tmp::T , p::AbstractPermutation , bs::T ) where {T<:SimpleBasisEl
     mul!( tmp.occupations , p , bs.occupations ) 
 end
 # compound basis element permutation
-function *( p::AbstractPermutation , bs::CompoundBasisElement )
+function *( p::AbstractPermutation , bs::CBSG ) where {CBSG<:CompoundCanonicalBasisGeneral}
     return CompoundBasisElement( p*bs.orbital , p*bs.spin )
 end
-function mul!( tmp::CompoundBasisElement ,
+function mul!( tmp::CBEG ,
                p::AbstractPermutation ,
-               bs::CompoundBasisElement )
+               bs::CBEG ) where {CBEG<:CompoundBasisElementGeneral}
     mul!( tmp.orbital , p , bs.orbital )
     mul!( tmp.spin    , p , bs.spin    )
 end
 # state permutation 
 function *( p::AbstractPermutation , s::State ) 
-    return State( MatrixPermutation(p,s.basis)*s.vector , s.basis )
+    return State( MatrixPermutation(p,s.basis)*s.vec , s.basis )
 end
 function mul!( tmp::State , 
                p::AbstractPermutation ,
@@ -715,7 +818,7 @@ function mul!( tmp::Tableau ,
                p::AbstractPermutation , 
                t::Tableau ) 
     @inbounds for i=1:length(p) 
-        tmp.vec[i] = p[t[i]]::Int64 
+        tmp.numbers[i] = p[t[i]]::Int64 
     end
 end
 
@@ -747,16 +850,11 @@ function MatrixPermutation( ap::AbstractPermutation , cb::T ) where {T<:Canonica
         mul!( tmp , ap , cb[j] )
         idx = get_bs_idx( tmp , cb )
         mat[idx,j] = 1
-        #for i=1:N 
-        #    #mat[i,j] = dot( cb[i] , ap*cb[j] )
-        #    mat[i,j] = dot( cb[i] , tmp )
-        #end
     end
     return MatrixPermutation(mat)
 end
 function MatrixPermutation!( tmp::MatrixPermutation , ap::AbstractPermutation , cb::T ; verbose=false ) where {T<:CanonicalBasis}
     N = length( cb )
-    mat::Matrix{Int64} = zeros( Int64 , N , N )
     tmp.mat .= zero(tmp.mat[1,1])
     tmpbe = deepcopy(cb[1])
     @inbounds for j=1:N
@@ -768,10 +866,6 @@ function MatrixPermutation!( tmp::MatrixPermutation , ap::AbstractPermutation , 
             println( "$j => $idx" )
         end
         tmp.mat[idx,j] = 1
-        #for i=1:N 
-        #    #mat[i,j] = dot( cb[i] , ap*cb[j] )
-        #    mat[i,j] = dot( cb[i] , tmp )
-        #end
     end
 end
 
@@ -890,7 +984,7 @@ show( io::IO, ::MIME"text/plain", sym::Symmetrizer ) = show( sym )
 # ***************************
 # ROW AND COLUMN SYMMETRIZERS
 # ...........................
-struct RowSymmetrizer <:Symmetrizer
+struct RowSymmetrizer <: Symmetrizer
     mat::Matrix{Int64} 
 end
 struct ColumnSymmetrizer <: Symmetrizer
@@ -922,7 +1016,6 @@ function ColumnSymmetrizer( t::Tableau , cb::T ) where {T<:CanonicalBasis}
     for perm in colsyms 
         MatrixPermutation!( tmp , perm , cb )
         mat .+= parity(perm) .* tmp.mat
-        #mat .+= parity(perm) .* MatrixPermutation( perm , cb ).mat
     end
     return ColumnSymmetrizer( mat )
 end
@@ -1106,6 +1199,67 @@ function get_dSsa2states( basis_s::SpinCanonicalBasis ,
         for (bipart,tabs) in get_partitions2tableaux(bipartitions)
 
             S = bipart2spin( bipart )
+            d = ( bipart.vec... ,) 
+            verbose && @show d, S
+
+            for (a,t) in enumerate(tabs)
+                verbose && pp( t )
+                ys = YoungSymmetrizer( t , basis_s )
+                ts = ys*seedstate 
+                if norm(ts)==zero(ComplexF64)
+                    verbose && println( "state annihilated by symmetrizer" )
+                    continue
+                end
+                if is_dependent( ts.vec , space[sortedspins] )
+                    verbose && println( "linearly dependent combination" )
+                    continue
+                end
+                space[sortedspins] = hcat( space[sortedspins] , ts.vec )
+                normalize!(ts)
+                sym = (d,S,s,a)
+                dSsa2states[sym] = ts
+                verbose && println( "$sym ==> $ts" )
+            end
+            verbose && println()
+        end
+    end
+    return dSsa2states
+end
+function get_dSsa2states( basis_s::SpinZeroCanonicalBasis , 
+                          bipartitions::Vector{Partition} ;
+                          verbose=false )
+
+    if verbose 
+        println( "==========================================================" )
+        println( "CALCULATION OF PERMUTATION- AND SPIN-SYMMETRIC SPIN STATES" )
+        println( "==========================================================" )
+    end
+
+    dSsa2states = Dict{ Tuple{Tuple,Float64,Float64,Int64} , 
+                        State }()
+    space::Dict{ Tuple , Matrix{ComplexF64} } = Dict()
+
+    for i in 1:length(basis_s)
+
+        seed = basis_s[i]
+        sortedspins = (seed.occupations...,)
+        if sortedspins ∉ keys(space) 
+            space[sortedspins] = Matrix{ComplexF64}(undef,length(basis_s),0) 
+        end
+        if verbose 
+            println( "**********************" )
+            println( "STATES FROM SEED $seed" )
+            println( "......................" )
+        end
+
+        s = 0.0
+
+        seedstate = State( seed , basis_s )
+
+        verbose && println( "BIPARTITIONS" )
+        for (bipart,tabs) in get_partitions2tableaux(bipartitions)
+
+            S = 0.0
             d = ( bipart.vec... ,) 
             verbose && @show d, S
 
@@ -1387,8 +1541,8 @@ end
 # ............
 function get_dSsadIair2states( dIair2states_o::Dict{ Tuple{Tuple,String,Int64,Int64,Int64} , State } ,
                                dSsa2states_s::Dict{ Tuple{Tuple,Float64,Float64,Int64} , State } ,
-                               basis_c::CompoundCanonicalBasis ;
-                               verbose=false )
+                               basis_c::CCBG ;
+                               verbose=false ) where {CCBG<:CompoundCanonicalBasisGeneral}
 
     verbose && println( "GETTING dSsadIair2states" )
     dSsadIair2states = Dict{ Tuple{Tuple,Float64,Float64,Int64,Tuple,String,Int64,Int64,Int64} , State }()
@@ -1432,18 +1586,20 @@ end
 function get_M( basis_c::CompoundCanonicalBasis ) 
     return basis_c[length(basis_c)].orbital.occupations[1]*2
 end
-function get_N( basis_c::CompoundCanonicalBasis )
+function get_M( basis_c::DoubleGroupCompoundCanonicalBasis ) 
+    return basis_c[length(basis_c)].orbital.occupations[1]
+end
+function get_N( basis_c::CCBG ) where {CCBG<:CompoundCanonicalBasisGeneral}
     return length(basis_c[1].orbital.occupations) 
 end
-function get_asymdim( basis_c::CompoundCanonicalBasis ) 
-    M = get_M( basis_c ) 
-    N = get_N( basis_c )
-    res::Int64 = factorial(M)/factorial(M-N)/factorial(N)
-    return res
+function get_asymdim( basis_c::CCBG ) where {CCBG<:CompoundCanonicalBasisGeneral}
+    M::Int64 = get_M( basis_c ) 
+    N::Int64 = get_N( basis_c )
+    return Int64(factorial(M)/factorial(M-N)/factorial(N))
 end
 function get_asymsubspace( N::Int64 , 
-                           basis_c::CompoundCanonicalBasis ;
-                           verbose=false )
+                           basis_c::CCBG ;
+                           verbose=false ) where {CCBG<:CompoundCanonicalBasisGeneral}
     if verbose 
         println( "================================" )
         println( "COMPUTING ANTISYMMETRIC SUBSPACE" )
@@ -1459,21 +1615,6 @@ function get_asymsubspace( N::Int64 ,
     ay = YoungSymmetrizer( at , basis_c )
     ts = State( basis_c[1] , basis_c )
     asymsubspace = Matrix{ComplexF64}(undef,length(basis_c),asymdim)
-    #if (asymdim==1 && N>0)  # particle saturation
-    #    if verbose 
-    #        println( "********************" )
-    #        println( "shortcut calculation" )
-    #        println( "--------------------" )
-    #    end
-    #    be = BasisElement( [1,2,3,1,2,3] , ['↑','↓','↑','↓','↑','↓'] )
-    #    verbose && @show bs
-    #    s = State( be , basis_c )
-    #    mul!( ts , ys , s ) 
-    #    verbose && @show ts
-    #    normalize!( ts )
-    #    asymsubspace[:,1] .= ts.vec 
-    #    return asymsubspace 
-    #end
     idx = 1
     for i in 1:length(basis_c)
         s = State( basis_c[i] , basis_c ) 
@@ -1491,7 +1632,6 @@ function get_asymsubspace( N::Int64 ,
             verbose && println( "first state in" )
             verbose && println()
             normalize!(ts)
-            #asymsubspace = hcat( asymsubspace , ts.vec )
             asymsubspace[:,idx] .= ts.vec
             idx += 1
             verbose && @show idx 
@@ -1572,8 +1712,8 @@ end
 # ..........
 function get_asym_ISisr( dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int64,Tuple,String,Int64,Int64,Int64} , State } ,
                          asymsubspace::Matrix{ComplexF64} ,
-                         basis_c::CompoundCanonicalBasis ;
-                         verbose=false )
+                         basis_c::CCBG ;
+                         verbose=false ) where {CCBG<:CompoundCanonicalBasisGeneral}
 
     if verbose
         println( "===========================" )
@@ -1661,7 +1801,8 @@ end
 function compute_multiplets( orbital::String ,
                              cg_o_dir::String ,
                              multiplets_path::String ;
-                             verbose::Bool=false )
+                             verbose::Bool=false ,
+                             doublegroup::Bool=false )
 
     # add convention name to multiplet folder
     if multiplets_path[end]=="/"
@@ -1673,9 +1814,14 @@ function compute_multiplets( orbital::String ,
     isdir(multiplets_path) || mkpath( multiplets_path )
 
     # compute multiplet states
-    for n in 2:2*get_M(orbital,cg_o_dir)
-        compute_asymstates_N( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+    for n in 2:get_M(orbital,cg_o_dir)
+        if !doublegroup
+            compute_asymstates_N( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+        else 
+            compute_asymstates_N_doublegroup( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+        end
     end
+
 end
 
 function compute_asymstates_N( 
@@ -1959,5 +2105,288 @@ function compute_asymstates_N(
         end
     end
           
+    return ISisr
+end
+
+function compute_asymstates_N_doublegroup( 
+            orbital::String , 
+            N::Int64 ,
+            cg_path::String ,
+            asym_path::String ;
+            verbose::Bool=false ,
+            identityrep::String="" )
+
+    # orbital dimensions
+    M = get_M( orbital , cg_path )
+
+    # basis
+    basis_c = DoubleGroupCompoundCanonicalBasis( N , M )
+    @show basis_c
+
+    # write down antisymmetric basis 
+    asymsubspace = get_asymsubspace( N , basis_c , verbose=verbose )
+    open( "$(asym_path)/N$(N)basis.txt" , "w" ) do io
+        for i in 1:size(asymsubspace,2) 
+
+            v = asymsubspace[:,i]
+            idx = findfirst( x->(!isapprox(abs(x),0.0)) , v )
+            basis_element = basis_c.states[idx]
+
+            o_part = basis_element.orbital.occupations
+            s_part = basis_element.spin.occupations
+
+            o_string = reduce( (x,y)->"$x $y" , o_part )
+            s_string = reduce( (x,y)->"- -" , s_part )
+
+            write( io , "$o_string $s_string \n" )
+
+        end
+    end
+
+    if (N==M && identityrep!=="")
+
+        if verbose 
+            println( "************************************************" )
+            println( "SHORTCUT COMPUTATION FOR THE SATURATED CASE N=2M" )
+            println( "------------------------------------------------" )
+        end
+
+        s = State( asymsubspace[:,1] ) 
+        sym = (identityrep,0.0,1,0.0,1)
+        ISisr = Dict( sym => s )
+
+        filename = "$(asym_path)/N$N.txt" 
+        cmd = `touch $filename` 
+        run(cmd)
+        open( "$(asym_path)/N$N.txt" , "w" ) do io 
+            for (k,s) in ISisr 
+                symstring = reduce( * , map(x->"$x ",[k...]) )
+                canrep = s.vec 
+                canstring = reduce( * , map(x->"($x)  ",canrep) ) 
+                asymrep = collect(flatten(nullspace(hcat(asymsubspace,-canrep),atol=1e-6)[1:size(asymsubspace,2),:]))
+                normalize!(asymrep)
+                asymstring = reduce( * , map(x->"($x)  ",asymrep) ) 
+                toprint = reduce( (x,y)->x*"| "*y , [symstring,canstring,asymstring] )
+                verbose && println( toprint )
+                println( io , toprint )
+            end
+        end
+        return ISisr
+    end
+
+
+    # *********
+    # SPIN PART
+    # .........
+
+    if verbose
+        println( "# · ######### · #" )
+        println( "# | --------- | #" )
+        println( "# | SPIN PART | #" )
+        println( "# | --------- | #" )
+        println( "# · ######### · #" )
+        println()
+    end
+
+    #%% BASIS
+    basis_s = SpinZeroCanonicalBasis(N)
+    if verbose 
+        println( "==========" )
+        println( "SPIN BASIS" )
+        println( "==========" )
+        println( basis_s )
+        println()
+    end
+
+    #%% BIPARTITIONS
+    partitions_s = [Partition([N])]
+    if verbose 
+        println( "===============" )
+        println( "SPIN PARTITIONS" )
+        println( "===============" )
+        for p in partitions_s
+            println( "partition: $(p.vec)" )
+            pp( p )
+            println()
+        end
+    end
+
+    #%% spin symstates
+    dSsa2states_s = get_dSsa2states( basis_s , 
+                                     partitions_s ;
+                                     verbose=verbose )
+    if verbose
+        println( "===========================================" )
+        println( "SPIN- AND PERMUTATION-SYMMETRIC SPIN STATES" )
+        println( "===========================================" )
+        for (k,s) in dSsa2states_s 
+            @show k 
+            @show s
+            println()
+        end
+    end
+
+
+    # ************
+    # ORBITAL PART 
+    # ............
+    if verbose
+        println( "# · ############ · #" )
+        println( "# | ------------ | #" )
+        println( "# | ORBITAL PART | #" )
+        println( "# | ------------ | #" )
+        println( "# · ############ · #" )
+        println()
+    end
+
+    #%% orbital basis
+    basis_o = OrbitalCanonicalBasis( N , M )
+    if verbose 
+        println( "=============" )
+        println( "ORBITAL BASIS" )
+        println( "=============" )
+        show( basis_o )
+        println()
+    end
+
+    #%% partitions
+    partitions_so = Dict( p=>complementary(p) for p in partitions_s )
+    partitions_o = [complementary(p) for p in partitions_s]
+    if verbose 
+        println( "==========================================" )
+        println( "ORBITAL PARTITIONS (complementary to spin)" )
+        println( "==========================================" )
+        for (sp,op) in partitions_so 
+            println( sp , " ==> " , op )
+            pp( op )
+            println()
+        end
+    end
+
+    #%% permutation-symmetric orbital states 
+    dar2states_o = get_dar2states( basis_o , 
+                                   partitions_o ; 
+                                   verbose=verbose )
+    if verbose 
+        println( "====================================" )
+        println( "PERMUTATION-SYMMETRIC ORBITAL STATES" )
+        println( "====================================" )
+        for (k,v) in dar2states_o 
+            println( "$k ==> $v" )
+            println()
+        end
+    end
+
+
+    #%% orbital-symmetric orbital states
+    Iir2states_o = get_Iir2states( N , M , orbital , cg_path ; verbose=verbose )
+    if verbose 
+        println( "================================" )
+        println( "ORBITAL-SYMMETRIC ORBITAL STATES" )
+        println( "================================" )
+        for (k,v) in Iir2states_o
+            println( "$k ==> $v" )
+            println()
+        end
+    end
+
+
+    #%% permutation and orbital symmetric states
+    dIair2states_o = get_dIair2states( dar2states_o , 
+                                       Iir2states_o ,
+                                       basis_o ;
+                                       verbose=verbose )
+    if verbose
+        println( "=========================================" )
+        println( "ORBITAL- AND PERMUTATION-SYMMETRIC STATES" )
+        println( "=========================================" )
+        clean_symstates!( dIair2states_o )
+        for (k,v) in dIair2states_o
+            println( "$k ==> $v" ) 
+        end
+        println()
+    end
+
+    # *************
+    # COMBINED PART
+    # .............
+    if verbose 
+        println( "# · ############# · #" )
+        println( "# | ------------- | #" )
+        println( "# | COMBINED PART | #" )
+        println( "# | -------.----- | #" )
+        println( "# · ############# · #" )
+        println()
+    end
+
+    #%% compound basis 
+    basis_c = DoubleGroupCompoundCanonicalBasis( N , M )
+    if verbose 
+        println( "==============" )
+        println( "COMPOUND BASIS" )
+        println( "==============" )
+        show(basis_c)
+    end
+
+    #%% independently symmetric states
+    dSsadIair2states = get_dSsadIair2states( dIair2states_o , 
+                                             dSsa2states_s ,
+                                             basis_c ;
+                                             verbose=verbose )
+    if verbose
+        println( "================" )
+        println( "dSsadIair STATES" )
+        println( "================" )
+        for (k,v) in dSsadIair2states 
+            @show k 
+            @show v 
+            println()
+        end
+    end
+
+    # ******************
+    # ANTISYMMETRIC PART
+    # ..................
+    #%% completely antisymmetric states
+    asymsubspace = get_asymsubspace( N , basis_c , verbose=verbose )
+
+    # *************************************
+    # SYMMETRY-ADAPTED ANTISYMMETRIC STATES
+    # .....................................
+    #%%
+    ISisr = get_asym_ISisr( dSsadIair2states , 
+                            asymsubspace ,
+                            basis_c ;
+                            verbose=verbose )
+    clean_symstates!( ISisr )
+
+    # *******
+    # WRITING
+    # .......
+    filename = "$(asym_path)/N$N.txt" 
+    cmd = `touch $filename` 
+    run(cmd)
+    open( "$(asym_path)/N$N.txt" , "w" ) do io 
+        for (k,s) in ISisr 
+            symstring = reduce( * , map(x->"$x ",[k...]) )
+            canrep = s.vec 
+            canstring = reduce( * , map(x->"($x)  ",canrep) ) 
+            asymrep = collect(Base.Iterators.flatten(nullspace(hcat(asymsubspace,-canrep),atol=1e-6)[1:size(asymsubspace,2),:]))
+            for e in asymrep 
+                if abs(e)!==0.0 
+                    if real(e)<0.0
+                        asymrep = -asymrep
+                    end
+                    break 
+                end
+            end
+            normalize!(asymrep)
+            asymstring = reduce( * , map(x->"($x)  ",asymrep) ) 
+            toprint = reduce( (x,y)->x*"| "*y , [symstring,canstring,asymstring] )
+            verbose && println( toprint )
+            println( io , toprint )
+        end
+    end
+
     return ISisr
 end
