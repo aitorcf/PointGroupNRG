@@ -33,7 +33,7 @@ function sortfunction( state::SFS ) where {SFS<:SymbolFockState}
     end
     orbitals = (orbitals...,)
 
-    spindict = Dict( "u"=>1 , "d"=>2 )
+    spindict = Dict( "u"=>1 , "d"=>2 , "-"=>1 )
     spins = []
     for idx in findall(state.occ) 
         push!( spins , spindict[hilbert.states[idx][4]] )

@@ -39,6 +39,7 @@ const AbstractQPCG = Union{ClearQPCG,IntQPCG}
 
 const ClearIrrepPCG = Dict{ ClearTripleG , Array{ComplexF64,3} }
 const IntIrrepPCG   = Dict{ IntTripleG ,   Array{ComplexF64,3} }
+const IntIrrepPCGNS = Dict{ IntTripleG ,   Array{ComplexF64,4} }
 const AbstractIrrepPCG = Union{ClearIrrepPCG,IntIrrepPCG}
 
 const ClearMultiplet = Tuple{Int64,String,Float64,Int64}
@@ -61,6 +62,7 @@ const AbstractIrrepVector = Union{ClearIrrepVector,IntIrrepVector}
 
 const IntCGKey = NTuple{3,Int64}
 const IntCG = Dict{ IntCGKey , Array{ComplexF64,3} }
+const IntCGNS = Dict{ IntCGKey , Array{ComplexF64,4} } # NS=NonSimple
 
 # ##################
 # ORBITAL GENERATORS 
@@ -305,11 +307,10 @@ function cg_orbital( I_1::String ,
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 } = Dict()
 
     file = [ x for x in readdir( "$(path)/" ) 
-             if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
+             if (occursin("_$(I_1)x$(I_2).",x) || occursin("_$(I_2)x$(I_1).",x)) ][1]
     verbose && @show file 
 
-    inverted = false
-    occursin("$(I_2)x$(I_1)",file) && (inverted=true)
+    inverted = I_1!==I_2 && occursin("$(I_2)x$(I_1)",file)
 
     I_3::String = "a"
     for line in readlines( "$(path)/$(file)" ) 
@@ -503,7 +504,7 @@ function symstates_n_oneirrep(
         for sfs::SFS in basis.states
             (g::Int64,I::String,mu::Int64,m::String) = sfs.hilbert.states[ findfirst(sfs.occ) ]
             get!( symstates , 
-                  (1,hiztegia[I],0.5,mu,hiztegia[m]::Float64,g) , 
+                  (1,hiztegia[I],m=="-" ? 0.0 : 0.5,mu,hiztegia[m]::Float64,g) , 
                   State(sfs,basis) )
         end
         return symstates

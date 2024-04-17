@@ -11,11 +11,10 @@ function cg_orbital_nonsimple( I_1 , I_2 , path ; verbose=false )
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64,Int64} , ComplexF64 } = 
         Dict{ Tuple{String,Int64,String,Int64,String,Int64,Int64} , ComplexF64 }()
     file = [ x for x in readdir("$(path)/") 
-               if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
+               if (occursin("_$(I_1)x$(I_2).",x) || occursin("_$(I_2)x$(I_1).",x)) ][1]
     verbose && @show file 
 
-    inverted = false
-    occursin("$(I_2)x$(I_1)",file) && (inverted=true)
+    inverted = (I_2!==I_1 && occursin("$(I_2)x$(I_1)",file))
 
     I_3::String = "a"
     r_3::Int64 = 1
@@ -38,6 +37,7 @@ end
 
 function get_M_nonsimple( I , cg_path ) 
     cgo = cg_orbital_nonsimple( I , I , cg_path )
+    @show cgo
     return maximum([k[2] for k in keys(cgo)])
 end
 
@@ -97,9 +97,9 @@ function combine_symstates_nonsimple( symstates_block::Dict{ Tuple{String,Int64,
             println("decomposition of multiplets m_a=$m_a and m_b=$m_b") 
         end
 
-        I_a, I_b = m_a[1], m_b[1]
-        r_a, r_b = m_a[2], m_b[2]
-        IIrr_c = Set(k[5:6] for k in keys(cg_o) 
+        I_a,I_b = m_a[1], m_b[1]
+        r_a,r_b = m_a[2], m_b[2]
+        IIrr_c = Set((k[5],k[7]) for k in keys(cg_o) 
                             if (k[1],k[3])==(I_a,I_b))
 
         for (I_c,r_c) in IIrr_c
@@ -448,16 +448,19 @@ function compute_asymstates_N_doublegroup_nonsimple(
         for (k,s) in ISisr 
             symstring = reduce( * , map(x->"$x ",[k...]) )
             canrep = s.vec 
+            phase_canrep = angle(filter(!iszero,canrep)[1])
             canstring = reduce( * , map(x->"($x)  ",canrep) ) 
             asymrep = collect(Base.Iterators.flatten(nullspace(hcat(asymsubspace,-canrep),atol=1e-6)[1:size(asymsubspace,2),:]))
-            for e in asymrep 
-                if abs(e)!==0.0 
-                    if real(e)<0.0
-                        asymrep = -asymrep
-                    end
-                    break 
-                end
-            end
+            phase_asymrep = angle(filter(!iszero,asymrep)[1])
+            asymrep *= exp(1.0im*(phase_canrep-phase_asymrep))
+            #for e in asymrep 
+            #    if abs(e)!==0.0 
+            #        if real(e)<0.0
+            #            asymrep = -asymrep
+            #        end
+            #        break 
+            #    end
+            #end
             normalize!(asymrep)
             asymstring = reduce( * , map(x->"($x)  ",asymrep) ) 
             toprint = reduce( (x,y)->x*"| "*y , [symstring,canstring,asymstring] )

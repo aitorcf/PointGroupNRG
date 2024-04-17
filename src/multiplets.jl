@@ -71,7 +71,6 @@ abstract type SimpleBasisElement <: BasisElement end
 # |↓ ↑ ) -> not sorted,|2 1) -> not sorted.
 is_ordered( be::T ) where {T<:SimpleBasisElement} = be==sort(be)
 sort( be::T ) where {T<:SimpleBasisElement} = BasisElement( sort(be.occupations) )
-sort( be::SpinZeroBasisElement ) = be
 # length (particle number)
 length( be::T ) where {T<:SimpleBasisElement} = length(be.occupations)
 # getindex
@@ -80,9 +79,6 @@ getindex( be::T , i::Int64 ) where {T<:SimpleBasisElement} = be.occupations[i]
 # DISPLAY
 function string( be::T ) where {T<:SimpleBasisElement}
     return "| " * reduce(*,map(x->"$x ",be.occupations))*")"
-end
-function string( be::T ) where {T<:SpinZeroBasisElement}
-    return "| " * reduce(*,map(x->"- ",be.occupations))*")"
 end
 
 # *********************
@@ -112,11 +108,19 @@ struct SpinZeroBasisElement <: SimpleBasisElement
     occupations::Vector{Nothing}
 end
 
+sort( be::SpinZeroBasisElement ) = be
+function string( be::T ) where {T<:SpinZeroBasisElement}
+    return "| " * reduce(*,map(x->"- ",be.occupations))*")"
+end
+
 # *******************************
 # ABSTRACT COMPOUND BASIS ELEMENT
 # ...............................
 abstract type CompoundBasisElementGeneral <: BasisElement end
 
+# order and sorting (see above)
+sort( be::CBEG ) where {CBEG<:CompoundBasisElementGeneral} = CompoundBasisElement( sort(be.orbital) , sort(be.spin) )
+isorted( be::CBEG ) where {CBEG<:CompoundBasisElementGeneral} = be.orbital==sort(be.orbital) || be.spin==sort(be.spin)
 
 # **********************
 # COMPOUND BASIS ELEMENT
@@ -132,9 +136,6 @@ end
     ( be1.orbital==be2.orbital && be1.spin==be2.spin )
 (==)( be_c::CompoundBasisElement , be_os::Tuple{OrbitalBasisElement,SpinBasisElement} ) =
     ( be_c.orbital==be_os[1] && be_c.spin==be_os[2] )
-# order and sorting (see above)
-sort( be::CompoundBasisElement ) = CompoundBasisElement( sort(be.orbital) , sort(be.spin) )
-isorted( be::CompoundBasisElement ) = be.orbital==sort(be.orbital) || be.spin==sorted(be.spin)
 
 # DISPLAY
 function string( be::CompoundBasisElement )
@@ -157,9 +158,6 @@ end
     ( be1.orbital==be2.orbital )
 (==)( be_c::DoubleGroupCompoundBasisElement , be_os::Tuple{OrbitalBasisElement,SpinZeroBasisElement} ) =
     ( be_c.orbital==be_os[1] )
-# order and sorting (see above)
-sort( be::CompoundBasisElement ) = CompoundBasisElement( sort(be.orbital) , be.spin )
-isorted( be::CompoundBasisElement ) = be.orbital==sort(be.orbital)
 
 # DISPLAY
 function string( be::DoubleGroupCompoundBasisElement )
@@ -1075,7 +1073,7 @@ function cg_orbital( I_1 , I_2 , path ; verbose=false )
     cg::Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 } = 
         Dict{ Tuple{String,Int64,String,Int64,String,Int64} , ComplexF64 }()
     file = [ x for x in readdir("$(path)/") 
-               if (occursin("$(I_1)x$(I_2)",x) || occursin("$(I_2)x$(I_1)",x)) ][1]
+               if (occursin("_$(I_1)x$(I_2).",x) || occursin("_$(I_2)x$(I_1).",x)) ][1]
     verbose && @show file 
 
     inverted = false
@@ -1142,8 +1140,9 @@ end
 
 # dictionary I => dim(I)
 get_oirreps2dimensions( cg_o ) = Dict( 
-            k[1]=>maximum(K[2] for K in keys(cg_o) if K[1]==k[1]) 
-            for k in keys(cg_o) )
+    k[1]=>maximum(K[2] for K in keys(cg_o) if K[1]==k[1]) 
+    for k in keys(cg_o) 
+)
 
 
 # ##########################################
@@ -1516,6 +1515,22 @@ function get_dIair2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
 
     dIair2states::Dict{ Tuple{Tuple,String,Int64,Int64,Int64} , State } = Dict()
 
+    # gather phases
+    phases = Dict{String,Vector{Tuple{Int64,Float64}}}()
+    for I in Set(k[1] for k in keys(Iir2states))
+
+        phases[I] = []
+
+        dim_I = maximum([k[2] for k in keys(Iir2states) if k[1]==I])
+        for i in 1:dim_I
+            q = (I,i,1)
+            state = Iir2states[q]
+            idx = findfirst(!iszero,state.vec)
+            c = angle(state.vec[idx])
+            push!( phases[I] , (idx,c) )
+        end
+    end
+
     for (d,a) in Set(k[1:2] for k in keys(dar2states)),
         (I,i) in Set(k[1:2] for k in keys(Iir2states))
 
@@ -1527,8 +1542,17 @@ function get_dIair2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
         int = subspace_intersection( S_dar , S_Iir )
         size(int,2)==0 && continue
 
+        idx,phase = phases[I][i]
+        @show I,i,phase
         for r in 1:size(int,2) 
-            dIair2states[d,I,a,i,r] = State(int[:,r],basis_o)
+            #println( "pre-phase-fix:")
+            state = State(int[:,r],basis_o)
+            #println(state)
+            #@show state.vec[idx],angle(state.vec[idx])
+            state.vec .*= cis(phase-angle(state.vec[idx]))
+            #println("post-phase-fix:")
+            #println(state)
+            dIair2states[d,I,a,i,r] = state
         end
         verbose && println()
     end
@@ -1721,6 +1745,24 @@ function get_asym_ISisr( dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int
         println( "===========================" )
     end
 
+    # get phases
+    phases = Dict()
+    for ((dS,S,s,aS,dI,I,aI,i,r),state) in dSsadIair2states
+
+        r==1 || continue
+        aS==1 || continue
+        aI==1 || continue
+
+        idx   = findfirst(x->!isapprox(x,zero(x);atol=1e-6),state.vec)
+        phase = angle(state.vec[idx])
+
+
+        phases[dS,S,s,dI,I,i] =  (idx,phase)
+        @show state
+        @show phase
+        println()
+    end
+
     ISisr = Dict{ Tuple{String,Float64,Int64,Float64,Int64} , State }()
     for sym in Set( (k[1:3]...,k[5],k[6],k[8]) 
                     for k in keys(dSsadIair2states) )
@@ -1732,9 +1774,12 @@ function get_asym_ISisr( dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int
 
         (_,S,s,_,I,i) = sym
 
+        idx,phase = phases[sym]
+        @show phase
+
         sub = hcat([s.vec for (k,s) in dSsadIair2states 
                     if (k[1:3]==sym[1:3] && (k[5],k[6],k[8])==sym[4:end])]...)
-        
+
         int = subspace_intersection( asymsubspace , sub ;
                                      verbose=false)
 
@@ -1749,7 +1794,9 @@ function get_asym_ISisr( dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int
         end
 
         for (r,as) in enumerate(asymsym)
-            ISisr[I,S,i,s,r] = as 
+            as_phasecorrected = as*cis(phase-angle(as.vec[idx])) 
+            verbose && (@show as_phasecorrected)
+            ISisr[I,S,i,s,r] = as_phasecorrected
         end
     end
     return ISisr
@@ -1802,7 +1849,8 @@ function compute_multiplets( orbital::String ,
                              cg_o_dir::String ,
                              multiplets_path::String ;
                              verbose::Bool=false ,
-                             doublegroup::Bool=false )
+                             doublegroup::Bool=false ,
+                             simple::Bool=true )
 
     # add convention name to multiplet folder
     if multiplets_path[end]=="/"
@@ -1813,12 +1861,20 @@ function compute_multiplets( orbital::String ,
     # create asym dir if it does not exist
     isdir(multiplets_path) || mkpath( multiplets_path )
 
+    nn_orbital = simple ? (2:get_M(orbital,cg_o_dir)) : (2:get_M_nonsimple(orbital,cg_o_dir))
+
     # compute multiplet states
-    for n in 2:get_M(orbital,cg_o_dir)
-        if !doublegroup
-            compute_asymstates_N( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+    for n in nn_orbital
+        if simple
+            if !doublegroup
+                compute_asymstates_N( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+            else 
+                compute_asymstates_N_doublegroup( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+            end
         else 
-            compute_asymstates_N_doublegroup( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+            if doublegroup
+                compute_asymstates_N_doublegroup_nonsimple( orbital , n , cg_o_dir , multiplets_path ; verbose=verbose )
+            end
         end
     end
 
