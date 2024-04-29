@@ -1081,8 +1081,8 @@ function construct_and_diagonalize_uHv(
         multiplets_a_block::Vector{NTuple{4,Int64}} , 
         multiplets_a_shell::Vector{NTuple{4,Int64}} ;
         conduction_diagonals::Dict{IntIrrep,Vector{Float64}}=Dict{IntIrrep,Vector{Float64}}() ,
-        impinfo=false ,
-        verbose=false )
+        impinfo::Bool=false ,
+        verbose::Bool=false )
 
     # Compute matrix elements 
     #
@@ -1134,7 +1134,7 @@ function construct_and_diagonalize_uHv(
     )
 
     # full-sized hblock matrix
-    R_uv_max = maximum(
+    R_uv_max::Int64 = maximum(
         mapreduce( length , + , values(GmuGi2combinations) )
         for (G_u,GmuGi2combinations) in Gu2GmuGi2rmuiualpha
     )
@@ -1211,16 +1211,6 @@ function construct_and_diagonalize_uHv(
                                     hoparam_matrix,
                                     lehmann_array_iaj[α,r_i,:,r_j]
                                 )
-                                #@show d 
-                                #@show lehmann_array_nuamu[β,r_nu,:,r_mu]
-                                #@show hoparam_matrix
-                                #@show lehmann_array_iaj[α,r_i,:,r_j]
-                                #@show dot(
-                                #    lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
-                                #    hoparam_matrix,
-                                #    lehmann_array_iaj[α,r_i,:,r_j]
-                                #)
-                                #println()
 
                             end # end of α,β iteration
                         end # end of u,i,mu,v,j,nu multiplet iteration
@@ -1375,21 +1365,29 @@ function compute_lehmann_iaj(
             #isapprox(sum(abs2.(uav_matrix)),zero(ComplexF64)) && continue
 
             # transform matrix
-            lehmann_iaj[G_iu,G_a,G_jv] = zeros(ComplexF64,B,R_u_postcutoff,R_a,R_v_postcutoff)
+            #lehmann_iaj[G_iu,G_a,G_jv] = zeros(ComplexF64,B,R_u_postcutoff,R_a,R_v_postcutoff)
+            lehmann_matrix = zeros(ComplexF64,B,R_u_postcutoff,R_a,R_v_postcutoff)
             for r_a in 1:R_a,
                 β in 1:B
 
-                @views begin
-                    uav_matrix_view = uav_matrix[β,:,r_a,:]
-                    lehmann_matrix_view = lehmann_iaj[G_iu,G_a,G_jv][β,:,r_a,:]
-                end
+                #@views begin
+                #    uav_matrix_view = uav_matrix[β,:,r_a,:]
+                #    lehmann_matrix_view = lehmann_iaj[G_iu,G_a,G_jv][β,:,r_a,:]
+                #end
 
-                @inbounds begin
-                    mul!( tmp , uav_matrix_view , U_jv )
-                    mul!( lehmann_matrix_view , U_iu' , tmp )
+                #lehmann_matrix_view .= (U_iu' * uav_matrix_view * U_jv)
+                #@inbounds begin
+                #    mul!( tmp , uav_matrix_view , U_jv )
+                #    mul!( lehmann_matrix_view , U_iu' , tmp )
+                #end
+                @views begin
+                    mul!( tmp , uav_matrix[β,:,r_a,:] , U_jv )
+                    mul!( lehmann_matrix[β,:,r_a,:] , U_iu' , tmp )
                 end
 
             end # r_a,α,β iteration
+            lehmann_iaj[G_iu,G_a,G_jv] = copy(lehmann_matrix)
+
         end # G_a iteration
     end # G_u, G_v iteration
 
