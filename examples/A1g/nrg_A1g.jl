@@ -16,15 +16,15 @@ epsilon_symparams = Dict{String,Vector{ComplexF64}}(
     "A1g" => [-0.1]
 )
 u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
-    ("A1g",0.0) => [0.4;;]
+    ("A1g",0.0) => [3.0;;]
 )
 
 # additional input for run=="thermo"
 label = "A1g"
-L = 3.0
-iterations = 10
+L = 10.0
+iterations = 42
 cutoff_type = "multiplet"
-cutoff_magnitude = 1000
+cutoff_magnitude = 100
 shell_config = atom_config 
 hop_symparams = Dict{String,Matrix{ComplexF64}}(
     "A1g" => [0.1;;]

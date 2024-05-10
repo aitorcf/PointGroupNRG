@@ -334,7 +334,7 @@ function Green( mu::Float64 ,
     # convolution intergral
     #integrand(o,e) = dos_function(e)/(o-mu-e-se_real_function(o)-im*se_imag_function(o)+im*delta)
     #convolution = [ quadgk(e->integrand(o,e),x[1],x[end],rtol=integral_tolerance)[1] for o in x ] 
-    denominator(o,e) = (o-mu-e-se_real_function(o)-im*se_imag_function(o))
+    denominator(o,e) = (o-mu-e-se_real_function(o)-im*(se_imag_function(o)-delta))
     integrand(o,e) = dos_function(e)/denominator(o,e)
     convolution = zeros(ComplexF64,size(x))
     for (i,o) in enumerate(x)
@@ -570,7 +570,6 @@ function dmft(
             K_factor::Float64=2.0 ,
             etafac::Float64=0.5 ,
             broadening_distribution::String="gaussian",
-            orbitalresolved::Bool=false,
             band_width::Float64=1.0 ,
             Nz::Int64=4 ,
             convergence_tolerance::Float64=convergence_tolerance ,
@@ -598,7 +597,6 @@ function dmft(
         @everywhere K_factor=$K_factor
         @everywhere etafac=$etafac
         @everywhere broadening_distribution=$broadening_distribution
-        @everywhere orbitalresolved=$orbitalresolved
     end
 
     convergence = false
@@ -629,16 +627,15 @@ function dmft(
                         channels_dos=channels_dos,
                         spectral=true,
                         K_factor=K_factor,
-                        etafac=etafac,
+                        spectral_broadening=etafac,
                         broadening_distribution=broadening_distribution,
-                        orbitalresolved=orbitalresolved,
                         scale_asymptotic=true
                 )
             end
-            NRGCalculator.zavg_spectral(label,Z;orbitalresolved_number = orbitalresolved ? 1 : 0)
+            NRGCalculator.zavg_spectral(label,Z;orbitalresolved_number=1)
 
             # initial LDOS and Weiss field
-            ldos_initial = DOS("spectral/spectral_$(label)_zavg.dat")
+            ldos_initial = DOS("spectral/spectral_$(label)_zavg_o1.dat")
             ldos_initial = bound_energies(ldos_initial)
             W_initial = Green( chemical_potential , ldos_initial )
             filesave( "green/$(iteration)_ldos_initial.dat" , ldos_initial )
@@ -667,9 +664,8 @@ function dmft(
                     channels_dos=channels_dos,
                     spectral=true,
                     K_factor=K_factor,
-                    etafac=etafac,
+                    spectral_broadening=etafac,
                     broadening_distribution=broadening_distribution,
-                    orbitalresolved=orbitalresolved,
                     scale_asymptotic=true
                 )
             end
@@ -691,18 +687,18 @@ function dmft(
                     channels_dos=channels_dos,
                     spectral=true,
                     K_factor=K_factor,
-                    etafac=etafac,
+                    spectral_broadening=etafac,
                     broadening_distribution=broadening_distribution,
-                    orbitalresolved=orbitalresolved,
                     scale_asymptotic=true,
                     compute_selfenergy=compute_selfenergy
                 )
             end
         end
-        NRGCalculator.zavg_spectral(label,Z;orbitalresolved_number = orbitalresolved ? 1 : 0)
+        NRGCalculator.zavg_spectral(label,Z;orbitalresolved_number=1)
 
         # spectral function from nrg
-        A = DOS( "spectral/spectral_$(label)_zavg.dat" )
+        A = DOS( "spectral/spectral_$(label)_zavg_o1.dat" )
+        A = bound_energies(A)
         #A = bound_energies(A)
         filesave( "green/$(iteration)_spectral.dat" , A )
 
@@ -724,7 +720,7 @@ function dmft(
         if compute_selfenergy
 
             # analytic initial weiss field
-            W_initial = Green( chemical_potential, hybridization_function_initial , A.x )
+            W_initial = Green( chemical_potential , hybridization_function_initial , A.x )
             ldos_initial = DOS(W_initial)
             filesave( "green/$(iteration)_weiss_initial.dat" , W_initial )
             filesave( "green/$(iteration)_ldos_initial.dat" , ldos_initial )

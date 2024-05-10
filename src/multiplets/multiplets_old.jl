@@ -1891,7 +1891,6 @@ function compute_asymstates_N(
     # orbital dimensions
     M = get_M( orbital , cg_path )
 
-
     # compound basis 
     basis_c = CompoundCanonicalBasis( N , M )
 
@@ -1945,7 +1944,6 @@ function compute_asymstates_N(
         end
         return ISisr
     end
-
 
 
     # *********
@@ -2087,7 +2085,7 @@ function compute_asymstates_N(
         println( "# · ############# · #" )
         println( "# | ------------- | #" )
         println( "# | COMBINED PART | #" )
-        println( "# | -------.----- | #" )
+        println( "# | ------------- | #" )
         println( "# · ############# · #" )
         println()
     end

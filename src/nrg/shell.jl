@@ -60,7 +60,7 @@ function shell_coperators( shell_basis::CB ,
         # sym = ( N , I , S , mu , m , r )
         sym::ClearQNums = ( convert(Int64,1) , 
                             convert(String,hiztegia[tup[2]]) , 
-                            convert(Float64,0.5) , 
+                            convert(Float64,tup[4]=="-" ? 0.0 : 0.5) , 
                             convert(Int64,tup[3]) , 
                             convert(Float64,hiztegia[tup[4]]) , 
                             convert(Int64,tup[1]) )
@@ -1017,6 +1017,8 @@ function NRG( label::String ,
                 distributed=distributed ,
                 precompute_iaj=precompute_iaj ,
                 conduction_diagonals=channels_diagonals[n] );
+        print_spectrum(irrEU)
+
         # information
         maximum_spin2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
         if maximum_spin2>max_spin2

@@ -641,7 +641,8 @@ end
 @inline function C( spectral_energy::Float64 ,
                     excitation_energy::Float64 ,
                     broadening_factor::Float64 ,
-                    distribution::String )
+                    distribution::String ;
+                    tq::Float64=0.0)
 
     if distribution=="gaussian"
 
@@ -657,8 +658,24 @@ end
 
         return broadening_factor/(2*pi*((spectral_energy-excitation_energy)^2+broadening_factor^2))
 
+    elseif distribution=="interpolated"
+
+        return (broadening_factor*sqrt(pi))^-1 *
+               exp(-(interpolator(spectral_energy,tq)-interpolator(excitation_energy,tq))^2/broadening_factor^2) *
+               interpolatorder(excitation_energy,tq)
+
     end
     error( "Could not compute peak convolution." )
+end
+@inline function interpolator(ω::Float64,tq::Float64)
+    frac = ω/tq
+    return 0.5 * tanh(frac) * log(frac^2+exp(tq))
+end
+@inline function interpolatorder(ω::Float64,tq::Float64)
+    frac = ω/tq 
+    e = exp(tq)
+    return (2*tq)^-1 * sech(frac)^2 * log((frac)^2+e) +
+           frac/tq * tanh(frac) * (frac^2+e)^-1
 end
 @inline function P( w_pm_E::Float64 , 
                     eta::Float64 ; 
@@ -3646,7 +3663,8 @@ function add_spectral_contribution!(
                                                                L,
                                                                scale,
                                                                half_weight_idx,
-                                                               half_weight_energy)
+                                                               half_weight_energy,
+                                                               T)
 
         end
 
@@ -3790,22 +3808,32 @@ function add_spectral_contribution_Tnonzero!(
                 w = cg*redmatel*boltzmann/partition
 
                 if e_diff>0
-                    correlation_matrix[end-iteration,2] += w*P((K_factor-e_diff)*iteration_scale,
-                                                               (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
-                                                               distribution=broadening_distribution,
-                                                               E=e_diff*iteration_scale,
-                                                               omega=K_factor*iteration_scale)
+                    #correlation_matrix[end-iteration,2] += w*P((K_factor-e_diff)*iteration_scale,
+                    #                                           (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
+                    #                                           distribution=broadening_distribution,
+                    #                                           E=e_diff*iteration_scale,
+                    #                                           omega=K_factor*iteration_scale)
+                    correlation_matrix[end-iteration,2] += w*C( K_factor*iteration_scale ,
+                                                               e_diff*iteration_scale ,
+                                                               spectral_broadening ,
+                                                               broadening_distribution ;
+                                                               tq=T)
                 elseif e_diff<0
-                    correlation_matrix[iteration+1,2] += w*P((-K_factor-e_diff)*iteration_scale,
-                                                             (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
-                                                             distribution=broadening_distribution,
-                                                             E=e_diff*iteration_scale,
-                                                             omega=K_factor*iteration_scale)
+                    #correlation_matrix[iteration+1,2] += w*P((-K_factor-e_diff)*iteration_scale,
+                    #                                         (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
+                    #                                         distribution=broadening_distribution,
+                    #                                         E=e_diff*iteration_scale,
+                    #                                         omega=K_factor*iteration_scale)
+                    correlation_matrix[iteration+1,2] += w*C(   -K_factor*iteration_scale ,
+                                                               e_diff*iteration_scale ,
+                                                               spectral_broadening ,
+                                                               broadening_distribution ;
+                                                               tq=T)
                 end
 
                 if limit_shell
-                    broad_dist = "lorentzian"
-                    eta_abs = 0.3*iteration_scale
+                    #broad_dist = "lorentzian"
+                    #eta_abs = 0.3*iteration_scale
                     #println("-------------")
                     #println()
                     for i in (iteration+1):(iteration+extra_iterations)
@@ -3816,12 +3844,13 @@ function add_spectral_contribution_Tnonzero!(
                         if e_diff>0
                             correlation_matrix[end-i,2] += w*C(extra_iteration_energy,
                                                                e_diff*iteration_scale,
-                                                               eta_abs,
-                                                               broad_dist)
-                            contribution = C(extra_iteration_energy,
-                                             e_diff*iteration_scale,
-                                             eta_abs,
-                                             broad_dist)
+                                                               spectral_broadening,
+                                                               broadening_distribution;
+                                                               tq=T)
+                            #contribution = C(extra_iteration_energy,
+                            #                 e_diff*iteration_scale,
+                            #                 eta_abs,
+                            #                 broad_dist)
                             #@show e_diff
                             #@show relative_scale
                             #@show contribution
@@ -3834,12 +3863,13 @@ function add_spectral_contribution_Tnonzero!(
                         elseif e_diff<0
                             correlation_matrix[i+1,2] += w*C(-extra_iteration_energy,
                                                              e_diff*iteration_scale,
-                                                             eta_abs,
-                                                             broad_dist)
-                            contribution = C(-extra_iteration_energy,
-                                              e_diff*iteration_scale,
-                                              eta_abs,
-                                              broad_dist)
+                                                             spectral_broadening,
+                                                             broadening_distribution;
+                                                             tq=T)
+                            #contribution = C(-extra_iteration_energy,
+                            #                  e_diff*iteration_scale,
+                            #                  eta_abs,
+                            #                  broad_dist)
                             #@show e_diff
                             #@show relative_scale
                             #@show contribution
@@ -4088,7 +4118,8 @@ function add_spectral_contribution_density_matrix_Tnonzero!(
         L::Float64 ,
         scale::Float64 ,
         half_weight_idx::Int64 ,
-        half_weight_energy::Float64 )
+        half_weight_energy::Float64 ,
+        T::Float64 )
 
     total_iterations = size(collect(values(correlation_dict))[1],1)÷2 - 1
     iterscales = map( n->iterscale(scale,L,n) , 0:total_iterations )
@@ -4181,7 +4212,8 @@ function add_spectral_contribution_density_matrix_Tnonzero!(
                             low_energy_iterator ,
                             broadening_distribution ,
                             spectral_broadening ,
-                            half_weight_energy 
+                            half_weight_energy ;
+                            tq=T
                         )
                         #correlation_matrix[positive_energy_mask,2] += map( 
                         #    omega-> omega>=half_weight_energy ? 
@@ -4272,7 +4304,8 @@ function add_spectral_contribution_density_matrix_Tnonzero!(
                             low_energy_iterator ,
                             broadening_distribution ,
                             spectral_broadening ,
-                            half_weight_energy 
+                            half_weight_energy ;
+                            tq=T
                         )
                         #if sign==1
                         #    @inbounds for n in high_energy_iterator
@@ -4374,7 +4407,8 @@ function add_spectral_contribution_density_matrix_Tnonzero!(
                             low_energy_iterator ,
                             broadening_distribution ,
                             spectral_broadening ,
-                            half_weight_energy 
+                            half_weight_energy ;
+                            tq=T
                         )
                         #@inbounds for n in high_energy_iterator
                         #    omega = correlation_matrix[n+1,1]
@@ -4466,7 +4500,8 @@ function add_spectral_contribution_density_matrix_Tnonzero!(
                             low_energy_iterator ,
                             broadening_distribution ,
                             spectral_broadening ,
-                            half_weight_energy 
+                            half_weight_energy ;
+                            tq=T
                         )
                         #if sign==-1
                         #    @inbounds for n in high_energy_iterator
@@ -4540,10 +4575,22 @@ function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
                                        low_energy_iterator ,
                                        broadening_distribution::String ,
                                        spectral_broadening::Float64 ,
-                                       half_weight_energy::Float64 )
+                                       half_weight_energy::Float64 ;
+                                       tq::Float64=0.0 )
+
     open( "spectral/peaks.dat" , "a") do f
         write( f , "$(e_diff_scaled) $w\n" )
     end
+
+    high_energy_broadening = broadening_distribution in ("loggaussian","interpolated") ? 
+                             spectral_broadening : 
+                             spectral_broadening*abs(e_diff_scaled)
+    low_energy_distribution = broadening_distribution=="interpolated" ?
+                              "interpolated" :
+                              "gaussian"
+    low_energy_broadening = broadening_distribution=="interpolated" ?
+                            spectral_broadening :
+                            half_weight_energy
 
     if e_diff_scaled>0
         @inbounds for n in high_energy_iterator
@@ -4551,8 +4598,9 @@ function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
             correlation_matrix[end-n,2] += w*C(
                 omega,
                 e_diff_scaled,
-                (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(e_diff_scaled)),
-                broadening_distribution 
+                high_energy_broadening,
+                broadening_distribution;
+                tq=tq
             )
         end
         @inbounds for n in low_energy_iterator
@@ -4560,8 +4608,9 @@ function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
             correlation_matrix[end-n,2] += w*C(
                 omega,
                 e_diff_scaled,
-                half_weight_energy,
-                "gaussian" 
+                low_energy_broadening,
+                low_energy_distribution;
+                tq=tq
             )
         end
     else
@@ -4570,8 +4619,9 @@ function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
             correlation_matrix[n+1,2] += w*C(
                 omega,
                 e_diff_scaled,
-                (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*abs(e_diff_scaled)),
-                broadening_distribution 
+                high_energy_broadening,
+                broadening_distribution;
+                tq=tq
             )
         end
         @inbounds for n in low_energy_iterator
@@ -4579,8 +4629,9 @@ function add_excitation_contribution!( correlation_matrix::Matrix{Float64} ,
             correlation_matrix[n+1,2] += w*C(
                 omega,
                 e_diff_scaled,
-                half_weight_energy,
-                "gaussian" 
+                low_energy_broadening,
+                low_energy_distribution;
+                tq=tq
             )
         end
     end

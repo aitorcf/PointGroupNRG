@@ -59,7 +59,7 @@ function get_redmat3( dictmat ,
         (N_i,I_i,S_i) = G_i
         (N_j,I_j,S_j) = G_j
         (N_a,I_a,S_a) = G_a
-        
+
         # filter irrep combination
         N_i==(N_j+N_a)                || continue 
         ((I_a,I_j,I_i) in cg_o_combs) || continue
@@ -124,7 +124,7 @@ function get_redmat3( dictmat ,
             verbose && (@show matel; println()) 
             # introduce value in final matrix
             redmat[(G_i,G_a,G_j)][r_i,r_a,r_j] = matel
-            
+
         end
     end
     return redmat
@@ -1595,7 +1595,7 @@ function compute_CG_Bsumdict_s(
 
     Bsum_s_dict = Dict{ NTuple{6,Int64} , ComplexF64 }()
 
-    S_a::Int64 = 1
+    S_a::Int64 = Ms_tot==0 ? 0 : 1
 
     for S_mu in 0:Ms_shell,
         S_nu in 0:Ms_shell,
@@ -1664,7 +1664,7 @@ function compute_CG_Csumdict_s(
             Ms_tot::Int64 ,
             Ms_shell::Int64 )
     
-    S_a::Int64 = 1
+    S_a::Int64 = Ms_tot==0 ? 0 : 1
     Csum_s_dict = Dict{ NTuple{6,Int64} , ComplexF64 }()
 
     for S_utp::Int64 in 0:Ms_tot, 
@@ -1862,6 +1862,8 @@ function compute_Kdict_spin(
             SS_a::Vector{Int64}=Int64[1] )
 
     Kdict_spin::Dict{ NTuple{6,Int64} , ComplexF64 } = Dict()
+
+    SS_a = iszero(Ms_tot) ? [0] : SS_a
 
     for S_u    in 0:Ms_tot,
         S_v    in 0:Ms_tot,

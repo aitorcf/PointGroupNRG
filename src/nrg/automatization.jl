@@ -480,9 +480,9 @@ function get_pcgred(
 
     # pcg in dict format
     pcg::IntQPCG = get_pseudoCG( symstates_noint , 
-                        basis , 
-                        hiztegia , 
-                        oirreps2indices )
+                                 basis , 
+                                 hiztegia , 
+                                 oirreps2indices )
     #if verbose 
     #    println( "PCG DICT" )
     #    print_dict( pcg ) 
@@ -523,7 +523,7 @@ function precompute_CGsums(
             cg_o_fullmatint ,
             cg_s_fullmatint ;
             verbose=false )
-            
+
     Mo_tot    = length( oirreps ) 
     II_a      = collect(Set( m[2] for m in multiplets_a ))
     Ms_tot    = max_spin2
@@ -2346,4 +2346,5 @@ function impurity_spectrum(
     end
     print_spectrum( irrEU_clear )
 
+    return irrEU_clear
 end
