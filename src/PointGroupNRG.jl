@@ -36,8 +36,9 @@ module NRGCalculator
     export impurity_spectrum
     #export impurity_spectrum_doublegroups
     export nrg_full
-    export nrg_full_doublegroups
-    export nrg_full_doublegroups_nonsimple
+    export nrg_full_doublegroup
+    export nrg_full_doublegroup_nonsimple
+    export nrg_full_totalangularmomentum
     export nrg_full_pointspin
     export generate_Z 
     export generate_Zlaps

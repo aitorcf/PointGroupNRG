@@ -64,6 +64,26 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
 
     return dsum,ksum,fsum
 end
+# totalangularmomentum (no cg_s_fullmatint)
+function ClebschGordanSums( maximum_J2_onelectron::Int64 ,
+                            maximum_J2::Int64 ,
+                            maximum_J2_impurity_shell::Int64 ;
+                            verbose=false )
+    dsum = DSum( maximum_J2_onelectron,
+                 maximum_J2,
+                 maximum_J2_impurity_shell;
+                 verbose=false )
+    ksum = KSum( maximum_J2_onelectron ,
+                 maximum_J2,
+                 maximum_J2_impurity_shell;
+                 verbose=false )
+    fsum = FSum( maximum_J2_onelectron,
+                 maximum_J2,
+                 maximum_J2_impurity_shell;
+                 verbose=false )
+
+    return dsum,ksum,fsum
+end
 
 # ----- #
 # D SUM #
@@ -210,6 +230,61 @@ function DSum( number_of_orbital_irreps::Int64 ,
 
         iszero(element) && continue
         spinsum[S_uv,S_a,S_i,S_j,S_mu,S_nu] = element
+
+    end
+
+    return DSum(orbitalsum,spinsum)
+end
+# totalangularmomentum (no cg_s_fullmatint)
+function DSum( maximum_J2_onelectron::Int64 ,
+               maximum_J2::Int64 ,
+               maximum_J2_impurity_shell::Int64 ;
+               verbose=false )
+
+    # ORBITAL SECTOR
+    #
+    orbitalsum = Dict{ NTuple{6,Int64} , Array{ComplexF64,4} }(
+        (1,1,1,1,1,1)=>ones(ComplexF64,1,1,1,1)
+    )
+
+    # TOTAL ANGULAR MOMENTUM (SPIN) SECTOR
+    #
+    spinsum = Dict{ NTuple{6,Int64} , ComplexF64 }()
+    # iterate through irreps
+    for J2_uv in 0:maximum_J2,
+        J2_a  in 0:maximum_J2_onelectron,
+        J2_i  in 0:maximum_J2,
+        J2_j  in 0:maximum_J2,
+        J2_mu in 0:maximum_J2_impurity_shell,
+        J2_nu in 0:maximum_J2_impurity_shell
+
+        j2_uv::Int64 = J2_uv
+
+        # early discard
+        isj3inj1timesj2(J2_mu,J2_i, J2_uv) || continue
+        isj3inj1timesj2(J2_nu,J2_j, J2_uv) || continue
+        isj3inj1timesj2(J2_a, J2_j, J2_i)  || continue
+        isj3inj1timesj2(J2_a, J2_mu,J2_nu) || continue
+
+        # dictionary entry
+        element::ComplexF64 = 0.0
+
+        # iterate through partners
+        for j2_a  in -J2_a:2:J2_a,
+            j2_i  in -J2_i:2:J2_i,
+            j2_j  in -J2_j:2:J2_j,
+            j2_mu in -J2_mu:2:J2_mu,
+            j2_nu in -J2_nu:2:J2_nu
+
+            element += conj(clebschgordan_doublearg(J2_mu,j2_mu,J2_i,j2_i,J2_uv,j2_uv))*
+                       clebschgordan_doublearg(J2_nu,j2_nu,J2_j,j2_j,J2_uv,j2_uv)*
+                       conj(clebschgordan_doublearg(J2_a,j2_a,J2_j,j2_j,J2_i,j2_i))*
+                       clebschgordan_doublearg(J2_a,j2_a,J2_mu,j2_mu,J2_nu,j2_nu)
+
+        end
+
+        iszero(element) && continue
+        spinsum[J2_uv,J2_a,J2_i,J2_j,J2_mu,J2_nu] = element
 
     end
 
@@ -366,6 +441,61 @@ function KSum( number_of_orbital_irreps::Int64 ,
 
     return KSum(orbitalsum,spinsum)
 end
+# total angular momentum
+function KSum( maximum_J2_onelectron::Int64 ,
+               maximum_J2::Int64 ,
+               maximum_J2_impurity_shell::Int64 ;
+               verbose=false )
+
+    # ORBITAL SECTOR
+    #
+    orbitalsum = Dict{ NTuple{6,Int64} , Array{ComplexF64,4} }(
+        (1,1,1,1,1,1)=>ones(ComplexF64,1,1,1,1)
+    )
+
+    # SPIN SECTOR
+    #
+    spinsum = Dict{ NTuple{6,Int64} , ComplexF64 }()
+    # iterate through irreps
+    for J2_u  in 0:maximum_J2,
+        J2_v  in 0:maximum_J2,
+        J2_a  in 0:maximum_J2_onelectron,
+        J2_ij in 0:maximum_J2,
+        J2_mu in 0:maximum_J2_impurity_shell,
+        J2_nu in 0:maximum_J2_impurity_shell
+
+        j2_u::Int64 = J2_u
+
+        # early discard
+        isj3inj1timesj2(J2_mu,J2_ij,J2_u)  || continue
+        isj3inj1timesj2(J2_nu,J2_ij,J2_v)  || continue
+        isj3inj1timesj2(J2_a, J2_nu,J2_mu) || continue
+        isj3inj1timesj2(J2_a, J2_v, J2_u)  || continue
+
+        # dictionary entry
+        element::ComplexF64 = 0.0
+
+        # iterate through partners
+        for j2_v  in -J2_v:2:J2_v,
+            j2_a  in -J2_a:2:J2_a,
+            j2_ij in -J2_ij:2:J2_ij,
+            j2_mu in -J2_mu:2:J2_mu,
+            j2_nu in -J2_nu:2:J2_nu
+
+            element += conj(clebschgordan_doublearg(J2_mu,j2_mu,J2_ij,j2_ij,J2_u,j2_u))*
+                       clebschgordan_doublearg(J2_nu,j2_nu,J2_ij,j2_ij,J2_v,j2_v)*
+                       conj(clebschgordan_doublearg(J2_a,j2_a,J2_nu,j2_nu,J2_mu,j2_mu))*
+                       clebschgordan_doublearg(J2_a,j2_a,J2_v,j2_v,J2_u,j2_u)
+
+        end
+
+        iszero(element) && continue
+        spinsum[J2_u,J2_v,J2_a,J2_ij,J2_mu,J2_nu] = element
+
+    end
+
+    return KSum(orbitalsum,spinsum)
+end
 
 # ----- #
 # F SUM #
@@ -511,6 +641,61 @@ function FSum( number_of_orbital_irreps::Int64 ,
 
         iszero(element) && continue
         spinsum[S_u,S_v,S_a,S_i,S_j,S_munu] = element
+
+    end
+
+    return FSum(orbitalsum,spinsum)
+end
+# total angular momentum
+function FSum( maximum_J2_onelectron::Int64 ,
+               maximum_J2::Int64 ,
+               maximum_J2_impurity_shell::Int64 ;
+               verbose=false )
+
+    # ORBITAL SECTOR
+    #
+    orbitalsum = Dict{ NTuple{6,Int64} , Array{ComplexF64,4} }(
+        (1,1,1,1,1,1)=>ones(ComplexF64,1,1,1,1)
+    )
+
+    # SPIN SECTOR
+    #
+    spinsum = Dict{ NTuple{6,Int64} , ComplexF64 }()
+    # iterate through irreps
+    for J2_u    in 0:maximum_J2,
+        J2_v    in 0:maximum_J2,
+        J2_a    in 0:maximum_J2_onelectron,
+        J2_i    in 0:maximum_J2,
+        J2_j    in 0:maximum_J2,
+        J2_munu in 0:maximum_J2_impurity_shell
+
+        j2_u::Int64 = J2_u
+
+        # early discard
+        isj3inj1timesj2(J2_munu,J2_i,J2_u) || continue
+        isj3inj1timesj2(J2_munu,J2_j,J2_v) || continue
+        isj3inj1timesj2(J2_a,   J2_j,J2_i) || continue
+        isj3inj1timesj2(J2_a,   J2_v,J2_u) || continue
+
+        # dictionary entry
+        element::ComplexF64 = 0.0
+
+        # iterate through partners
+        for j2_v in -J2_v:2:J2_v,
+            j2_a in -J2_a:2:J2_a,
+            j2_i in -J2_i:2:J2_i,
+            j2_j in -J2_j:2:J2_j,
+            j2_munu in -J2_munu:2:J2_munu
+
+            element += conj(clebschgordan_doublearg(J2_munu,j2_munu,J2_i,j2_i,J2_u,j2_u))*
+                       clebschgordan_doublearg(J2_munu,j2_munu,J2_j,j2_j,J2_v,j2_v)*
+                       conj(clebschgordan_doublearg(J2_a,j2_a,J2_j,j2_j,J2_i,j2_i))*
+                       clebschgordan_doublearg(J2_a,j2_a,J2_v,j2_v,J2_u,j2_u)
+
+        end
+
+        iszero(element) && continue
+        spinsum[J2_u,J2_v,J2_a,J2_i,J2_j,J2_munu] = element
 
     end
 

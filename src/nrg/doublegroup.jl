@@ -320,6 +320,28 @@ function cg_reduce_product_states_nonsimple( symstates_1::Dict{ Tuple{Int64,Stri
     return symstates_new
 end
 
+# ---------------- #
+# BASIS AND STATES #
+# ---------------- #
+
+function get_atomic_states_doublegroups( 
+            external_label::Int64 ,
+            ostring::String , 
+            oirreps2dimensions::Dict{String,Int64} )::Vector{Tuple{Int64,String,Int64,String}}
+
+    root = ( external_label , ostring )
+    statetuples = Tuple{Int64,String,Int64,String}[]
+
+    for orbital in 1:oirreps2dimensions[ostring]
+
+        push!( statetuples , (root...,orbital,"-") )
+
+    end
+
+    return statetuples
+end
+
+
 function get_symstates_basis_multiplets_doublegroups_nonsimple( 
             atom_config::Dict{String,Int64},
             oirreps2dimensions::Dict{String,Int64} ,
@@ -1990,7 +2012,7 @@ function NRG_doublegroups_nonsimple(
     )
 end
 
-function nrg_full_doublegroups( 
+function nrg_full_doublegroup( 
             label::String ,
             calculation::String ,
             L::Float64 ,
@@ -2903,7 +2925,7 @@ function nrg_full_doublegroups(
     println( "END OF FULL NRG CALCULATION WITH z=$(z)" )
 end
 
-function nrg_full_doublegroups_nonsimple( 
+function nrg_full_doublegroup_nonsimple( 
             label::String ,
             calculation::String ,
             L::Float64 ,

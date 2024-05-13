@@ -36,23 +36,25 @@ const integrate_methods = Set([
 # ========= #
 # Interface #
 # ========= #
-function discretize_bands( dos_channels::Dict{String,Vector{Function}} ,
-                           L::Float64 ,
-                           z::Float64 ,
-                           number_of_shells::Int64 ;
-                           discretization::String=discretization_default ,
-                           tridiagonalization::String=tridiagonalization_default ,
-                           enforce_particle_hole_symmetry::Bool=enforce_particle_hole_symmetry_default ,
-                           enforce_asymptotic_behavior::Bool=enforce_particle_hole_symmetry_default )
+function discretize_bands( 
+            dos_channels::Dict{SF,Vector{Function}} ,
+            L::Float64 ,
+            z::Float64 ,
+            number_of_shells::Int64 ;
+            discretization::String=discretization_default ,
+            tridiagonalization::String=tridiagonalization_default ,
+            enforce_particle_hole_symmetry::Bool=enforce_particle_hole_symmetry_default ,
+            enforce_asymptotic_behavior::Bool=enforce_particle_hole_symmetry_default
+    )::Dict{SF,Vector{Tuple{Vector{Float64},Vector{Float64}}}} where {SF<:Union{String,Float64}}
 
     @assert (discretization in discretizations) "Discretization not implemented."
     @assert (tridiagonalization in tridiagonalizations) "Tridiagonalization not implemented."
 
     # obtain diagonal and codiagonal elements of the tridiagonal hamiltonians
     println( "Computing discretized channels..." )
-    channels_tridiagonal::Dict{String,Vector{Tuple{Vector{Float64},Vector{Float64}}}} =
+    channels_tridiagonal::Dict{SF,Vector{Tuple{Vector{Float64},Vector{Float64}}}} =
         Dict( 
-            orbital_irrep => [
+            irrep => [
                 discretize_band( dos,
                                  L,
                                  z,
@@ -62,12 +64,44 @@ function discretize_bands( dos_channels::Dict{String,Vector{Function}} ,
                                  enforce_particle_hole_symmetry=enforce_particle_hole_symmetry ,
                                  enforce_asymptotic_behavior=enforce_particle_hole_symmetry_default )
                 for dos in dos_functions
-            ] for (orbital_irrep,dos_functions) in dos_channels
+            ] for (irrep,dos_functions) in dos_channels
         )
 
     return channels_tridiagonal
-
 end
+# old version
+#function discretize_bands( dos_channels::Dict{String,Vector{Function}} ,
+#                           L::Float64 ,
+#                           z::Float64 ,
+#                           number_of_shells::Int64 ;
+#                           discretization::String=discretization_default ,
+#                           tridiagonalization::String=tridiagonalization_default ,
+#                           enforce_particle_hole_symmetry::Bool=enforce_particle_hole_symmetry_default ,
+#                           enforce_asymptotic_behavior::Bool=enforce_particle_hole_symmetry_default )
+#
+#    @assert (discretization in discretizations) "Discretization not implemented."
+#    @assert (tridiagonalization in tridiagonalizations) "Tridiagonalization not implemented."
+#
+#    # obtain diagonal and codiagonal elements of the tridiagonal hamiltonians
+#    println( "Computing discretized channels..." )
+#    channels_tridiagonal::Dict{String,Vector{Tuple{Vector{Float64},Vector{Float64}}}} =
+#        Dict( 
+#            orbital_irrep => [
+#                discretize_band( dos,
+#                                 L,
+#                                 z,
+#                                 number_of_shells;
+#                                 discretization=discretization,
+#                                 tridiagonalization=tridiagonalization ,
+#                                 enforce_particle_hole_symmetry=enforce_particle_hole_symmetry ,
+#                                 enforce_asymptotic_behavior=enforce_particle_hole_symmetry_default )
+#                for dos in dos_functions
+#            ] for (orbital_irrep,dos_functions) in dos_channels
+#        )
+#
+#    return channels_tridiagonal
+#
+#end
 
 # ============= #
 # Main function #
