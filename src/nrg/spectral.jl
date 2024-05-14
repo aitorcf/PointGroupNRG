@@ -3008,6 +3008,14 @@ function is_matrix_zero( matrix::SubArray{ComplexF64,3} )
     end
     return true
 end
+function is_matrix_zero( matrix::SubArray{ComplexF64,4} )
+    s::Float64 = zero(Float64)
+    @inbounds for i in eachindex(matrix)
+        s += abs2(matrix[i])
+        s > zero(s) && return false
+    end
+    return true
+end
 
 # ------ #
 # DM-NRG #
@@ -5313,4 +5321,380 @@ function compute_correlation_spectral_decomposition_Tnonzero(
         )
     end
 
+end
+
+# ================= #
+# NON-SIMPLE GROUPS #
+# ================= #
+function add_correlation_contribution_nonsimple!( 
+            correlation_dict::Dict{IntMultiplet,Matrix{Float64}} ,
+            A::Dict{ IntTripleG , Array{ComplexF64,4} } ,
+            B::Dict{ IntTripleG , Array{ComplexF64,4} } ,
+            oindex2dimensions::Vector{Int64} ,
+            irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+            iteration::Int64 ,
+            broadening_distribution::String ,
+            spectral_broadening::Float64 ,
+            iteration_scale::Float64 ,
+            K_factor::Float64 ;
+            correlation_type::String="spectral" ,
+            T::Float64=0.0 ,
+            limit_shell::Bool=false ,
+            extra_iterations::Int64=0 ,
+            density_matrix::Dict{IntIrrep,Matrix{Float64}}=Dict{IntIrrep,Matrix{Float64}}() ,
+            multiplets_kept::Vector{IntMultiplet}=IntMultiplet[] ,
+            multiplets_discarded::Vector{IntMultiplet}=IntMultiplet[] ,
+            L::Float64=0.0 ,
+            scale::Float64=0.0 ,
+            half_weight_idx::Int64=0 ,
+            half_weight_energy::Float64=0.0 
+    )
+
+    if (correlation_type=="spectral" && A==B)
+        add_spectral_contribution_nonsimple!(
+            correlation_dict,
+            A,
+            oindex2dimensions,
+            irrEU,
+            iteration,
+            broadening_distribution,
+            spectral_broadening,
+            iteration_scale,
+            K_factor;
+            T=T,
+            limit_shell=limit_shell,
+            extra_iterations=extra_iterations,
+            density_matrix=density_matrix,
+            multiplets_kept=multiplets_kept,
+            multiplets_discarded=multiplets_discarded,
+            L=L,
+            scale=scale,
+            half_weight_idx=half_weight_idx,
+            half_weight_energy=half_weight_energy
+        )
+    end
+
+end
+function add_spectral_contribution_nonsimple!(
+            correlation_dict::Dict{IntMultiplet,Matrix{Float64}} ,
+            A::Dict{ IntTripleG , Array{ComplexF64,4} } ,
+            oindex2dimensions::Vector{Int64} ,
+            irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+            iteration::Int64,
+            broadening_distribution::String ,
+            spectral_broadening::Float64 ,
+            iteration_scale::Float64 ,
+            K_factor::Float64 ;
+            T::Float64=0.0 ,
+            limit_shell::Bool=false ,
+            extra_iterations::Int64=0 ,
+            density_matrix::Dict{IntIrrep,Matrix{Float64}}=Dict{IntIrrep,Matrix{Float64}}() ,
+            multiplets_kept::Vector{IntMultiplet}=IntMultiplet[] ,
+            multiplets_discarded::Vector{IntMultiplet}=IntMultiplet[] ,
+            L::Float64=0.0 ,
+            scale::Float64=0.0 ,
+            half_weight_idx::Int64=0 ,
+            half_weight_energy::Float64=half_weight_energy )
+
+    use_density_matrix = !iszero(length(density_matrix))
+
+    if !use_density_matrix
+
+        if iszero(T)
+            add_spectral_contribution_T0_nonsimple!(
+                correlation_dict,
+                A,
+                oindex2dimensions,
+                irrEU,
+                iteration,
+                broadening_distribution,
+                spectral_broadening,
+                iteration_scale,
+                K_factor
+            )
+        else
+            add_spectral_contribution_Tnonzero!(
+                correlation_dict,
+                A,
+                oindex2dimensions,
+                irrEU,
+                iteration,
+                broadening_distribution,
+                spectral_broadening,
+                iteration_scale,
+                K_factor,
+                T,
+                limit_shell,
+                extra_iterations
+            )
+        end
+
+    elseif use_density_matrix
+
+        if iszero(T)
+            add_spectral_contribution_density_matrix_T0!(correlation_dict,
+                                                         A,
+                                                         oindex2dimensions,
+                                                         irrEU,
+                                                         iteration,
+                                                         broadening_distribution,
+                                                         spectral_broadening,
+                                                         iteration_scale,
+                                                         K_factor,
+                                                         density_matrix,
+                                                         multiplets_kept,
+                                                         multiplets_discarded,
+                                                         L,
+                                                         scale)
+        else
+            add_spectral_contribution_density_matrix_Tnonzero!(correlation_dict,
+                                                               A,
+                                                               oindex2dimensions,
+                                                               irrEU,
+                                                               iteration,
+                                                               broadening_distribution,
+                                                               spectral_broadening,
+                                                               iteration_scale,
+                                                               K_factor,
+                                                               density_matrix,
+                                                               multiplets_kept,
+                                                               multiplets_discarded,
+                                                               L,
+                                                               scale,
+                                                               half_weight_idx,
+                                                               half_weight_energy,
+                                                               T)
+
+        end
+
+    end
+end
+function add_spectral_contribution_T0_nonsimple!(
+            correlation_dict::Dict{IntMultiplet,Matrix{Float64}} ,
+            A::Dict{ IntTripleG , Array{ComplexF64,4} } ,
+            oindex2dimensions::Vector{Int64} ,
+            irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+            iteration::Int64 ,
+            broadening_distribution::String ,
+            spectral_broadening::Float64 ,
+            iteration_scale::Float64 ,
+            K_factor::Float64 
+    )
+
+    # ground multiplets and partition function
+    G2R_0::Dict{IntIrrep,Int64} = Dict( 
+        G => length(filter(iszero,E))
+        for (G,(E,U)) in irrEU 
+    )
+    partition = sum( R*oindex2dimensions[I]*(S+1) for ((_,I,S),R) in G2R_0 )
+
+    # iterate over irreducible matrices
+    for ((G_u,G_a,G_v),redmat) in A
+
+        # irrep quantum numbers
+        (_,I_u,S_u) = G_u 
+        (_,I_a,S_a) = G_a
+
+        @views energies_Gu = irrEU[G_u][1]
+        @views energies_Gv = irrEU[G_v][1]
+
+        # clebsch-gordan contribution 
+        dim_u = oindex2dimensions[I_u]*(S_u+1)
+        dim_a = oindex2dimensions[I_a]*(S_a+1)
+        cg = dim_u/dim_a
+
+        # iterate over creation operator multiplets
+        for r_a in axes(redmat,3)
+
+            m_a = (G_a...,r_a)
+            correlation_matrix = correlation_dict[m_a]
+
+            # iterate over eigenstate multiplets
+            for r_u in axes(redmat,2),
+                r_v in axes(redmat,4)
+
+                # excitation energy
+                e_u = energies_Gu[r_u]
+                e_v = energies_Gv[r_v]
+                e_diff = e_u-e_v
+
+                # iterate over cg multiplicity index
+                for α in axes(redmat,1)
+
+                    # coefficient from reduced matrix element
+                    redmatel = abs2(redmat[α,r_u,r_a,r_v])
+
+                    # total contribution 
+                    w = cg*redmatel/partition
+
+                    # particle contribution: m_v ground, positive peak
+                    if iszero(e_v) && e_diff>0
+                        #contribution = w*P((K_factor-e_diff)*iteration_scale,
+                        #                                           (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
+                        #                                           distribution=broadening_distribution,
+                        #                                           E=e_diff*iteration_scale,
+                        #                                           omega=K_factor*iteration_scale)
+                        correlation_matrix[end-iteration,2] += w*P((K_factor-e_diff)*iteration_scale,
+                                                                   (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
+                                                                   distribution=broadening_distribution,
+                                                                   E=e_diff*iteration_scale,
+                                                                   omega=K_factor*iteration_scale)
+                    # hole contribution: m_u ground, negative peak
+                    elseif iszero(e_u) && e_diff<0
+                        correlation_matrix[iteration+1,2] += w*P((-K_factor-e_diff)*iteration_scale,
+                                                                 (broadening_distribution=="loggaussian" ? spectral_broadening : spectral_broadening*iteration_scale);
+                                                                 distribution=broadening_distribution,
+                                                                 E=e_diff*iteration_scale,
+                                                                 omega=K_factor*iteration_scale)
+                    end
+                end
+            end
+        end
+    end
+
+end
+
+# update excitation operator
+function update_operator_nonsimple(
+        redmat_iaj::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } ,
+        multiplets_a_block::Vector{NTuple{4,Int64}} , 
+        fsum::FSum ,
+        combinations_Gu_muiualpha::Dict{NTuple{3,Int64}, Vector{Tuple{IntMultiplet,IntMultiplet,IntMultiplet,Int64}}} ,
+        irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+        cg_o_comb2A::Dict{ NTuple{3,Int64} , Int64 }
+    )::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} }
+
+    # G => multiplicity of G
+    #
+    # i (n) / u (n-1)
+    G2R_uv::Dict{IntIrrep,Int64} = Dict( G_u=>size(U_u,1) for (G_u,(_,U_u)) in irrEU )
+    # a
+    G2R_a::Dict{NTuple{3,Int64},Int64} = Dict( 
+        G=>R for (G,R) in get_irreps( Set(multiplets_a_block) ; multiplicity=true ) 
+    )
+
+    # irrep -> decomposition -> multiplet
+    Gu2GmuGi2rmuiualpha::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{4,Int64}}}} = Dict(
+        G_u => Dict(
+        (G_mu,G_i) => [(m_mu[4],m_i[4],m_u[4],α_u) for (m_mu,m_i,m_u,α_u) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+            for (G_mu,G_i) in Set( (m_mu[1:3],m_i[1:3]) for (m_mu,m_i,_,_) in multiplet_combinations_Gu )
+        )
+        for (G_u,multiplet_combinations_Gu) in combinations_Gu_muiualpha
+    )
+
+    # full-sized matrices for avoiding allocations
+    R_uv_max = maximum(values(G2R_uv))
+    R_a_max = maximum(values(G2R_a))
+    A_max = maximum([size(arr,1) for arr in values(redmat_iaj)])
+    tmp_full = zeros(ComplexF64,R_uv_max,R_uv_max)
+    uav_matrix_full = zeros(ComplexF64,A_max,R_uv_max,R_a_max,R_uv_max)
+
+    # initialize result dictionary
+    redmat_uav::Dict{ IntTripleG , Array{ComplexF64,4} } = Dict()
+
+    # G_u, G_v iteration
+    for (G_u,GmuGi2rmuiualpha) in Gu2GmuGi2rmuiualpha,
+        (G_v,GnuGj2rnujvalpha) in Gu2GmuGi2rmuiualpha
+
+        # irrep quantum numbers 
+        N_u,I_u,S_u = G_u
+        N_v,I_v,S_v = G_v
+
+        # multiplicities
+        R_u= G2R_uv[G_u]
+        R_v= G2R_uv[G_v]
+
+        # transformation matrices
+        @views begin
+            U_u::Matrix{ComplexF64} = irrEU[G_u][2]
+            U_v::Matrix{ComplexF64} = irrEU[G_v][2]
+        end
+        # temporary matrix for transformation
+        @views tmp = tmp_full[1:R_u,1:R_v]
+        tmp .= zero(ComplexF64)
+
+        # G_a iteration
+        for (G_a,R_a) in G2R_a
+
+            # irrep quantum numbers
+            N_a,I_a,S_a = G_a
+
+
+            # early discard 
+            N_u==(N_v+N_a) || continue
+
+            # maximum outer multiplicity β=1,…,B_uav
+            B_uav = get( cg_o_comb2A , (I_u,I_a,I_v) , zero(Int64) )
+            iszero(B_uav) && continue
+
+            # < Γ_u || f†_{Γ_a} || Γ_v >_β
+            @views uav_matrix = uav_matrix_full[1:B_uav,1:R_u,1:R_a,1:R_v]
+            uav_matrix .= zero(ComplexF64)
+
+            # G_i,G_mu,G_j,G_nu iteration
+            for ((G_mu,G_i),rmuiualphas) in GmuGi2rmuiualpha,
+                ((G_nu,G_j),rnujvalphas) in GnuGj2rnujvalpha
+
+                # irrep quantum numbers 
+                N_i,I_i,S_i = G_i
+                N_j,I_j,S_j = G_j
+                N_munu,I_munu,S_munu = G_mu
+
+                # early discard
+                G_mu==G_nu     || continue
+                N_i==(N_j+N_a) || continue
+                G_munu = G_mu
+
+                # clebsch-gordan sum array
+                f_spin_and_sign,f_orbital_array = fsum[(G_u,G_v,G_a,G_i,G_j,G_munu)]
+                (iszero(f_spin_and_sign) && iszero(length(f_orbital_array))) && continue
+
+                # ⟨ Γ_i || f†_{Γ_a} || Γ_j ⟩_α
+                iaj_matrix = get( redmat_iaj , (G_i,G_a,G_j) , zeros(ComplexF64,0,0,0,0) )
+                iszero(length(iaj_matrix)) && continue
+
+                # maximum outer multiplicity α=1,…,A_iaj
+                A_iaj = cg_o_comb2A[I_i,I_a,I_j]
+
+                # u,i,mu,α_u ; v,j,nu,α_v  multiplet iteration
+                for (r_mu,r_i,r_u,α_u) in rmuiualphas,
+                    (r_nu,r_j,r_v,α_v) in rnujvalphas
+
+                    r_mu==r_nu || continue
+
+                    # outer multiplicites of ⟨i||a||j⟩^[n-1]_α, ⟨u||a||v⟩^[n]_β
+                    for α in 1:A_iaj,
+                        β in 1:B_uav
+
+                        f = f_spin_and_sign * f_orbital_array[α_u,α_v,α,β]
+
+                        for r_a in 1:R_a
+                            uav_matrix[β,r_u,r_a,r_v] += f * iaj_matrix[α,r_i,r_a,r_j]
+                        end
+                    end
+
+                end # u,i,mu , v,j,nu , a multiplet iteration
+
+            end # G_i,G_mu,G_j,G_nu iteration
+
+            # final discard
+            is_matrix_zero(uav_matrix) && continue
+
+            # transform matrix
+            @views for r_a in 1:G2R_a[G_a],
+                       β   in 1:B_uav
+
+                mul!( tmp , uav_matrix[β,:,r_a,:] , U_v )
+                mul!( uav_matrix[β,:,r_a,:] , U_u' , tmp )
+            end
+
+            # redmat_uav
+            push!( redmat_uav , (G_u,G_a,G_v) => uav_matrix[:,:,:,:] )
+            #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix_full[1:R_u,1:R_a,1:R_v]
+            #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix[:,:,:]
+
+        end # G_a iteration
+    end # G_u, G_v iteration
+
+    return redmat_uav
 end

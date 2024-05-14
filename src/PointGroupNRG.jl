@@ -53,6 +53,7 @@ module NRGCalculator
     include( "nrg/symmetry.jl" )
     include( "nrg/shell.jl" )
     include( "nrg/band.jl" )
+    include( "nrg/clebschgordansums.jl" )
     include( "nrg/spectral.jl" )
     include( "nrg/thermo.jl" )
     include( "nrg/reddiag.jl" )
@@ -61,7 +62,6 @@ module NRGCalculator
     include( "nrg/molecule.jl" )
 #    include( "nrg/doublegroups_old.jl" )
 #    include( "nrg/doublegroupsnonsimple_old.jl" ) # old
-    include( "nrg/clebschgordansums.jl" )
     include( "nrg/doublegroup.jl" )
     include( "nrg/pointspin.jl" )
     include( "nrg/totalangularmomentum.jl" )

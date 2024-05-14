@@ -63,6 +63,11 @@ function get_symstates_basis_multiplets_pointspin_nonsimple(
 
     return (symstates,basis,multiplets,multiplets_a)
 end
+
+# ========================================= #
+# SYSTEM INITIALIZATION AND NRG CALCULATION #
+# ========================================= #
+
 function nrg_full_pointspin( 
             label::String ,
             calculation::String ,
@@ -198,13 +203,15 @@ function nrg_full_pointspin(
     end
 
     # channel coupling parameters
-    channels_tridiagonal = discretize_bands( channels_dos ,
-                                             L ,
-                                             z , 
-                                             iterations ;
-                                             discretization=discretization ,
-                                             tridiagonalization=tridiagonalization ,
-                                             enforce_particle_hole_symmetry=enforce_particle_hole_symmetry )
+    channels_tridiagonal = discretize_bands( 
+        channels_dos ,
+        L ,
+        z , 
+        iterations ;
+        discretization=discretization ,
+        tridiagonalization=tridiagonalization ,
+        enforce_particle_hole_symmetry=enforce_particle_hole_symmetry 
+    )
     channels_tridiagonal_int::Dict{Int64,Vector{Tuple{Vector{Float64},Vector{Float64}}}} = Dict(
         oirreps2indices[oirrep]=>v 
         for (oirrep,v) in channels_tridiagonal
@@ -297,16 +304,16 @@ function nrg_full_pointspin(
         symstates_atom_noint,
         basis_atom,
         multiplets_atom_noint,
-        multiplets_a_atom_noint = 
-            get_symstates_basis_multiplets_pointspin_nonsimple( 
-                    impurity_config,
-                    oirreps2dimensions,
-                    identityrep,
-                    multiplets_dir,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ,
-                    oirreps2indices ;
-                    verbose=true )
+        multiplets_a_atom_noint = get_symstates_basis_multiplets_pointspin_nonsimple( 
+            impurity_config,
+            oirreps2dimensions,
+            identityrep,
+            multiplets_dir,
+            cg_o_fullmatint ,
+            cg_s_fullmatint ,
+            oirreps2indices ;
+            verbose=true 
+        )
         orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
         mult2index = Dict( m=>i for (i,m) in enumerate(orbital_multiplets))
         multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
@@ -398,7 +405,7 @@ function nrg_full_pointspin(
     #   ==================   #
     #%% SHELL CONSTRUCTION %%#
     #   ==================   #
-    
+
     println()
     println( ":::::::::::::::::::::::" )
     println( "--- SHELL STRUCTURE ---" )
@@ -504,18 +511,20 @@ function nrg_full_pointspin(
         for n in 1:iterations
     ]
 
-    #   ------------------------ #
-    #%% reduced pcg coefficients #
-    #   ------------------------ #
-    lehmann_muanu::Dict{NTuple{3,NTuple{3,Int64}},Array{ComplexF64,4}} = get_pcgred_nonsimple( 
-                basis_shell ,
-                symstates_shell_noint ,
-                multiplets_shell ,
-                hiztegia ,
-                oirreps2indices ,
-                cg_o_fullmatint ,
-                cg_s_fullmatint ;
-                verbose=true )
+    #   -------------------------- #
+    #%% reduced lehmann amplitudes #
+    #   -------------------------- #
+
+    lehmann_muanu::Dict{IntTripleG,Array{ComplexF64,4}} = get_pcgred_nonsimple( 
+        basis_shell ,
+        symstates_shell_noint ,
+        multiplets_shell ,
+        hiztegia ,
+        oirreps2indices ,
+        cg_o_fullmatint ,
+        cg_s_fullmatint ;
+        verbose=true 
+    )
 
 
     #   ================================   #
@@ -546,7 +555,7 @@ function nrg_full_pointspin(
     #   -------- #
     #%% spectral #
     #   -------- #
-    impurity_operators = Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}()
+    impurity_operators = Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}()
     spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}()
     if spectral
 
@@ -567,7 +576,7 @@ function nrg_full_pointspin(
             )
         )
 
-        add_correlation_contribution!(
+        add_correlation_contribution_nonsimple!(
             spectral_functions["spectral"],
             impurity_operators["particle"],
             impurity_operators["particle"],
@@ -583,56 +592,22 @@ function nrg_full_pointspin(
             limit_shell = iterations==0 ,
             extra_iterations=extra_iterations
         )
-        #compute_correlation_peaks(
-        #    impurity_operators["particle"],
-        #    impurity_operators["particle"],
-        #    oindex2dimensions,
-        #    irrEU,
-        #    z,
-        #    0 ;
-        #    correlation_type="spectral",
-        #    T=spectral_temperature,
-        #    iteration_scale=iterscale(scale,L,0)
-        #)
 
-        #M = pcgred_atom 
-        #part0 = get_partition0(irrEU,oindex2dimensions)
-        #if orbitalresolved 
-        #    A = redM2A_orbitalresolved( 
-        #            M,
-        #            collect(multiplets_a_atom),
-        #            cg_o_fullmatint,
-        #            cg_s_fullmatint,
-        #            irrEU,
-        #            part0
-        #    )
-        #else
-        #    A = redM2A( 
-        #            M,
-        #            collect(multiplets_a_atom),
-        #            cg_o_fullmatint,
-        #            cg_s_fullmatint,
-        #            irrEU,
-        #            part0
-        #    )
-        #end
-        #AA = [A]
-
-        Mo_tot = length(oirreps2indices) 
-        II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_atom )]))
-        Ms_atomspin = maximum([m[3] for m in multiplets_atom])
-        Ms_shellspin = maximum([m[3] for m in multiplets_shell]) 
-        Ms_tot = maximum((max_spin2,Ms_atomspin,Ms_shellspin))
-        Ms_shell = maximum((Ms_atomspin,Ms_shellspin))
-        Karray_orbital,Karray_spin = 
-                    compute_Ksum_arrays(
-                        oindex2dimensions,
-                        cg_o_fullmatint,
-                        cg_s_fullmatint,
-                        Mo_tot ,
-                        II_a ,
-                        Ms_tot ,
-                        Ms_shell)
+        #Mo_tot = length(oirreps2indices) 
+        #II_a = collect(Set([G[2] for G in get_irreps( multiplets_a_atom )]))
+        #Ms_atomspin = maximum([m[3] for m in multiplets_atom])
+        #Ms_shellspin = maximum([m[3] for m in multiplets_shell]) 
+        #Ms_tot = maximum((max_spin2,Ms_atomspin,Ms_shellspin))
+        #Ms_shell = maximum((Ms_atomspin,Ms_shellspin))
+        #Karray_orbital,Karray_spin = 
+        #            compute_Ksum_arrays(
+        #                oindex2dimensions,
+        #                cg_o_fullmatint,
+        #                cg_s_fullmatint,
+        #                Mo_tot ,
+        #                II_a ,
+        #                Ms_tot ,
+        #                Ms_shell)
     end
         
     #   ------------------   #
@@ -687,13 +662,15 @@ function nrg_full_pointspin(
     #   --------------------------- #
     if spectral 
 
-        impurity_operators["particle"] = update_operator( impurity_operators["particle"], 
-                                                          collect(multiplets_a_atom) ,
-                                                          Karray_orbital ,
-                                                          Karray_spin ,
-                                                          combinations_uprima ,
-                                                          irrEU )
-        add_correlation_contribution!(
+        impurity_operators["particle"] = update_operator_nonsimple( 
+            impurity_operators["particle"],
+            collect(multiplets_a_atom) ,
+            fsum ,
+            combinations_Gu_muiualpha ,
+            irrEU ,
+            cg_o_comb2A
+        )
+        add_correlation_contribution_nonsimple!(
             spectral_functions["spectral"],
             impurity_operators["particle"],
             impurity_operators["particle"],
@@ -709,45 +686,7 @@ function nrg_full_pointspin(
             limit_shell = iterations==1 ,
             extra_iterations=extra_iterations
         )
-        #compute_correlation_peaks(
-        #    impurity_operators["particle"],
-        #    impurity_operators["particle"],
-        #    oindex2dimensions,
-        #    irrEU,
-        #    z,
-        #    1 ;
-        #    correlation_type="spectral",
-        #    T=spectral_temperature,
-        #    iteration_scale=iterscale(scale,L,1)
-        #)
 
-        #if orbitalresolved 
-        #    M, AA = update_redmat_AA_CGsummethod_orbitalresolved(
-        #            M,
-        #            irrEU ,
-        #            combinations_uprima ,
-        #            collect(multiplets_a_atom) ,
-        #            cg_o_fullmatint ,
-        #            cg_s_fullmatint ,
-        #            Karray_orbital ,
-        #            Karray_spin ,
-        #            AA ,
-        #            oindex2dimensions ;
-        #            verbose=false )
-        #else
-        #    M, AA = update_redmat_AA_CGsummethod(
-        #            M,
-        #            irrEU ,
-        #            combinations_uprima ,
-        #            collect(multiplets_a_atom) ,
-        #            cg_o_fullmatint ,
-        #            cg_s_fullmatint ,
-        #            Karray_orbital ,
-        #            Karray_spin ,
-        #            AA ,
-        #            oindex2dimensions ;
-        #            verbose=false )
-        #end
     end
 
 
@@ -764,19 +703,19 @@ function nrg_full_pointspin(
         nrg = NRG_doublegroups_nonsimple( 
             label,
             calculation,
-            iterations, 
-            cutoff_type, 
+            iterations,
+            cutoff_type,
             cutoff_magnitude,
             L,
             irrEU,
-            multiplets_shell, 
+            multiplets_shell,
             keys_as_dict_o,
             keys_as_dict_s,
             cg_o_comb2A,
             dsum,
             ksum,
             lehmann_muanu,
-            collect(multiplets_a_shell) ,
+            collect(multiplets_a_shell),
             combinations_Gu_muiualpha,
             betabar,
             oindex2dimensions,
@@ -919,57 +858,47 @@ function nrg_full_pointspin(
              half_weight_idx=nrg.half_weight_idx ,
              half_weight_energy=nrg.half_weight_energy )
 
-    elseif spectral # not updated
+    elseif spectral
 
-        nrg = NRG( label ,
-                   calculation ,
-                   iterations,
-                   cutoff_type,
-                   cutoff_magnitude,
-                   L,
-                   hop_symparams_int,
-                   irrEU,
-                   multiplets_shell,
-                   cg_o_fullmatint,
-                   cg_s_fullmatint,
-                   keys_as_dict_o ,
-                   keys_as_dict_s ,
-                   Csum_o_array ,
-                   Csum_s_array ,
-                   Bsum_o_array ,
-                   Bsum_s_array ,
-                   pcgred_shell ,
-                   collect(multiplets_a_shell), 
-                   combinations_uprima,
-                   betabar,
-                   oindex2dimensions,
-                   channels_codiagonals ,
-                   max_spin2 ;
-                   mine=mine ,
-                   distributed=distributed ,
-                   z=z ,
-                   verbose=false ,
-                   spectral=true ,
-                   spectral_functions=spectral_functions ,
-                   spectral_broadening=spectral_broadening ,
-                   broadening_distribution=broadening_distribution ,
-                   K_factor=K_factor ,
-                   orbitalresolved=orbitalresolved ,
-                   impurity_operators=impurity_operators ,
-                   spectral_temperature=spectral_temperature ,
-                   extra_iterations=extra_iterations ,
-                   #M=M,
-                   #AA=AA , 
-                   Karray_orbital=Karray_orbital ,
-                   Karray_spin=Karray_spin ,
-                   multiplets_atomhop=collect(multiplets_a_atom) ,
-                   scale=Float64(scale) ,
-                   precompute_iaj=precompute_iaj ,
-                   compute_impmults=compute_impmults ,
-                   mult2index=mult2index ,
-                   orbital_multiplets=orbital_multiplets ,
-                   mm_i=mm_i ,
-                   channels_diagonals=channels_diagonals )
+        nrg = NRG_doublegroups_nonsimple( 
+            label,
+            calculation,
+            iterations,
+            cutoff_type,
+            cutoff_magnitude,
+            L,
+            irrEU,
+            multiplets_shell,
+            keys_as_dict_o,
+            keys_as_dict_s,
+            cg_o_comb2A,
+            dsum,
+            ksum,
+            lehmann_muanu,
+            collect(multiplets_a_shell),
+            combinations_Gu_muiualpha,
+            betabar,
+            oindex2dimensions,
+            channels_codiagonals,
+            max_spin2;
+            mine=mine ,
+            z=z ,
+            compute_impmults=compute_impmults ,
+            mult2index=mult2index ,
+            orbital_multiplets=orbital_multiplets ,
+            mm_i=mm_i ,
+            channels_diagonals=channels_diagonals ,
+            spectral=true ,
+            spectral_functions=spectral_functions ,
+            spectral_broadening=spectral_broadening ,
+            broadening_distribution=broadening_distribution ,
+            K_factor=K_factor ,
+            impurity_operators=impurity_operators ,
+            spectral_temperature=spectral_temperature ,
+            extra_iterations=extra_iterations ,
+            multiplets_atomhop=collect(multiplets_a_atom) ,
+            fsum=fsum ,
+        )
     end
 
     println()

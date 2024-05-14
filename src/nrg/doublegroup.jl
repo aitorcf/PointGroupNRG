@@ -1107,7 +1107,7 @@ function construct_and_diagonalize_uHv(
         dsum::DSum ,
         lehmann_iaj::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } , # ⟨i||f†_a||j⟩^[n-1]
         lehmann_nuamu::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } , # ⟨ν||f†_a||μ⟩^[n]
-        multiplets_a_block::Vector{NTuple{4,Int64}} , 
+        multiplets_a_block::Vector{NTuple{4,Int64}} ,
         multiplets_a_shell::Vector{NTuple{4,Int64}} ;
         conduction_diagonals::Dict{IntIrrep,Vector{Float64}}=Dict{IntIrrep,Vector{Float64}}() ,
         impinfo::Bool=false ,
@@ -1423,7 +1423,110 @@ function compute_lehmann_iaj(
     return lehmann_iaj
 end
 
-function NRG_doublegroups_nonsimple( 
+function cut_off_nonsimple!( 
+            irrEU::Dict{ Tuple{Int64,Int64,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} };
+            type::String="multiplet" , 
+            cutoff::T=200 , 
+            safeguard::Bool=true , 
+            safeguard_tol::Float64=1e-5 ,
+            safeguard_max::Int64=200 ,
+            minmult::Int64=0 , 
+            mine::Float64=-1.0 ,
+            verbose::Bool=true ,
+            impurity_operator::Dict{ IntTripleG , Array{ComplexF64,4} }=Dict{ IntTripleG , Array{ComplexF64,4} }()
+    ) where {T<:Number}
+    # input 
+    # - irrEU : G => (E,U)
+    # - type : "multiplet" --> keep a limited number of lowest-energy multiplets
+    #          "energy"    --> upper bound to energy
+    # - cutoff : upper bound in multiplets/energy
+    # output: 
+    # - [irrEU : altered, not returned]
+    # - { kept } : kept block multiplets
+    # - discarded : amount of multiplets discarded
+
+    # order multiplets in terms of their energy 
+    mm::Vector{Tuple{IntMultiplet,Float64}} = collect( ((G...,r),E[r]) for (G,(E,U)) in irrEU for r=1:length(E) )
+    sort!( mm , by=x->x[2] )
+
+    # discard, kept and safeguarded
+    discarded::Vector{IntMultiplet} = IntMultiplet[]
+    kept::Vector{IntMultiplet} = IntMultiplet[]
+    sg::Vector{IntMultiplet} = IntMultiplet[]
+
+    # multiplet cutoff
+    if type=="multiplet"
+
+        # excessive cutoff, no discard
+        if cutoff>=length(mm)
+
+            kept = map( x->x[1] , mm )
+            discarded = []
+
+        # discard needed
+        else
+
+            mine_idx::Int64 = mm[end][2]<mine ? cutoff : findfirst( x->x[2]>=mine , mm )
+            cutoff = maximum([ mine_idx , cutoff ])
+            cutoff_energy = mm[cutoff][2]
+            #kept = map( x->x[1] , mm[1:cutoff] )
+
+            mm_kept = filter( x->(x[2]<=cutoff_energy || (safeguard && isapprox(x[2],cutoff_energy;atol=safeguard_tol))) , mm ) 
+            length(mm_kept)>(cutoff+safeguard_max) && (mm_kept=mm_kept[1:(cutoff+safeguard_max)])
+            mm_discarded = mm[(length(mm_kept)+1):end]
+
+            kept      = map( x->x[1] , mm_kept )
+            discarded = map( x->x[1] , mm_discarded )
+        end
+
+    # energy cutoff
+    elseif type=="energy" 
+        kept      = collect( pair[1] for pair in mm if pair[2]<=cutoff  )
+        cutoff    = length(kept)
+        (cutoff<minmult && minmult<length(mm)) && (cutoff=minmult)
+        kept      = collect( pair[1] for pair in mm[1:cutoff] )
+        if cutoff<length(mm) 
+            if safeguard
+                safeguard = map( x->x[1] ,
+                                [ m for m in mm[(cutoff+1):end] 
+                                  if isapprox(m[2],mm[cutoff][2];atol=1e-1)] )
+                append!( kept , safeguard )
+            end
+            cutoff = length(kept)
+            discarded = map( x->x[1] , mm[(cutoff+1):end] )
+        else 
+            discarded = []
+        end
+    else 
+        error( "type must be 'multiplet' or 'energy'" )
+    end
+
+    # apply cutoff to irrEU
+    for (G,(E,U)) in irrEU 
+        N = length(collect( k for k in kept if k[1:3]==G ))
+        if N==0 
+            pop!( irrEU , G )
+            continue
+        end
+        # U does not need cutoff (multiplets run over)
+        irrEU[G] = ( E[1:N] , U[:,1:N] )
+    end
+
+    # cut off impurity operator
+    for ((G_u,G_a,G_v),uavmat) in impurity_operator
+        if !(haskey(irrEU,G_u) && haskey(irrEU,G_v)) 
+            pop!( impurity_operator , (G_u,G_a,G_v) )
+            continue
+        end
+        R_u = length(irrEU[G_u][1]) 
+        R_v = length(irrEU[G_v][1]) 
+        impurity_operator[G_u,G_a,G_v] = uavmat[:,1:R_u,:,1:R_v]
+    end
+
+    return ( Set(kept) , discarded )::Tuple{Set{NTuple{4,Int64}},Vector{NTuple{4,Int64}}}
+end
+
+function NRG_doublegroups_nonsimple(
               label::String ,
               calculation::String ,
               iterations::Int64, 
@@ -1460,8 +1563,6 @@ function NRG_doublegroups_nonsimple(
               density_matrices::Vector{Dict{IntIrrep,Matrix{Float64}}}=Dict{IntIrrep,Matrix{Float64}}[] ,
               half_weight_idx::Int64=0 ,
               half_weight_energy::Float64=0.0 ,
-              M::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
-              AA::Vector{T}=[] ,
               fsum::FSum=EmptyClebschGordanSum(FSum) ,
               multiplets_atomhop::Vector{NTuple{4,Int64}}=NTuple{4,Int64}[] ,
               scale::Float64=1.0 ,
@@ -1472,9 +1573,7 @@ function NRG_doublegroups_nonsimple(
               write_spectrum::Bool=false ,
               channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[] ,
               compute_selfenergy::Bool=false ,
-              Mred_se::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }=Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,3} }() ,
-              AA_se=[] ,
-              impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}() ,
+              impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}() ,
               spectral_temperature::Float64=0.0 ,
               extra_iterations::Int64=0 ) where {T}
 
@@ -1533,14 +1632,16 @@ function NRG_doublegroups_nonsimple(
         #
         # apply cutoff
         irrEU_uncut = copy(irrEU)
-        (multiplets_block, discarded) = cut_off!( irrEU ; 
-                                                  type=cutoff_type , 
-                                                  cutoff=cutoff_magnitude , 
-                                                  safeguard=true ,
-                                                  minmult=minmult ,
-                                                  mine=mine ,
-                                                  verbose=false ,
-                                                  M=!iszero(length(impurity_operators)) ? impurity_operators["particle"] : Dict{IntTripleG,Array{ComplexF64,3}}() )
+        (multiplets_block, discarded) = cut_off_nonsimple!( 
+            irrEU ; 
+            type=cutoff_type , 
+            cutoff=cutoff_magnitude , 
+            safeguard=true ,
+            minmult=minmult ,
+            mine=mine ,
+            verbose=false ,
+            impurity_operator=!iszero(length(impurity_operators)) ? impurity_operators["particle"] : Dict{IntTripleG,Array{ComplexF64,4}}() 
+        )
 
         # print info
         number_kept_multiplets = length(multiplets_block)
@@ -1602,7 +1703,7 @@ function NRG_doublegroups_nonsimple(
         #   <i||f†_a||j>_α
         #
         lehmann_iaj = compute_lehmann_iaj( 
-            collect(multiplets_a), 
+            collect(multiplets_a),
             ksum ,
             lehmann_muanu ,
             combinations_Gu_muiualpha,
@@ -1611,19 +1712,19 @@ function NRG_doublegroups_nonsimple(
         )
 
         # construct and diagonalize ⟨u||H||v⟩
-        diagonalization_performance = @timed (irrEU,combinations_Gu_muiualpha) = construct_and_diagonalize_uHv( 
-                    multiplets_block, 
-                    multiplets_shell,
-                    irrEU, 
-                    hop_symparams, 
-                    keys_as_dict_o,
-                    keys_as_dict_s,
-                    dsum,
-                    lehmann_iaj,
-                    lehmann_muanu,
-                    multiplets_a,
-                    multiplets_a;
-                    conduction_diagonals=channels_diagonals[1]
+        diagonalization_performance = @timed (irrEU,combinations_Gu_muiualpha) = construct_and_diagonalize_uHv(
+            multiplets_block,
+            multiplets_shell,
+            irrEU,
+            hop_symparams,
+            keys_as_dict_o,
+            keys_as_dict_s,
+            dsum,
+            lehmann_iaj,
+            lehmann_muanu,
+            multiplets_a,
+            multiplets_a;
+            conduction_diagonals=channels_diagonals[1]
         )
 
         # information
@@ -1658,6 +1759,7 @@ function NRG_doublegroups_nonsimple(
             push!( combinations_uprima_train , combinations_uprima )
             push!( diagonalizers , Dict( G=>U for (G,(_,U)) in irrEU ) )
             push!( spectrum_train , Dict( G=>E for (G,(E,_)) in irrEU ) )
+
         end
 
         # spectrum 
@@ -1714,12 +1816,14 @@ function NRG_doublegroups_nonsimple(
         if spectral 
 
             spectral_performance = @timed begin
-                impurity_operators["particle"] = update_operator( impurity_operators["particle"], 
-                                                                  collect(multiplets_atomhop) ,
-                                                                  Karray_orbital ,
-                                                                  Karray_spin ,
-                                                                  combinations_uprima ,
-                                                                  irrEU )
+                impurity_operators["particle"] = update_operator_nonsimple( 
+                    impurity_operators["particle"], 
+                    collect(multiplets_atomhop) ,
+                    fsum ,
+                    combinations_Gu_muiualpha ,
+                    irrEU ,
+                    cg_o_comb2A
+                )
                 multiplets_kept = Set{IntMultiplet}()
                 multiplets_discarded = Set{IntMultiplet}()
                 if dmnrg_run==2
@@ -1733,7 +1837,7 @@ function NRG_doublegroups_nonsimple(
                                                                        mine=mine )
                     irrEU = irrEU_copy
                 end
-                add_correlation_contribution!(
+                add_correlation_contribution_nonsimple!(
                     spectral_functions["spectral"],
                     impurity_operators["particle"],
                     impurity_operators["particle"],
@@ -1760,6 +1864,9 @@ function NRG_doublegroups_nonsimple(
 
             # information
             maximum_irrep_spin2 = irreps -> maximum((irreps[1][3],irreps[2][3],irreps[3][3]))
+            if any(any(isnan.(v)) for v in values(impurity_operators["particle"]))
+                error("NaN in impurity operators")
+            end
             maximum_spin2 = maximum([ maximum_irrep_spin2(irreps) for irreps in keys(impurity_operators["particle"]) ])
             maximum_spin2_all_iterations = maximum([ maximum_spin2_all_iterations , maximum_spin2 ])
             println( "EXCITATION MATRIX CALCULATION" )
