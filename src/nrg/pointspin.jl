@@ -1,5 +1,3 @@
-ispointspin(symmetry::String) = symmetry=="PS" || symmetry=="pointspin"
-
 # ================================= #
 # SYMMETRY-ADAPTED STATES AND BASIS #
 # ================================= #
