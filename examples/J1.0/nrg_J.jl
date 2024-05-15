@@ -12,23 +12,23 @@ label = "J$J"
 multiplets_dir = "multiplets"
 atom_config = Dict{Float64,Int64}( J => 1 )
 
-
 # additional input for run=="spectrum"
 epsilon_symparams = Dict{Float64,Vector{ComplexF64}}(
     J => [-0.1]
 )
 u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
     ("A",1.0) => [0.5;;],
+    #("A",0.0) => [0.2;;]
 )
 
-# additional input for run=="thermo" (and run=="spectral")
+# additional input for run=="thermo" and run=="spectral"
 cutoff_type = "multiplet"
-cutoff_magnitude = 600
-L = 10.0
+cutoff_magnitude = 300
+L = 3.0
 iterations = 42
 shell_config = atom_config
 hop_symparams = Dict{Float64,Matrix{ComplexF64}}(
-    J => [0.07;;]
+    J => [0.1;;]
 )
 
 # choose what to calculate
@@ -75,7 +75,8 @@ elseif run=="thermo"
 
     for calculation in ["CLEAN","IMP"]
 
-        nrg_full_totalangularmomentum( 
+        nrg_full_allsymmetries( 
+            "J",
             label ,
             calculation ,
             L ,
@@ -96,18 +97,17 @@ elseif run=="spectral"
 
     calculation = "IMP"
 
-    nrg_full( 
+    nrg_full_allsymmetries( 
+        "J" ,
         label ,
         calculation ,
         L ,
         iterations ,
         cutoff_type ,
         cutoff_magnitude ,
-        cg_o_dir ,
         multiplets_dir ,
         atom_config ,
         shell_config ,
-        identityrep ,
         epsilon_symparams ,
         u_symparams ,
         hop_symparams ;

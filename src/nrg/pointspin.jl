@@ -1,3 +1,8 @@
+ispointspin(symmetry::String) = symmetry=="PS" || symmetry=="pointspin"
+
+# ================================= #
+# SYMMETRY-ADAPTED STATES AND BASIS #
+# ================================= #
 function get_symstates_basis_multiplets_pointspin_nonsimple( 
             atom_config::Dict{String,Int64},
             oirreps2dimensions::Dict{String,Int64} ,

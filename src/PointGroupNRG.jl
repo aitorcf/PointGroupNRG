@@ -40,6 +40,7 @@ module NRGCalculator
     export nrg_full_doublegroup_nonsimple
     export nrg_full_totalangularmomentum
     export nrg_full_pointspin
+    export nrg_full_allsymmetries
     export generate_Z 
     export generate_Zlaps
     export zavg_thermo 
@@ -65,6 +66,7 @@ module NRGCalculator
     include( "nrg/doublegroup.jl" )
     include( "nrg/pointspin.jl" )
     include( "nrg/totalangularmomentum.jl" )
+    include( "nrg/allsymmetries.jl")
 
 end
 using .NRGCalculator

@@ -5482,9 +5482,9 @@ function add_spectral_contribution_T0_nonsimple!(
     )
 
     # ground multiplets and partition function
-    G2R_0::Dict{IntIrrep,Int64} = Dict( 
+    G2R_0::Dict{IntIrrep,Int64} = Dict(
         G => length(filter(iszero,E))
-        for (G,(E,U)) in irrEU 
+        for (G,(E,U)) in irrEU
     )
     partition = sum( R*oindex2dimensions[I]*(S+1) for ((_,I,S),R) in G2R_0 )
 
@@ -5492,15 +5492,16 @@ function add_spectral_contribution_T0_nonsimple!(
     for ((G_u,G_a,G_v),redmat) in A
 
         # irrep quantum numbers
-        (_,I_u,S_u) = G_u 
+        (_,I_u,S_u) = G_u
         (_,I_a,S_a) = G_a
 
-        @views energies_Gu = irrEU[G_u][1]
-        @views energies_Gv = irrEU[G_v][1]
+        energies_Gu = irrEU[G_u][1]
+        energies_Gv = irrEU[G_v][1]
 
         # clebsch-gordan contribution 
         dim_u = oindex2dimensions[I_u]*(S_u+1)
         dim_a = oindex2dimensions[I_a]*(S_a+1)
+        @show dim_a
         cg = dim_u/dim_a
 
         # iterate over creation operator multiplets
@@ -5557,7 +5558,7 @@ end
 # update excitation operator
 function update_operator_nonsimple(
         redmat_iaj::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } ,
-        multiplets_a_block::Vector{NTuple{4,Int64}} , 
+        multiplets_a_block::Vector{NTuple{4,Int64}} ,
         fsum::FSum ,
         combinations_Gu_muiualpha::Dict{NTuple{3,Int64}, Vector{Tuple{IntMultiplet,IntMultiplet,IntMultiplet,Int64}}} ,
         irrEU::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
@@ -5565,8 +5566,6 @@ function update_operator_nonsimple(
     )::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} }
 
     # G => multiplicity of G
-    #
-    # i (n) / u (n-1)
     G2R_uv::Dict{IntIrrep,Int64} = Dict( G_u=>size(U_u,1) for (G_u,(_,U_u)) in irrEU )
     # a
     G2R_a::Dict{NTuple{3,Int64},Int64} = Dict( 
@@ -5618,7 +5617,6 @@ function update_operator_nonsimple(
 
             # irrep quantum numbers
             N_a,I_a,S_a = G_a
-
 
             # early discard 
             N_u==(N_v+N_a) || continue

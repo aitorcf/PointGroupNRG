@@ -31,16 +31,16 @@ u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
 # additional input for run=="thermo" (and run=="spectral")
 label = "T"
 cutoff_type = "multiplet"
-cutoff_magnitude = 1000
-L = 10.0
+cutoff_magnitude = 300
+L = 3.0
 iterations = 42
 shell_config = atom_config
 hop_symparams = Dict{String,Matrix{ComplexF64}}(
-    "T" => [0.05;;]
+    "T" => [0.1;;]
 )
 
 # choose what to calculate
-run = "profile"
+run = "thermo"
 
 if run=="multiplets"
 
@@ -63,21 +63,22 @@ elseif run=="spectrum"
     )
 
 elseif run=="imp"
-    
-    nrg_full_doublegroup_nonsimple( 
-        label ,
-        "IMP" ,
-        L ,
-        iterations ,
-        cutoff_type ,
-        cutoff_magnitude ,
-        cg_o_dir ,
-        multiplets_dir ,
-        atom_config ,
-        shell_config ,
-        identityrep ,
-        epsilon_symparams ,
-        u_symparams ,
+
+    nrg_full_allsymmetries( 
+        "D",
+        label,
+        "IMP",
+        L,
+        iterations,
+        cutoff_type,
+        cutoff_magnitude,
+        cg_o_dir,
+        multiplets_dir,
+        atom_config,
+        shell_config,
+        identityrep,
+        epsilon_symparams,
+        u_symparams,
         hop_symparams
     )
 
@@ -121,21 +122,22 @@ elseif run=="thermo"
 
     for calculation in ["CLEAN","IMP"]
 
-        nrg_full_doublegroups_nonsimple( 
-            label ,
-            calculation ,
-            L ,
-            iterations ,
-            cutoff_type ,
-            cutoff_magnitude ,
-            cg_o_dir ,
-            multiplets_dir ,
-            atom_config ,
-            shell_config ,
-            identityrep ,
-            epsilon_symparams ,
-            u_symparams ,
-            hop_symparams
+        nrg_full_allsymmetries( 
+            "D",
+            label,
+            calculation,
+            L,
+            iterations,
+            cutoff_type,
+            cutoff_magnitude,
+            multiplets_dir,
+            atom_config,
+            shell_config,
+            epsilon_symparams,
+            u_symparams,
+            hop_symparams;
+            cg_o_dir=cg_o_dir,
+            identityrep=identityrep
         )
 
     end
@@ -144,21 +146,22 @@ elseif run=="spectral"
 
     calculation = "IMP"
 
-    nrg_full( 
+    nrg_full_allsymmetries( 
+        "D" ,
         label ,
         calculation ,
         L ,
         iterations ,
         cutoff_type ,
         cutoff_magnitude ,
-        cg_o_dir ,
         multiplets_dir ,
         atom_config ,
         shell_config ,
-        identityrep ,
         epsilon_symparams ,
         u_symparams ,
         hop_symparams ;
+        cg_o_dir=cg_o_dir ,
+        identityrep=identityrep ,
         spectral=true
     )
 

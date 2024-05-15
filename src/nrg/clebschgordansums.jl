@@ -36,7 +36,9 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
                             maximum_spin2::Int64 ,
                             maximum_spin2_impurity_shell::Int64 ,
                             cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ;
+                            compute_fsum::Bool=false ,
                             verbose=false )
+
     dsum = DSum( number_of_orbital_irreps,
                  orbital_irreps_impurity_shell,
                  orbital_irreps_one_electron,
@@ -44,7 +46,7 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
                  maximum_spin2,
                  maximum_spin2_impurity_shell,
                  cg_s_fullmatint;
-                 verbose=false )
+                 verbose=verbose )
     ksum = KSum( number_of_orbital_irreps,
                  orbital_irreps_impurity_shell,
                  orbital_irreps_one_electron,
@@ -52,35 +54,47 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
                  maximum_spin2,
                  maximum_spin2_impurity_shell,
                  cg_s_fullmatint;
-                 verbose=false )
-    fsum = FSum( number_of_orbital_irreps,
-                 orbital_irreps_impurity_shell,
-                 orbital_irreps_one_electron,
-                 cg_o_fullmatint,
-                 maximum_spin2,
-                 maximum_spin2_impurity_shell,
-                 cg_s_fullmatint;
-                 verbose=false )
-
+                 verbose=verbose )
+    fsum = (
+        if compute_fsum
+             FSum( number_of_orbital_irreps,
+                   orbital_irreps_impurity_shell,
+                   orbital_irreps_one_electron,
+                   cg_o_fullmatint,
+                   maximum_spin2,
+                   maximum_spin2_impurity_shell,
+                   cg_s_fullmatint;
+                   verbose=verbose )
+        else
+            EmptyClebschGordanSum(FSum)
+        end
+    )
     return dsum,ksum,fsum
 end
 # totalangularmomentum (no cg_s_fullmatint)
 function ClebschGordanSums( maximum_J2_onelectron::Int64 ,
                             maximum_J2::Int64 ,
                             maximum_J2_impurity_shell::Int64 ;
+                            compute_fsum::Bool=false ,
                             verbose=false )
     dsum = DSum( maximum_J2_onelectron,
                  maximum_J2,
                  maximum_J2_impurity_shell;
-                 verbose=false )
+                 verbose=verbose )
     ksum = KSum( maximum_J2_onelectron ,
                  maximum_J2,
                  maximum_J2_impurity_shell;
-                 verbose=false )
-    fsum = FSum( maximum_J2_onelectron,
-                 maximum_J2,
-                 maximum_J2_impurity_shell;
-                 verbose=false )
+                 verbose=verbose )
+    fsum = (
+        if compute_fsum
+            FSum( maximum_J2_onelectron,
+                  maximum_J2,
+                  maximum_J2_impurity_shell;
+                  verbose=verbose )
+        else
+            EmptyClebschGordanSum(FSum)
+        end
+    )
 
     return dsum,ksum,fsum
 end

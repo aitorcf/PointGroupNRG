@@ -2,6 +2,7 @@
 spin_doubleint2index( s2::Float64 , S2::Float64 ) = Int64(0.5*(s2+S2)+1)
 spin_index2doubleint( si::Int64 , S2::Int64 ) = Int64(2*(si-(S2+2)/2.0))
 
+
 function cg_orbital_nonsimple( I_1::String , I_2::String , path ; verbose=false )
 
     # STRING version. 
@@ -619,7 +620,7 @@ function pcg_nonsimple_sanity_check( pcgdict::IntQPCG ,
     verbose && println("Reduced Lehmann amplitudes correct!")
 end
 
-function get_pcgred_nonsimple( 
+function get_lehmann_reduced_orbitalsym( 
             basis::CB ,
             symstates_noint::ClearSymstateDict ,
             multiplets::IntMultipletSet,
@@ -642,7 +643,7 @@ function get_pcgred_nonsimple(
         multiplets_a ,
         cg_o_fullmatint ,
         cg_s_fullmatint ;
-        verbose=true 
+        verbose=verbose
     )
     if verbose
         println( "PCGRED" )
@@ -650,7 +651,7 @@ function get_pcgred_nonsimple(
         println()
     end
 
-    pcg_nonsimple_sanity_check( pcg , pcgred , cg_o_fullmatint , cg_s_fullmatint ; verbose=false )
+    pcg_nonsimple_sanity_check( pcg , pcgred , cg_o_fullmatint , cg_s_fullmatint ; verbose=verbose )
 
     return pcgred
 end
@@ -1097,7 +1098,7 @@ function get_combinations_Gu_muiualpha(
     return combinations_Gu_muiualpha
 end
 
-function construct_and_diagonalize_uHv( 
+function construct_and_diagonalize_uHv_orbitalsym( 
         multiplets_block::Set{NTuple{4,Int64}} , 
         multiplets_shell::Set{NTuple{4,Int64}} ,
         irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
