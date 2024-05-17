@@ -13,7 +13,7 @@ function compute_multiplets( symmetry::String , # "PS": Pointgroup-Spin, "D": Do
     # create asym dir if it does not exist
     isdir(multiplets_path) || mkpath( multiplets_path )
 
-    nn_irrep = symmetry=="J" ? (2:Int64(2*irrep+1)) : (2:get_M_nonsimple(irrep,clebschgordan_path))
+    nn_irrep = symmetry=="J" ? (2:Int64(2*irrep+1)) : (2:get_N_nonsimple(irrep,clebschgordan_path,symmetry))
 
     # compute multiplet states
     for n in nn_irrep

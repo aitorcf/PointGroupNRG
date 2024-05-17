@@ -1017,7 +1017,7 @@ function NRG( label::String ,
                 distributed=distributed ,
                 precompute_iaj=precompute_iaj ,
                 conduction_diagonals=channels_diagonals[n] );
-        print_spectrum(irrEU)
+
         # information
         maximum_spin2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
         if maximum_spin2>max_spin2

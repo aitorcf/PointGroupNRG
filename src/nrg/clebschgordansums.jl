@@ -55,7 +55,7 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
                  maximum_spin2_impurity_shell,
                  cg_s_fullmatint;
                  verbose=verbose )
-    fsum = (
+    fsum = begin
         if compute_fsum
              FSum( number_of_orbital_irreps,
                    orbital_irreps_impurity_shell,
@@ -68,7 +68,8 @@ function ClebschGordanSums( number_of_orbital_irreps::Int64 ,
         else
             EmptyClebschGordanSum(FSum)
         end
-    )
+    end
+
     return dsum,ksum,fsum
 end
 # totalangularmomentum (no cg_s_fullmatint)

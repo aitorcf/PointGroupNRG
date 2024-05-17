@@ -1,3 +1,18 @@
+# ========= #
+# UTILITIES #
+# ========= #
+
+# get symmetry type
+ispointspin(symmetry::String) = symmetry=="PS" || symmetry=="pointspin"
+isdoublegroup(symmetry::String) = symmetry=="D" || symmetry=="doublegroup"
+istotalangularmomentum(symmetry::String) = symmetry=="J" || symmetry=="totalangularmomentum"
+isorbital(symmetry::String) = ispointspin(symmetry) || isdoublegroup(symmetry)
+
+# total angular momentum
+doublej(J::Float64) = Int64(2J)
+jdim(J::Float64) = Int64(2J+1)
+jdim(J::Int64) = J+1
+
 # ############################################
 # OBTENTION OF CLEBSCH-GORDAN COEFFICIENTS
 # 
@@ -134,9 +149,39 @@ function cg_orbital_nonsimple( I_1 , I_2 , path ; verbose=false )
     return cg
 end
 
-function get_M_nonsimple( I , cg_path ) 
-    cgo = cg_orbital_nonsimple( I , I , cg_path )
-    return maximum([k[2] for k in keys(cgo)])
+# orbital part multiplicity
+function get_M_nonsimple( I , cg_path ; symmetry="D") 
+    if isorbital(symmetry)
+
+        cgo = cg_orbital_nonsimple( I , I , cg_path )
+        return maximum([k[2] for k in keys(cgo)])
+
+    else
+
+        return 1
+
+    end
+end
+# number of particles in irrep subspace
+function get_N_nonsimple( 
+            IJ::SF ,
+            cg_path::String ,
+            symmetry::String 
+    ) where {SF<:Union{String,Float64}}
+
+    if ispointspin(symmetry)
+
+        return 2*get_M_nonsimple(IJ,cg_path;symmetry=symmetry)
+
+    elseif isdoublegroup(symmetry)
+
+        return get_M_nonsimple(IJ,cg_path;symmetry=symmetry)
+
+    else # totalangularmomentum
+
+        return jdim(IJ)
+
+    end
 end
 
 function cg_shortcircuit_nonsimple( CG_PATH , oirreps... ; verbose=false )
@@ -175,3 +220,4 @@ function get_cg_o_fulldict_nonsimple( oirreps , cg_path )
     end
     return cg_o_full
 end
+

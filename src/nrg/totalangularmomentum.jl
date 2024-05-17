@@ -248,7 +248,7 @@ end
 
 function shell_coperators_totalangularmomentum( 
             shell_basis::CB 
-    )::Dict{ ClearQNums , Operator{CB} } where {CB<:CanonicalBasis,D<:Dict}
+    )::Dict{ ClearQNums , Operator{CB} } where {CB<:CanonicalBasis}
 
     # same as basis2coperators (above) but stores the creation
     # operators as a dictionary.
@@ -306,7 +306,7 @@ end
 function get_lehmann_totalangularmomentum( 
                 symstates_shell::Dict{ClearQNums,S} , 
                 basis_shell::CB ;
-                verbose=false )::IntQPCG where {CB<:CanonicalBasis,S<:State,D<:Dict}
+                verbose=false )::IntQPCG where {CB<:CanonicalBasis,S<:State}
     # compute the pseudo-CG coefficients for the shells.
     #
     # input
@@ -541,7 +541,7 @@ function get_lehmann_reduced_totalangularmomentum(
             basis::CB ,
             symstates_noint::ClearSymstateDict ,
             multiplets::IntMultipletSet ;
-            verbose::Bool=false )::IntIrrepPCGNS where {CB<:CanonicalBasis,D<:Dict}
+            verbose::Bool=false )::IntIrrepPCGNS where {CB<:CanonicalBasis}
 
     # pcg in dict format
     pcg::IntQPCG = get_lehmann_totalangularmomentum(

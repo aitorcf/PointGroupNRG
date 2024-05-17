@@ -28,7 +28,7 @@ function write_spectral_function(
             spectral_data::Matrix{Float64} ;
             header::String=spectralheader ,
             orbitalresolved_header::String="" )
-    
+
     open( filename , write=true ) do f 
         if orbitalresolved_header!==""
             write( f , orbitalresolved_header )
@@ -4647,7 +4647,8 @@ end
 function save_correlation_spectral_decomposition(
             spectral_functions::Dict{String,Dict{IntMultiplet,Matrix{Float64}}} ,
             label::String ,
-            z::Float64 )
+            z::Float64 
+    )
 
     spectral_function = spectral_functions["spectral"]
 
@@ -4662,12 +4663,10 @@ function save_correlation_spectral_decomposition(
         start_odd  = iseven(iterations) ? iterations+2 : iterations+3
         spectral_function_even = vcat(
             spectral_a[1:2:iterations+1,:],
-            #reverse(spectral_a[end:-2:iterations+2,:],dims=1)
             spectral_a[start_even:2:end,:]
         )
         spectral_function_odd = vcat(
             spectral_a[2:2:iterations+1,:],
-            #reverse(spectral_a[end-1:-2:iterations+2,:],dims=1)
             spectral_a[start_odd:2:end,:]
         )
 
@@ -4678,7 +4677,7 @@ function save_correlation_spectral_decomposition(
         )
         interpolator_even = linear_interpolation(spectral_function_even[:,1],spectral_function_even[:,2])
         interpolator_odd  = linear_interpolation(spectral_function_odd[:,1] ,spectral_function_odd[:,2])
-        spectral_function_evenodd = zeros(Float64,length(omegas_evenodd),length(omegas_evenodd))
+        spectral_function_evenodd = zeros(Float64,length(omegas_evenodd),2)
         spectral_function_evenodd[:,1] .= omegas_evenodd
         spectral_function_evenodd[:,2] .= map( x->0.5*(interpolator_even(x)+interpolator_odd(x)) , omegas_evenodd )
 
@@ -5501,7 +5500,6 @@ function add_spectral_contribution_T0_nonsimple!(
         # clebsch-gordan contribution 
         dim_u = oindex2dimensions[I_u]*(S_u+1)
         dim_a = oindex2dimensions[I_a]*(S_a+1)
-        @show dim_a
         cg = dim_u/dim_a
 
         # iterate over creation operator multiplets

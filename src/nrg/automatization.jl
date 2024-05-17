@@ -991,7 +991,7 @@ function nrg_full(
                     cg_o_fullmatint::IntCG ,
                     cg_s_fullmatint::IntCG ;
                     verbose=false )::IntIrrepPCG
-        
+
     #   ------------- #
     #%% impurity atom #
     #   ------------- #

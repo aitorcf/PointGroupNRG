@@ -32,7 +32,7 @@ using .MultipletCalculator
 module NRGCalculator
 
     export multiplets_2particles
-    #export multiplets_2particles_doublegroups
+    export multiplets_2particles_allsymmetries
     export impurity_spectrum
     #export impurity_spectrum_doublegroups
     export nrg_full

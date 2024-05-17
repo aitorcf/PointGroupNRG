@@ -1576,7 +1576,7 @@ function NRG_doublegroups_nonsimple(
               compute_selfenergy::Bool=false ,
               impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,3}}}() ,
               spectral_temperature::Float64=0.0 ,
-              extra_iterations::Int64=0 ) where {T}
+              extra_iterations::Int64=0 )
 
     println( "=============" )
     println( "NRG PROCEDURE" )
