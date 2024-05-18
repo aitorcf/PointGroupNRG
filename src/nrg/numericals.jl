@@ -195,8 +195,8 @@ end
 @inbounds function GenericBasis( cb::CanonicalBasis{SFS} , u::Matrix{ComplexF64} ) where {SFS<:SymbolFockState}
     states::Vector{State} = [State(cb) for _=1:length(cb.states)]
     u = u'
-    for i=1:size(u,1),
-        j=1:size(u,2)
+    for i in axes(u,1),
+        j in axes(u,2)
 
         states[i] += u[i,j]*State(cb.states[j],cb)
 
@@ -239,7 +239,7 @@ end
     return Operator( mat , basis )
 end
 function Operator( a::N , basis::CB )::Operator{CB} where {N<:Number,CB<:CanonicalBasis} 
-    return a * Operator( I , basis )
+    return a * Operator( SymbolIdentityOperator() , basis )
 end
 function Operator( o::Operator{CB} , basis::GB , herm=false )::Operator{GB} where {CB<:CanonicalBasis,GB<:GenericBasis}
     mat = Matrix{ComplexF64}(length(basis.states),length(basis.states))

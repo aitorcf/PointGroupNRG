@@ -185,7 +185,7 @@ struct SymbolIdentityOperator <: SymbolOperator end
 function *( o::SymbolIdentityOperator , s::SFS )::Tuple{ComplexF64,SymbolFockState} where {SFS<:SymbolFockState}
     return (1,s)
 end
-I = SymbolIdentityOperator()
+#I = SymbolIdentityOperator()
 
 # printing
 string( sco::SCO ) where {SCO<:SymbolCreationOperator} = 
