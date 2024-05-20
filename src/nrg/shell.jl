@@ -2063,16 +2063,17 @@ end
 # ~~~~~~~~~~~~~~~~~~~ #
 # IMPURITY MULTIPLETS #
 # ~~~~~~~~~~~~~~~~~~~ #
-function ordered_multiplets( mults )
-    max_N::Int64 = maximum(m[1] for m in mults) 
-    omults = []
-    for N in 0:max_N 
-        for mult in mults
-            mult[1]==N || continue
-            push!(omults,mult)
-        end
+function ordered_multiplets( multiplets )
+    max_N::Int64 = maximum(m[1] for m in multiplets) 
+    omultiplets = []
+    for N in 0:max_N,
+        mult in multiplets
+
+        mult[1]==N || continue
+        push!(omultiplets,mult)
+
     end
-    return omults
+    return omultiplets
 end
 
 # Specrtra from each iteration: Eigenvalues

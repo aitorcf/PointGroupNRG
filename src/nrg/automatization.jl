@@ -298,8 +298,12 @@ function irrEU2int( irrEU , oirreps2indices )
     return Dict( (convert_to_int(G,oirreps2indices),(E,U)) 
                  for (G,(E,U)) in irrEU )
 end
+
 function multiplets2int( multiplets::ClearMultipletSet , oirreps2indices::Dict{String,Int64} )::IntMultipletSet
     return Set( convert_to_int(m,oirreps2indices) for m in multiplets )
+end
+function multiplets2int( multiplets::Vector{ClearMultiplet} , oirreps2indices::Dict{String,Int64} )::Vector{IntMultiplet}
+    return [convert_to_int(m,oirreps2indices) for m in multiplets ]
 end
 
 function get_multiplets_block( 
@@ -315,23 +319,29 @@ function get_multiplets_block(
 end
 
 function setup_impmultinfo( 
-            multiplets_block ,
+            orbital_multiplets_noint::Vector{ClearMultiplet} ,
             irrEU ,
             betabar ,
-            oindex2dimensions )::Tuple{Dict{IntMultiplet,Vector{Float64}},Vector{Float64}}
-    
-    orbital_multiplets = ordered_multiplets(multiplets_block)
+            oindex2dimensions ,
+            oirreps2indices
+    )::Tuple{Dict{IntMultiplet,Vector{Float64}},Vector{Float64}}
+
+    orbital_multiplets_int = multiplets2int(orbital_multiplets_noint,oirreps2indices)
     mult2index = Dict( m=>i for (i,m) in 
-                       enumerate(orbital_multiplets))
-    mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict( 
-        m=>[(i==mult2index[m] ? 1.0 : 0.0)
-            for i in 1:length(multiplets_block)] 
-            for m in orbital_multiplets
+                       enumerate(orbital_multiplets_int))
+    mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict(
+        m=>[
+            (i==mult2index[m] ? 1.0 : 0.0)
+            for i in 1:length(orbital_multiplets_int)
+        ]
+        for m in orbital_multiplets_int
     )
-    m_imp::Vector{Float64} = mult_thermo( irrEU ,
-                         betabar ,
-                         oindex2dimensions ,
-                         mm_i )
+    m_imp::Vector{Float64} = mult_thermo( 
+        irrEU ,
+        betabar ,
+        oindex2dimensions ,
+        mm_i
+    )
 
     return mm_i,m_imp
 end
@@ -343,13 +353,33 @@ function update_impmultinfo(
                 combinations_uprima )
 
     mm_i = imp_mults( irrEU ,
-                      oindex2dimensions ,
                       combinations_uprima ,
                       mm_i )
     m_imp = mult_thermo( irrEU ,
                          betabar ,
                          oindex2dimensions ,
                          mm_i )
+    return mm_i,m_imp 
+end
+function update_impmultinfo_allsymmetries( 
+            mm_i::Dict{NTuple{4,Int64},Vector{Float64}} ,
+            irrEU::Dict{IntIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}} ,
+            betabar::Float64 ,
+            oindex2dimensions::Vector{Int64} ,
+            combinations_Gu_muiualpha::Dict{IntIrrep,Vector{Tuple{IntMultiplet,IntMultiplet,IntMultiplet,Int64}}} 
+    )
+
+    mm_i = imp_mults_nonsimple( 
+        irrEU ,
+        combinations_Gu_muiualpha ,
+        mm_i 
+    )
+    m_imp = mult_thermo( 
+        irrEU ,
+        betabar ,
+        oindex2dimensions ,
+        mm_i
+    )
     return mm_i,m_imp 
 end
 

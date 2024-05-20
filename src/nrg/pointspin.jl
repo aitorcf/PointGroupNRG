@@ -21,8 +21,6 @@ function get_symstates_basis_multiplets_pointspin_nonsimple(
         for m in 1:multiplicity
             onemult_states = get_atomic_states(m,oirrep,oirreps2dimensions)
             onemult_hilbert = HilbertSpace( onemult_states )
-            println(onemult_states)
-            println(onemult_hilbert)
             onemult_symstates = oneirrep_symstates(
                                     onemult_hilbert ,
                                     hiztegia ,

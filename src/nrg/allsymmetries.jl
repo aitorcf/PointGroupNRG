@@ -10,13 +10,17 @@ isorbital(symmetry::String) = ispointspin(symmetry) || isdoublegroup(symmetry)
 function multiplets_2particles_allsymmetries( 
             symmetry::String ,
             multiplets_dir::String ,
-            impurity_config::Dict{SF,Int64} ,
-            identityrep::String ;
-            cg_o_dir::String="" ,
+            impurity_config::Dict{SF,Int64} ;
+            identityrep::String="",
+            cg_o_dir::String="",
             max_SJ2::Int64=10) where {SF<:Union{String,Float64}}
 
-    if isorbital(symmetry) && cg_o_dir==""
-        error("Clebsch-Gordan directory cg_o_dir required for orbital symmetries.")
+    if isorbital(symmetry)
+        if cg_o_dir==""
+            error("Clebsch-Gordan directory <cg_o_dir> required for orbital symmetries.")
+        elseif identityrep==""
+            error("Identity irrep <identityrep> required for orbital symmetries.")
+        end
     end
 
     atom_orbital_irreps::Vector{SF} = collect(keys(impurity_config))
@@ -83,7 +87,7 @@ function multiplets_2particles_allsymmetries(
                 cg_s_fullmatint ,
                 oirreps2indices ;
                 verbose=true 
-                )
+            )
 
         elseif isdoublegroup(symmetry)
 
@@ -122,9 +126,392 @@ function multiplets_2particles_allsymmetries(
     end
 end
 
+# ================= #
+# IMPURITY SPECTRUM #
+# ================= #
+function impurity_spectrum_allsymmetries(
+            symmetry::String , # pointspin PS, double group D, total angular momentum J
+            multiplets_dir::String ,
+            impurity_config::Dict{SF,Int64} ,
+            shell_config::Dict{SF,Int64} ,
+            epsilon_symparams::Dict{ SF , Vector{ComplexF64} } ,
+            u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
+            hop_symparams::Dict{ SF , Matrix{ComplexF64} } ;
+            cg_o_dir::String="",
+            identityrep="",
+            max_SJ2::Int64=10 ,
+    ) where {SF<:Union{String,Float64}}
+
+    println( "*****************************" )
+    println( "Impurity spectrum calculation" )
+    println( "*****************************" )
+    println()
+
+    if isorbital(symmetry)
+        if cg_o_dir==""
+            error("Clebsch-Gordan directory <cg_o_dir> required for orbital symmetries.")
+        elseif identityrep==""
+            error("Identity irrep <identityrep> required for orbital symmetries.")
+        end
+    end
+
+    # orbital irreps present in the atom
+    atom_orbital_irreps::Vector{SF} = collect(keys(impurity_config))
+
+    println( "====================" )
+    println( "SETUP AND PARAMETERS" )
+    println( "====================" )
+    println( "OCCUPATION ENERGIES" )
+    print_dict( epsilon_symparams ) 
+    println( "COULOMB PARAMETERS" )
+    print_dict( u_symparams ) 
+    println( "HYBRIDIZATION PARAMETERS" )
+    print_dict( hop_symparams )
+    println()
+
+
+    # hiztegia
+    hiztegia = Dict{String,Any}()
+    if ispointspin(symmetry)
+
+        hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
+        merge!( hiztegia , Dict( "u"=>0.5 , "d"=>-0.5 ) )
+
+    elseif isdoublegroup(symmetry)
+
+        hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
+        merge!( hiztegia , Dict( "-"=>0.0 ) )
+
+    end # no hiztegia for total angular momentum symmetry
+
+    #   ==========================   #
+    #%% SYMMETRY-RELATED VARIABLES %%#
+    #   ==========================   #
+
+    # orbital symmetry
+    oirreps::Vector{String} = []
+    oirreps2indices::Dict{String,Int64} = Dict()
+    oirreps2dimensions::Dict{String,Int64} = Dict()
+    oindex2dimensions::Vector{Int64} = []
+    cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} = Dict()
+    if isorbital(symmetry)
+
+        (oirreps,
+         oirreps2indices,
+         oirreps2dimensions,
+         oindex2dimensions,
+         cg_o_fullmatint) = get_cg_o_info_nonsimple( cg_o_dir , atom_orbital_irreps )
+
+    else # total angular momentum
+
+        identityrep::String = "A"
+        oirreps = [identityrep]
+        oirreps2indices = Dict(identityrep=>1)
+        oirreps2dimensions = Dict(identityrep=>1)
+        oindex2dimensions = [1]
+        cg_o_fullmatint = Dict(
+            (1,1,1) => ones(ComplexF64,1,1,1,1)
+        )
+
+    end
+
+    # for dmnrg
+    shell_dimension::Int64 = 0
+    if ispointspin(symmetry)
+
+        shell_dimension = reduce( * , [4^(oirreps2dimensions[I]*R) for (I,R) in shell_config] )
+
+    elseif isdoublegroup(symmetry)
+
+        shell_dimension = reduce( * , [(oirreps2dimensions[I]*R) for (I,R) in shell_config] )
+
+    elseif istotalangularmomentum(symmetry)
+
+        shell_dimension = reduce( * , [jdim(J)*R for (J,R) in shell_config] )
+
+    end
+
+    # spin symmetry
+    cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = Dict{NTuple{3,Int64},Array{ComplexF64,3}}()
+    if ispointspin(symmetry)
+
+        cg_s_fullmatint = get_cg_s_fullmatint(max_SJ2)
+
+    elseif isdoublegroup(symmetry)
+
+        cg_s_fullmatint = Dict( (0,0,0)=>[1.0;;;] )
+
+    end
+
+    #   ===========   #
+    #%% ATOMIC PART %%#
+    #   ===========   #
+    println()
+    println( ":::::::::::::::::::" )
+    println( "--- ATOMIC PART ---" )
+    println( ":::::::::::::::::::" )
+    println()
+
+    #   ------------------------------- #
+    #%% symstates, basis and multiplets #
+    #   ------------------------------- #
+    symstates_atom_noint, basis_atom, _, _ = begin
+        if ispointspin(symmetry)
+
+            get_symstates_basis_multiplets_pointspin_nonsimple( 
+                impurity_config,
+                oirreps2dimensions,
+                identityrep,
+                multiplets_dir,
+                cg_o_fullmatint ,
+                cg_s_fullmatint ,
+                oirreps2indices ;
+                verbose=true 
+                )
+
+        elseif isdoublegroup(symmetry)
+
+            get_symstates_basis_multiplets_doublegroups_nonsimple( 
+                    impurity_config,
+                    oirreps2dimensions,
+                    identityrep,
+                    multiplets_dir,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ,
+                    oirreps2indices ;
+                    verbose=true )
+
+        else # totalangularmomentum
+
+            get_symstates_basis_multiplets_totalangularmomentum( 
+                    impurity_config,
+                    multiplets_dir;
+                    verbose=true )
+
+        end
+    end
+
+    #   ----- #
+    #%% model #
+    #   ----- #
+    # operators
+    if isorbital(symmetry)
+
+        epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+        coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+
+    else
+
+        epsilon = epsilon_sym_totalangularmomentum( symstates_atom_noint , epsilon_symparams ; verbose=false )
+        coulomb = u_sym_totalangularmomentum( symstates_atom_noint , u_symparams ; verbose=false )
+
+    end
+
+    # hamiltonian 
+    H::Operator{typeof(basis_atom)} = epsilon + coulomb 
+
+    #   --------   #
+    #%% spectrum %%#
+    #   --------   #
+    irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = get_irrEU_initial(
+        symstates_atom_noint,
+        H;
+        verbose=true
+    )::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+    println( "------------------------------------" )
+    println( "IMPURITY SPECTRUM" )
+    println()
+    print_spectrum( irrEU_clear )
+    println( "------------------------------------" )
+    println()
+end
+
 # ==================== #
 # FULL NRG CALCULATION #
 # ==================== #
+
+# impurity part
+function construct_impurity(
+        symmetry::String ,
+        calculation::String ,
+        impurity_config::Dict{SF,Int64} ,
+        oirreps2dimensions::Dict{SF,Int64} ,
+        oirreps2indices::Dict{SF,Int64} ,
+        identityrep::String ,
+        multiplets_dir::String ,
+        cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
+        cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ,
+        hiztegia ,
+        epsilon_symparams::Dict{SF,Vector{ComplexF64}} ,
+        u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ,
+        L::Float64 ,
+        scale::Float64
+    ) where {SF<:Union{String,Float64}}
+
+    println()
+    println( ":::::::::::::::::::::" )
+    println( "--- IMPURITY PART ---" )
+    println( ":::::::::::::::::::::" )
+    println()
+
+    #   ------------------------------- #
+    #%% symstates, basis and multiplets #
+    #   ------------------------------- #
+    symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
+    multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    mult2index::Dict{ClearMultiplet,Int64} = Dict()
+    orbital_multiplets::Vector{ClearMultiplet} = []
+    if calculation=="IMP"
+        symstates_atom_noint,
+        basis_atom,
+        multiplets_atom_noint,
+        multiplets_a_atom_noint = begin
+            if ispointspin(symmetry)
+
+                get_symstates_basis_multiplets_pointspin_nonsimple( 
+                    impurity_config,
+                    oirreps2dimensions,
+                    identityrep,
+                    multiplets_dir,
+                    cg_o_fullmatint ,
+                    cg_s_fullmatint ,
+                    oirreps2indices ;
+                    verbose=true 
+                    )
+
+            elseif isdoublegroup(symmetry)
+
+                get_symstates_basis_multiplets_doublegroups_nonsimple( 
+                        impurity_config,
+                        oirreps2dimensions,
+                        identityrep,
+                        multiplets_dir,
+                        cg_o_fullmatint ,
+                        cg_s_fullmatint ,
+                        oirreps2indices ;
+                        verbose=true )
+
+            else # totalangularmomentum
+
+                get_symstates_basis_multiplets_totalangularmomentum( 
+                        impurity_config,
+                        multiplets_dir;
+                        verbose=true )
+
+            end
+        end
+        orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
+        mult2index = Dict( m=>i for (i,m) in enumerate(orbital_multiplets))
+        multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
+                                                                oirreps2indices )
+        multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
+                                                                  oirreps2indices )
+    else 
+        multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
+        multiplets_atom = multiplets2int(multiplets_atom_noint,oirreps2indices)
+        multiplets_a_atom = multiplets_atom
+    end
+
+    #   -------------------------- #
+    #%% reduced lehmann amplitudes #
+    #   -------------------------- #
+    lehmann_iaj::IntIrrepPCGNS = begin
+        if calculation=="CLEAN"
+
+            IntIrrepPCGNS()
+
+        else
+            if isorbital(symmetry)
+
+                get_lehmann_reduced_orbitalsym( 
+                    basis_atom ,
+                    symstates_atom_noint::ClearSymstateDict ,
+                    multiplets_atom::IntMultipletSet ,
+                    hiztegia ,
+                    oirreps2indices::Dict{String,Int64} ,
+                    cg_o_fullmatint::IntCGNS ,
+                    cg_s_fullmatint::IntCG ;
+                    verbose=false
+                )::IntIrrepPCGNS
+
+            else
+
+                get_lehmann_reduced_totalangularmomentum( 
+                    basis_atom ,
+                    symstates_atom_noint::ClearSymstateDict ,
+                    multiplets_atom::IntMultipletSet ;
+                    verbose=false 
+                )::IntIrrepPCGNS
+
+            end
+        end
+    end
+
+    #   -------------------- #
+    #%% impurity hamiltonian #
+    #   -------------------- #
+    if calculation=="IMP"
+
+        # operators
+        if isorbital(symmetry)
+
+            epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+            coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+
+        else
+
+            epsilon = epsilon_sym_totalangularmomentum( symstates_atom_noint , epsilon_symparams ; verbose=false )
+            coulomb = u_sym_totalangularmomentum( symstates_atom_noint , u_symparams ; verbose=false )
+
+        end
+
+        # hamiltonian 
+        H::Operator{typeof(basis_atom)} = epsilon + coulomb 
+
+    end
+
+    #   --------   #
+    #%% spectrum %%#
+    #   --------   #
+    irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = begin
+        if calculation=="IMP"
+
+            get_irrEU_initial(symstates_atom_noint,H;verbose=true)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+
+        elseif calculation=="CLEAN" 
+
+            get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+
+        end
+    end
+    println( "------------------------------------" )
+    println( "IMPURITY SPECTRUM" )
+    println()
+    println( "Before rescale:" )
+    println()
+    print_spectrum( Dict((G,(E.*(scale*sqrt(L)),U)) for (G,(E,U)) in irrEU_clear) )
+    println()
+    println( "After rescale:" )
+    println()
+    print_spectrum( irrEU_clear )
+    println( "------------------------------------" )
+    println()
+    irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
+        irrEU2int( irrEU_clear , oirreps2indices ) 
+
+    return (
+        multiplets_atom_noint,
+        multiplets_a_atom_noint,
+        multiplets_atom,
+        multiplets_a_atom,
+        mult2index,
+        orbital_multiplets,
+        lehmann_iaj,
+        irrEU
+    ) 
+end
+
 function nrg_full_allsymmetries( 
             symmetry::String , # pointspin PS, double group D, total angular momentum J
             label::String ,
@@ -163,21 +550,34 @@ function nrg_full_allsymmetries(
             band_width::Float64=1.0 
     ) where {SF<:Union{String,Float64}}
 
-    # impmults only with imp
-    compute_impmults = compute_impmults && (calculation=="IMP")
 
     println( "********************************" )
     println( "Full NRG calculation with z=$(z)" )
     println( "********************************" )
     println()
 
+    # =================== #
+    # ERRORS AND WARNINGS #
+    # =================== #
+
+    # spectral only
     if (spectral && calculation=="CLEAN") 
-        error( "Calculation must be IMP for computing the spectral function" )
-        return nothing 
+        println( "CLEAN calculation → spectral function will not be computed" )
     end
 
-    # orbital irreps present in the atom
-    atom_orbital_irreps::Vector{SF} = collect(keys(impurity_config))
+    # impmults only with IMP
+    if compute_impmults && calculation=="CLEAN"
+        println("CLEAN calculation → impurity multiplet weights will not be coputed.")
+    end
+    compute_impmults = compute_impmults && (calculation=="IMP")
+
+    if isorbital(symmetry)
+        if cg_o_dir==""
+            error("Clebsch-Gordan directory <cg_o_dir> required for orbital symmetries.")
+        elseif identityrep==""
+            error("Identity irrep <identityrep> required for orbital symmetries.")
+        end
+    end
 
     println( "====================" )
     println( "SETUP AND PARAMETERS" )
@@ -201,6 +601,12 @@ function nrg_full_allsymmetries(
     print_dict( hop_symparams )
     println()
 
+    #   ==========================   #
+    #%% SYMMETRY-RELATED VARIABLES %%#
+    #   ==========================   #
+
+    # orbital irreps present in the atom
+    atom_orbital_irreps::Vector{SF} = collect(keys(impurity_config))
 
     # hiztegia
     hiztegia = Dict{String,Any}()
@@ -215,10 +621,6 @@ function nrg_full_allsymmetries(
         merge!( hiztegia , Dict( "-"=>0.0 ) )
 
     end # no hiztegia for total angular momentum symmetry
-
-    #   ==========================   #
-    #%% SYMMETRY-RELATED VARIABLES %%#
-    #   ==========================   #
 
     # orbital symmetry
     oirreps::Vector{String} = []
@@ -293,7 +695,7 @@ function nrg_full_allsymmetries(
         (S1,S2)=>collect(Set(x[3] for x in cg_s_fullmatint_keys if x[1:2]==(S1,S2)))
         for (S1,S2,_) in cg_s_fullmatint_keys 
     )
-    
+
     #   ==============   #
     #%% DISCRETIZATION %%#
     #   ==============   #
@@ -417,15 +819,16 @@ function nrg_full_allsymmetries(
     u_symparams       = Dict( k=>@.rescale(v,L,z,scale) for (k,v) in u_symparams )
     A_L = 0.5*(L+1)/(L-1)*log(L)  # correction factor
     hopscale = discretization=="yoshida1990" ? scale/sqrt(A_L) : scale
-    hop_symparams_int = Dict{Int64,Matrix{ComplexF64}}()
-    if isorbital(symmetry)
+    hop_symparams_int::Dict{Int64,Matrix{ComplexF64}} = begin
+        if isorbital(symmetry)
 
-        hop_symparams_int = Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>(@.rescale(v,L,z,hopscale)) for (k,v) in hop_symparams )
+            Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>(@.rescale(v,L,z,hopscale)) for (k,v) in hop_symparams )
 
-    else
+        else
 
-        hop_symparams_int = Dict{Int64,Matrix{ComplexF64}}( doublej(J)=>(@.rescale(v,L,z,hopscale)) for (J,v) in hop_symparams )
+            Dict{Int64,Matrix{ComplexF64}}( doublej(J)=>(@.rescale(v,L,z,hopscale)) for (J,v) in hop_symparams )
 
+        end
     end
     println( "RESCALED PARAMETERS FOR H0" )
     @show epsilon_symparams 
@@ -436,174 +839,203 @@ function nrg_full_allsymmetries(
     #   ===========   #
     #%% ATOMIC PART %%#
     #   ===========   #
-    println()
-    println( ":::::::::::::::::::" )
-    println( "--- ATOMIC PART ---" )
-    println( ":::::::::::::::::::" )
-    println()
+    multiplets_atom_noint,
+    multiplets_a_atom_noint,
+    multiplets_atom,
+    multiplets_a_atom,
+    mult2index,
+    orbital_multiplets,
+    lehmann_iaj,
+    irrEU = construct_impurity(
+        symmetry::String ,
+        calculation::String ,
+        impurity_config::Dict{SF,Int64} ,
+        oirreps2dimensions::Dict{SF,Int64} ,
+        oirreps2indices::Dict{SF,Int64} ,
+        identityrep::String ,
+        multiplets_dir::String ,
+        cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
+        cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ,
+        hiztegia ,
+        epsilon_symparams::Dict{SF,Vector{ComplexF64}} ,
+        u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ,
+        L::Float64 ,
+        scale::Float64
+    ) 
+    #println()
+    #println( ":::::::::::::::::::" )
+    #println( "--- ATOMIC PART ---" )
+    #println( ":::::::::::::::::::" )
+    #println()
 
-    #   ------------------------------- #
-    #%% symstates, basis and multiplets #
-    #   ------------------------------- #
-    symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
-    multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
-    multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
-    mult2index::Dict{ClearMultiplet,Int64} = Dict()
-    orbital_multiplets::Vector{Tuple{Int64,String,Float64,Int64}} = []
-    if calculation=="IMP"
-        symstates_atom_noint,
-        basis_atom,
-        multiplets_atom_noint,
-        multiplets_a_atom_noint = begin
-            if ispointspin(symmetry)
+    ##   ------------------------------- #
+    ##%% symstates, basis and multiplets #
+    ##   ------------------------------- #
+    #symstates_atom_noint::Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State} = Dict()
+    #multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    #multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    #mult2index::Dict{ClearMultiplet,Int64} = Dict()
+    #orbital_multiplets::Vector{ClearMultiplet} = []
+    #if calculation=="IMP"
+    #    symstates_atom_noint,
+    #    basis_atom,
+    #    multiplets_atom_noint,
+    #    multiplets_a_atom_noint = begin
+    #        if ispointspin(symmetry)
 
-                get_symstates_basis_multiplets_pointspin_nonsimple( 
-                    impurity_config,
-                    oirreps2dimensions,
-                    identityrep,
-                    multiplets_dir,
-                    cg_o_fullmatint ,
-                    cg_s_fullmatint ,
-                    oirreps2indices ;
-                    verbose=true 
-                    )
+    #            get_symstates_basis_multiplets_pointspin_nonsimple( 
+    #                impurity_config,
+    #                oirreps2dimensions,
+    #                identityrep,
+    #                multiplets_dir,
+    #                cg_o_fullmatint ,
+    #                cg_s_fullmatint ,
+    #                oirreps2indices ;
+    #                verbose=true 
+    #                )
 
-            elseif isdoublegroup(symmetry)
+    #        elseif isdoublegroup(symmetry)
 
-                get_symstates_basis_multiplets_doublegroups_nonsimple( 
-                        impurity_config,
-                        oirreps2dimensions,
-                        identityrep,
-                        multiplets_dir,
-                        cg_o_fullmatint ,
-                        cg_s_fullmatint ,
-                        oirreps2indices ;
-                        verbose=true )
+    #            get_symstates_basis_multiplets_doublegroups_nonsimple( 
+    #                    impurity_config,
+    #                    oirreps2dimensions,
+    #                    identityrep,
+    #                    multiplets_dir,
+    #                    cg_o_fullmatint ,
+    #                    cg_s_fullmatint ,
+    #                    oirreps2indices ;
+    #                    verbose=true )
 
-            else # totalangularmomentum
+    #        else # totalangularmomentum
 
-                get_symstates_basis_multiplets_totalangularmomentum( 
-                        impurity_config,
-                        multiplets_dir;
-                        verbose=true )
+    #            get_symstates_basis_multiplets_totalangularmomentum( 
+    #                    impurity_config,
+    #                    multiplets_dir;
+    #                    verbose=true )
 
-            end
-        end
-        orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
-        mult2index = Dict( m=>i for (i,m) in enumerate(orbital_multiplets))
-        multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
-                                                                oirreps2indices )
-        multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
-                                                                  oirreps2indices )
-    else 
-        multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
-        multiplets_atom = multiplets2int(multiplets_atom_noint,oirreps2indices)
-        multiplets_a_atom = multiplets_atom
-    end
+    #        end
+    #    end
+    #    orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
+    #    mult2index = Dict( m=>i for (i,m) in enumerate(orbital_multiplets))
+    #    multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
+    #                                                            oirreps2indices )
+    #    multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
+    #                                                              oirreps2indices )
+    #else 
+    #    multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
+    #    multiplets_atom = multiplets2int(multiplets_atom_noint,oirreps2indices)
+    #    multiplets_a_atom = multiplets_atom
+    #end
 
-    #   ------------------------ #
-    #%% reduced pcg coefficients #
-    #   ------------------------ #
-    lehmann_iaj::IntIrrepPCGNS = begin
-        if calculation=="CLEAN"
+    ##   -------------------------- #
+    ##%% reduced lehmann amplitudes #
+    ##   -------------------------- #
+    #lehmann_iaj::IntIrrepPCGNS = begin
+    #    if calculation=="CLEAN"
 
-            IntIrrepPCGNS()
+    #        IntIrrepPCGNS()
 
-        else
-            if isorbital(symmetry)
+    #    else
+    #        if isorbital(symmetry)
 
-                get_lehmann_reduced_orbitalsym( 
-                    basis_atom ,
-                    symstates_atom_noint::ClearSymstateDict ,
-                    multiplets_atom::IntMultipletSet ,
-                    hiztegia ,
-                    oirreps2indices::Dict{String,Int64} ,
-                    cg_o_fullmatint::IntCGNS ,
-                    cg_s_fullmatint::IntCG ;
-                    verbose=false 
-                )::IntIrrepPCGNS
+    #            get_lehmann_reduced_orbitalsym( 
+    #                basis_atom ,
+    #                symstates_atom_noint::ClearSymstateDict ,
+    #                multiplets_atom::IntMultipletSet ,
+    #                hiztegia ,
+    #                oirreps2indices::Dict{String,Int64} ,
+    #                cg_o_fullmatint::IntCGNS ,
+    #                cg_s_fullmatint::IntCG ;
+    #                verbose=false
+    #            )::IntIrrepPCGNS
 
-            else
+    #        else
 
-                get_lehmann_reduced_totalangularmomentum( 
-                    basis_atom ,
-                    symstates_atom_noint::ClearSymstateDict ,
-                    multiplets_atom::IntMultipletSet ;
-                    verbose=false 
-                )::IntIrrepPCGNS
+    #            get_lehmann_reduced_totalangularmomentum( 
+    #                basis_atom ,
+    #                symstates_atom_noint::ClearSymstateDict ,
+    #                multiplets_atom::IntMultipletSet ;
+    #                verbose=false 
+    #            )::IntIrrepPCGNS
 
-            end
-        end
-    end
+    #        end
+    #    end
+    #end
 
-    #   ------------- #
-    #%% impurity atom #
-    #   ------------- #
-    if calculation=="IMP"
+    ##   -------------------- #
+    ##%% impurity hamiltonian #
+    ##   -------------------- #
+    #if calculation=="IMP"
 
-        # operators
-        if isorbital(symmetry)
+    #    # operators
+    #    if isorbital(symmetry)
 
-            epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
-            coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
+    #        epsilon = epsilon_sym( symstates_atom_noint , epsilon_symparams ; verbose=false )
+    #        coulomb = u_sym( symstates_atom_noint , u_symparams ; verbose=false )
 
-        else
+    #    else
 
-            epsilon = epsilon_sym_totalangularmomentum( symstates_atom_noint , epsilon_symparams ; verbose=false )
-            coulomb = u_sym_totalangularmomentum( symstates_atom_noint , u_symparams ; verbose=false )
+    #        epsilon = epsilon_sym_totalangularmomentum( symstates_atom_noint , epsilon_symparams ; verbose=false )
+    #        coulomb = u_sym_totalangularmomentum( symstates_atom_noint , u_symparams ; verbose=false )
 
-        end
+    #    end
 
-        # hamiltonian 
-        H::Operator{typeof(basis_atom)} = epsilon + coulomb 
+    #    # hamiltonian 
+    #    H::Operator{typeof(basis_atom)} = epsilon + coulomb 
 
-    end
+    #end
 
-    #   -----   #
-    #%% irreu %%#
-    #   -----   #
-    irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
-    if calculation=="IMP"
-        irrEU_clear = 
-            get_irrEU_initial(symstates_atom_noint,H;verbose=true)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
-    elseif calculation=="CLEAN" 
-        irrEU_clear = 
-            get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
-    end
-    println( "------------------------------------" )
-    println( "IMPURITY SPECTRUM" )
-    println()
-    println( "Before rescale:" )
-    println()
-    print_spectrum( Dict((G,(E.*(scale*sqrt(L)),U)) for (G,(E,U)) in irrEU_clear) )
-    println()
-    println( "After rescale:" )
-    println()
-    print_spectrum( irrEU_clear )
-    println( "------------------------------------" )
-    println()
-    irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
-        irrEU2int( irrEU_clear , oirreps2indices ) 
+    ##   --------   #
+    ##%% spectrum %%#
+    ##   --------   #
+    #irrEU_clear::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = begin
+    #    if calculation=="IMP"
+
+    #        get_irrEU_initial(symstates_atom_noint,H;verbose=true)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+
+    #    elseif calculation=="CLEAN" 
+
+    #        get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+
+    #    end
+    #end
+    #println( "------------------------------------" )
+    #println( "IMPURITY SPECTRUM" )
+    #println()
+    #println( "Before rescale:" )
+    #println()
+    #print_spectrum( Dict((G,(E.*(scale*sqrt(L)),U)) for (G,(E,U)) in irrEU_clear) )
+    #println()
+    #println( "After rescale:" )
+    #println()
+    #print_spectrum( irrEU_clear )
+    #println( "------------------------------------" )
+    #println()
+    #irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
+    #    irrEU2int( irrEU_clear , oirreps2indices ) 
 
 
     #   ------------------------   #
     #%% impurity quantum numbers %%#
     #   ------------------------   #
     mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict()
+    m_imp::Vector{Float64} = []
     if compute_impmults
-        mm_i,m_imp::Vector{Float64} = 
-            setup_impmultinfo( multiplets_atom ,
-                               irrEU ,
-                               betabar ,
-                               oindex2dimensions )
+        mm_i, m_imp = setup_impmultinfo(
+            orbital_multiplets,
+            irrEU,
+            betabar,
+            oindex2dimensions,
+            oirreps2indices
+        )
         println( "IMPURITY COMPOSITION" )
         println()
-        @show mm_i
-        println()
-        @show m_imp
+        @printf "%20s   %-10s\n" "multiplets" "weights" 
+        for (multiplet,weight) in zip(orbital_multiplets,m_imp)
+            @printf "%20s   %-.3f\n" multiplet weight
+        end
         println()
     end
-
 
     #   ==================   #
     #%% SHELL CONSTRUCTION %%#
@@ -936,12 +1368,12 @@ function nrg_full_allsymmetries(
     #%% update impurity information # 
     #   --------------------------- #
     if compute_impmults
-        mm_i,m_imp = update_impmultinfo( 
-                        mm_i ,
-                        irrEU ,
-                        betabar ,
-                        oindex2dimensions ,
-                        combinations_Gu_muiualpha )
+        mm_i,m_imp = update_impmultinfo_allsymmetries(
+            mm_i ,
+            irrEU ,
+            betabar ,
+            oindex2dimensions ,
+            combinations_Gu_muiualpha )
     end
 
     #   --------------------------- #
@@ -1195,9 +1627,8 @@ function NRG_allsymmetries(
               spectral::Bool=false ,
               spectral_functions::Dict{String,Dict{IntMultiplet,Matrix{Float64}}}=Dict{String,Dict{IntMultiplet,Matrix{Float64}}}() ,
               K_factor::Float64=2.0 ,
-              spectral_method::String="sakai1989",
               spectral_broadening::Float64=1.0 ,
-              broadening_distribution::String="gauss",
+              broadening_distribution::String="loggaussian",
               dmnrg::Bool=false ,
               dmnrg_run::Int64=1 ,
               shell_dimension::Int64=0 ,
@@ -1213,10 +1644,10 @@ function NRG_allsymmetries(
               mm_i::Dict{NTuple{4,Int64},Vector{Float64}}=Dict{NTuple{4,Int64},Vector{Float64}}() ,
               write_spectrum::Bool=false ,
               channels_diagonals::Vector{Dict{IntIrrep,Vector{Float64}}}=[] ,
-              compute_selfenergy::Bool=false ,
               impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}() ,
               spectral_temperature::Float64=0.0 ,
-              extra_iterations::Int64=0 
+              extra_iterations::Int64=0 ,
+              compute_selfenergy::Bool=false
     )
 
     println( "=============" )
@@ -1434,15 +1865,14 @@ function NRG_allsymmetries(
 
         # impurity info
         if compute_impmults
-            mm_i = imp_mults( irrEU ,
-                              oindex2dimensions ,
-                              combinations_uprima ,
-                              mm_i )
-            m_imp::Vector{Float64} = mult_thermo( irrEU ,
-                                 betabar ,
-                                 oindex2dimensions ,
-                                 mm_i )
-            push!( impmults , m_imp )
+            mm_i,m_imp = update_impmultinfo_allsymmetries(
+                mm_i ,
+                irrEU ,
+                betabar ,
+                oindex2dimensions ,
+                combinations_Gu_muiualpha 
+            )
+            push!(impmults,m_imp)
         end
 
         # thermodynamics 

@@ -375,10 +375,10 @@ end
 # IMPURITY MULTIPLETS #
 # ------------------- #
 function imp_mults(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    oindex2dimensions::Vector{Int64},
-    combinations_uprima::Dict{NTuple{3,Int64},Vector{NTuple{3,NTuple{4,Int64}}}},
-    mm_ip::Dict{NTuple{4,Int64},Vector{Float64}})
+            irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+            combinations_uprima::Dict{NTuple{3,Int64},Vector{NTuple{3,NTuple{4,Int64}}}},
+            mm_ip::Dict{NTuple{4,Int64},Vector{Float64}}
+    )
 
     # average impurity spin^2 and N per multiplet
     M::Int64 = length(collect(values(mm_ip))[1])
@@ -419,16 +419,62 @@ function imp_mults(
 
     return mm_u
 end
+function imp_mults_nonsimple(
+            irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+            combinations_Gu_muiualpha::Dict{NTuple{3,Int64}, Vector{Tuple{IntMultiplet,IntMultiplet,IntMultiplet,Int64}}},
+            mm_ip::Dict{NTuple{4,Int64},Vector{Float64}}
+    )
+
+    # average impurity spin^2 and N per multiplet
+    M::Int64 = length(collect(values(mm_ip))[1])
+    mm_u::Dict{NTuple{4,Int64},Vector{Float64}} = Dict()
+
+    # iterate over irrep blocks
+    for (G, (_, U)) in irrEU
+
+        # iterate over multiplets in irrep block
+        # (store the block-shell combination)
+        for (_,_,m_u,_) in combinations_Gu_muiualpha[G]
+
+            # qnum temp setup
+            tmp_m_u = zeros(Float64,M)
+
+            # outer multiplicity
+            r_u = m_u[4]
+
+            ## iterate over primed multiplets
+            for (_,m_ip,m_up,_) in combinations_Gu_muiualpha[G]
+
+                # U(Γ) term
+                r_up = m_up[4]
+                uterm = abs2(U[r_up, r_u])
+
+                # quantum number averages
+                tmp_m_u .+= uterm .* mm_ip[m_ip]
+
+            end
+            mm_u[m_u] = tmp_m_u
+        end
+    end
+
+    return mm_u
+end
+
 function mult_thermo(
-    irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
-    betabar::Float64,
-    oindex2dimensions::Vector{Int64},
-    mm_u::Dict{NTuple{4,Int64},Vector{Float64}};
-    verbose=false)::Vector{Float64}
+            irrEU::Dict{NTuple{3,Int64},Tuple{Vector{Float64},Matrix{ComplexF64}}},
+            betabar::Float64,
+            oindex2dimensions::Vector{Int64},
+            mm_u::Dict{NTuple{4,Int64},Vector{Float64}};
+            verbose=false
+    )::Vector{Float64}
 
+    # number of impurity multiplets
     M::Int64 = length(collect(values(mm_u))[1])
-    mult_imp::Vector{Float64} = [0.0 for i in 1:M]
 
+    # thermodynamic weights of each multiplet
+    mult_imp::Vector{Float64} = zeros(Float64,M)
+
+    # partition function
     part::Float64 = compute_partition_function(irrEU, betabar, oindex2dimensions)
 
     for (G, (E, U)) in irrEU
