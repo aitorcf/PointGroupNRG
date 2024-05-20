@@ -331,6 +331,7 @@ end
 # ==================== #
 
 # impurity part
+# - stardard anderson method
 function construct_impurity(
         symmetry::String ,
         calculation::String ,
@@ -501,8 +502,6 @@ function construct_impurity(
         irrEU2int( irrEU_clear , oirreps2indices ) 
 
     return (
-        multiplets_atom_noint,
-        multiplets_a_atom_noint,
         multiplets_atom,
         multiplets_a_atom,
         mult2index,
@@ -510,6 +509,103 @@ function construct_impurity(
         lehmann_iaj,
         irrEU
     ) 
+end
+# - ionic anderson method
+function construct_impurity(
+        spectrum::Dict{ClearIrrep,Vector{Float64}} ,
+        lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}} ,
+        calculation::String ,
+        oirreps2indices::Dict{SF,Int64} ,
+        identityrep::String ,
+        L::Float64 ,
+        scale::Float64
+    ) where {SF<:Union{String,Float64}}
+
+    println()
+    println( ":::::::::::::::::::::" )
+    println( "--- IMPURITY PART ---" )
+    println( ":::::::::::::::::::::" )
+    println()
+
+    #   ------------------------------- #
+    #%% symstates, basis and multiplets #
+    #   ------------------------------- #
+    multiplets_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    multiplets_a_atom_noint::Set{Tuple{Int64,String,Float64,Int64}} = Set()
+    mult2index::Dict{ClearMultiplet,Int64} = Dict()
+    orbital_multiplets::Vector{ClearMultiplet} = []
+    if calculation=="IMP"
+        multiplets_atom_noint = Set((G...,r) for (G,E) in spectrum for r in 1:length(E))
+        multiplets_a_atom_noint = Set((G_a...,r_a) for ((_,G_a,_),arr) in lehmann_iaj for r_a in 1:size(arr,3))   
+        orbital_multiplets = ordered_multiplets(multiplets_atom_noint)
+        mult2index = Dict( m=>i for (i,m) in enumerate(orbital_multiplets))
+        multiplets_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_atom_noint , 
+                                                                oirreps2indices )
+        multiplets_a_atom::Set{NTuple{4,Int64}} = multiplets2int( multiplets_a_atom_noint , 
+                                                                  oirreps2indices )
+    else 
+        multiplets_atom_noint = Set([(0,identityrep,0.0,1)]) 
+        multiplets_atom = multiplets2int(multiplets_atom_noint,oirreps2indices)
+        multiplets_a_atom = multiplets_atom
+    end
+
+    #   -------------------------- #
+    #%% reduced lehmann amplitudes #
+    #   -------------------------- #
+    lehmann_iaj::IntIrrepPCGNS = begin
+        if calculation=="CLEAN"
+
+            IntIrrepPCGNS()
+
+        else
+
+            Dict(
+                (convert_to_int(G_i,oirreps2indices),
+                 convert_to_int(G_a,oirreps2indices),
+                 convert_to_int(G_j,oirreps2indices)) => arr
+                 for ((G_i,G_a,G_j),arr) in lehmann_iaj
+            )
+
+        end
+    end
+
+    #   --------   #
+    #%% spectrum %%#
+    #   --------   #
+    irrEU_clear::Dict{ClearIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}} = begin
+        if calculation=="IMP"
+
+            Dict( (G,(E,Matrix{ComplexF64}(I,length(E),length(E)))) for (G,E) in spectrum )
+
+        elseif calculation=="CLEAN" 
+
+            get_irrEU_initial(identityrep,oirreps2indices)::Dict{ Tuple{Int64,String,Float64} , Tuple{Vector{Float64},Matrix{ComplexF64}} }
+
+        end
+    end
+    println( "------------------------------------" )
+    println( "IMPURITY SPECTRUM" )
+    println()
+    println( "Before rescale:" )
+    println()
+    print_spectrum( Dict((G,(E.*(scale*sqrt(L)),U)) for (G,(E,U)) in irrEU_clear) )
+    println()
+    println( "After rescale:" )
+    println()
+    print_spectrum( irrEU_clear )
+    println( "------------------------------------" )
+    println()
+    irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } = 
+        irrEU2int( irrEU_clear , oirreps2indices ) 
+
+    return (
+        multiplets_atom,
+        multiplets_a_atom,
+        mult2index,
+        orbital_multiplets,
+        lehmann_iaj,
+        irrEU
+    )
 end
 
 function nrg_full_allsymmetries( 
@@ -519,13 +615,19 @@ function nrg_full_allsymmetries(
             L::Float64 ,
             iterations::Int64 ,
             cutoff_type::String ,
-            cutoff_magnitude ,
+            cutoff_magnitude::IF ,
             multiplets_dir::String ,
-            impurity_config::Dict{SF,Int64} ,
             shell_config::Dict{SF,Int64} ,
-            epsilon_symparams::Dict{ SF , Vector{ComplexF64} } ,
-            u_symparams::Dict{ Tuple{String,Float64} , Matrix{ComplexF64} } ,
             hop_symparams::Dict{ SF , Matrix{ComplexF64} } ;
+            # impurity input
+            # - standard anderson
+            impurity_config::Dict{SF,Int64}=Dict{SF,Int64}() ,
+            epsilon_symparams::Dict{SF,Vector{ComplexF64}}=Dict{SF,Vector{ComplexF64}}() ,
+            u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}}=Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }() ,
+            # - ionic anderson
+            spectrum::Dict{ClearIrrep,Vector{Float64}}=Dict{ClearIrrep,Vector{Float64}}() ,
+            lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}}=Dict{ClearTripleG,Array{ComplexF64,4}}() ,
+            # other
             cg_o_dir::String="" ,
             identityrep::String="" ,
             distributed::Bool=false ,
@@ -548,13 +650,16 @@ function nrg_full_allsymmetries(
             compute_impmults::Bool=false ,
             scale_asymptotic::Bool=true ,
             band_width::Float64=1.0 
-    ) where {SF<:Union{String,Float64}}
+    ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
 
 
     println( "********************************" )
     println( "Full NRG calculation with z=$(z)" )
     println( "********************************" )
     println()
+
+    # impurity model
+    model = length(epsilon_symparams)==length(u_symparams)==0 ? "ionic" : "standard"
 
     # =================== #
     # ERRORS AND WARNINGS #
@@ -606,13 +711,29 @@ function nrg_full_allsymmetries(
     #   ==========================   #
 
     # orbital irreps present in the atom
-    atom_orbital_irreps::Vector{SF} = collect(keys(impurity_config))
+    atom_orbital_irreps::Vector{SF} = begin 
+
+        if model=="standard"
+
+            collect(keys(impurity_config))
+
+        else # ionic
+
+            imp_orbital_irreps::Vector{SF} = collect(Set(
+                I for ((_,I,_),_) in spectrum
+            ))
+            shell_orbital_irreps::Vector{SF} = collect(keys(shell_config))
+            collect(Set(vcat(imp_orbital_irreps,shell_orbital_irreps)))
+
+        end
+    end
 
     # hiztegia
     hiztegia = Dict{String,Any}()
     if ispointspin(symmetry)
 
         hiztegia = Dict{String,Any}( o=>o for (o,_) in impurity_config )
+        merge!( hiztegia , Dict{String,Any}(o=>o for (o,_) in shell_config) )
         merge!( hiztegia , Dict( "u"=>0.5 , "d"=>-0.5 ) )
 
     elseif isdoublegroup(symmetry)
@@ -839,29 +960,49 @@ function nrg_full_allsymmetries(
     #   ===========   #
     #%% ATOMIC PART %%#
     #   ===========   #
-    multiplets_atom_noint,
-    multiplets_a_atom_noint,
     multiplets_atom,
     multiplets_a_atom,
     mult2index,
     orbital_multiplets,
     lehmann_iaj,
-    irrEU = construct_impurity(
-        symmetry::String ,
-        calculation::String ,
-        impurity_config::Dict{SF,Int64} ,
-        oirreps2dimensions::Dict{SF,Int64} ,
-        oirreps2indices::Dict{SF,Int64} ,
-        identityrep::String ,
-        multiplets_dir::String ,
-        cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
-        cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ,
-        hiztegia ,
-        epsilon_symparams::Dict{SF,Vector{ComplexF64}} ,
-        u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ,
-        L::Float64 ,
-        scale::Float64
-    ) 
+    irrEU = begin
+
+        # ionic model
+        if model=="ionic"
+
+            construct_impurity(
+                spectrum::Dict{ClearIrrep,Vector{Float64}} ,
+                lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}} ,
+                calculation::String ,
+                oirreps2indices::Dict{SF,Int64} ,
+                identityrep::String ,
+                L::Float64 ,
+                scale::Float64
+            )
+
+
+        # standard anderson model
+        else
+
+            construct_impurity(
+                symmetry::String ,
+                calculation::String ,
+                impurity_config::Dict{SF,Int64} ,
+                oirreps2dimensions::Dict{SF,Int64} ,
+                oirreps2indices::Dict{SF,Int64} ,
+                identityrep::String ,
+                multiplets_dir::String ,
+                cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
+                cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ,
+                hiztegia ,
+                epsilon_symparams::Dict{SF,Vector{ComplexF64}} ,
+                u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ,
+                L::Float64 ,
+                scale::Float64
+            )
+
+        end
+    end
     #println()
     #println( ":::::::::::::::::::" )
     #println( "--- ATOMIC PART ---" )
@@ -1192,7 +1333,6 @@ function nrg_full_allsymmetries(
     #   -------------------------- #
     #%% reduced lehmann amplitudes #
     #   -------------------------- #
-
     lehmann_muanu::Dict{IntTripleG,Array{ComplexF64,4}} = begin
         if isorbital(symmetry)
 
