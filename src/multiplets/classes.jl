@@ -1,16 +1,17 @@
 #%%
 using Combinatorics 
 using LinearAlgebra
-import Base.:show
-import Base.:*
-import Base.:+
-import Base.:-
-import Base.:(==)
-import Base.:getindex
-import Base.:size
-import Base.:display
-import Base.:length
-import Base.:sort
+import Base.show
+import Base.*
+import Base.+
+import Base.-
+import Base.(==)
+import Base.getindex
+import Base.size
+import Base.display
+import Base.length
+import Base.sort
+import Base.iszero
 import LinearAlgebra.:dot
 
 # ##############################################
@@ -466,6 +467,7 @@ function (==)( s::State , zer::T ) where {T<:Number}
         return all(s.vec.==zero(ComplexF64))
     end
 end
+iszero(s::State) = iszero(s.vec)
 # getindex (array interface)
 getindex( s::State , i::Int64 ) = s.vec[i]
 # cleaning: keep only vector components with norm above tolerance (1e-6)
@@ -609,6 +611,7 @@ end
 struct Partition 
     vec::Vector{Int64}
 end
+Partition( p::Tuple ) = Partition(collect(p))
 
 # OPERATIONS
 # getindex (array interface)

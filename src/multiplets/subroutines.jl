@@ -625,18 +625,123 @@ end
 # *********
 # dIair part
 # .........
-function get_dIair2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
-                           Iir2states::Dict{ Tuple{String,Int64,Int64} , State } ,
-                           basis_o::OrbitalCanonicalBasis ;
-                           verbose=false )
+function get_dIair2states_alternative( 
+            dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
+            Iir2states::Dict{ Tuple{String,Int64,Int64} , State } ,
+            basis_o::OrbitalCanonicalBasis ;
+            verbose=false 
+    )
 
+    if verbose 
+        println()
+        println("************************")
+        println("Calculating dIair2states")
+        println("************************")
+        println()
+    end
+
+    dIair2states::Dict{ Tuple{Tuple,String,Int64,Int64,Int64} , State } = Dict()
+    for d in Set(k[1] for k in keys(dar2states))
+
+        partition = Partition(d)
+
+        println("Partition")
+        pp(partition)
+        println()
+
+        # collect symmetrizers
+        tableaux = standard_tableaux(partition)
+        symmetrizers = map( t->YoungSymmetrizer(t,basis_o) , tableaux )
+
+        for (a,symmetrizer) in enumerate(symmetrizers),
+            (I,i) in Set(k[1:2] for k in keys(Iir2states))
+
+            println("----")
+            pp(tableaux[a])
+            @show a,I,i
+
+            # collect states
+            states_r_Ii::Vector{Tuple{State,Int16}} = [
+                (s,k[3]) 
+                for (k,s) in Iir2states 
+                if k[1:2]==(I,i)
+            ]
+            sort!(states_r_Ii,by=x->x[2])
+
+            println("States with I,i")
+            for (s,r) in states_r_Ii
+                println(":::: r=$r: ", norm(s.vec),"  ", s)
+            end
+            println()
+
+            # apply symmetrizer
+            states_dIai::Vector{State} = [
+                symmetrizer*s
+                for (s,_) in states_r_Ii
+            ]
+            filter!(s->!isapprox(s.vec,zero(s.vec);atol=1e-6),states_dIai)
+            iszero(length(states_dIai)) && continue
+
+            println("Symmetrized states")
+            for (r,s) in enumerate(states_dIai)
+                println(":::: r=$r: ", norm(s.vec),"  ", s)
+            end
+            println()
+
+            # build subspace
+            projected_subspace = hcat([ s.vec for s in states_dIai]...)
+            qr_dec = qr(projected_subspace,Val(true))
+            @show diag(qr_dec.R)
+            dim = length(filter(
+                x->!isapprox(x,zero(x);atol=1e-6),
+                diag(qr_dec.R)
+            ))
+            @show dim
+            projected_subspace_reduced =
+                (projected_subspace*qr_dec.P)[:,qr_dec.p[end+1-dim:end]]
+            @show projected_subspace_reduced
+
+            ##% intersection method
+            #
+            # compute independent subspaces
+            S_dar = hcat([ s.vec for (k,s) in dar2states 
+                                 if k[1:2]==(d,a) ]...)
+            S_Iir = hcat([ s.vec for (k,s) in Iir2states 
+                                 if k[1:2]==(I,i) ]...)
+            # compute intersection
+            int = subspace_intersection( S_dar , S_Iir )
+            size(int,2)==0 && continue
+
+            # intersect methods
+            method_intersection = subspace_intersection(projected_subspace,int)
+            @show size(projected_subspace)
+            @show size(projected_subspace_reduced)
+            @show size(int)
+            if size(projected_subspace_reduced)!==size(int)
+                error("Methods don't match!")
+            end
+
+            for r in 1:size(projected_subspace_reduced,2) 
+                state = State(projected_subspace_reduced[:,r],basis_o)
+                dIair2states[d,I,a,i,r] = state
+            end
+        end
+    end
+
+    return dIair2states
+end
+function get_dIair2states( 
+            dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
+            Iir2states::Dict{ Tuple{String,Int64,Int64} , State } ,
+            basis_o::OrbitalCanonicalBasis ;
+            verbose=false 
+    )
 
     if verbose 
         println()
         println("Calculating dIair2states.")
         println()
     end
-
 
     dIair2states::Dict{ Tuple{Tuple,String,Int64,Int64,Int64} , State } = Dict()
 
@@ -645,22 +750,33 @@ function get_dIair2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
         println("Storing phases")
         println("***")
     end
-    phases = Dict{String,Vector{Tuple{Int64,Float64}}}()
-    for I in Set(k[1] for k in keys(Iir2states))
+    #phases = Dict{String,Vector{Tuple{Int64,Float64}}}()
+    phases = Dict{Tuple{String,Int64},Vector{Dict{Int64,Float64}}}()
+    #for I in Set(k[1] for k in keys(Iir2states))
+    for (I,r) in Set((k[1],k[3]) for k in keys(Iir2states))
 
-        phases[I] = []
+        #@show I
+        @show I,r
+
+        #phases[I] = []
+        phases[I,r] = []
 
         dim_I = maximum([k[2] for k in keys(Iir2states) if k[1]==I])
         for i in 1:dim_I
-            q = (I,i,1)
+
+            #q = (I,i,1)
+            q = (I,i,r)
             state = Iir2states[q]
-            idx = findfirst(!iszero,state.vec)
-            c = angle(state.vec[idx])
-            push!( phases[I] , (idx,c) )
+            #idx = findfirst(!iszero,state.vec)
+            indices_angles = Dict(i=>angle(x) for (i,x) in enumerate(state.vec) if !iszero(x))
+            #c = angle(state.vec[idx])
+            #push!( phases[I] , (idx,c) )
+            push!( phases[I,r] , indices_angles )
 
             if verbose
                 @show state
-                @show c
+                #@show c
+                @show indices_angles
                 println("---")
             end
         end
@@ -673,27 +789,65 @@ function get_dIair2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
     for (d,a) in Set(k[1:2] for k in keys(dar2states)),
         (I,i) in Set(k[1:2] for k in keys(Iir2states))
 
+        ##% intersection method
+        #
+        # compute independent subspaces
         S_dar = hcat([ s.vec for (k,s) in dar2states 
                              if k[1:2]==(d,a) ]...)
         S_Iir = hcat([ s.vec for (k,s) in Iir2states 
                              if k[1:2]==(I,i) ]...)
-
+        # compute intersection
         int = subspace_intersection( S_dar , S_Iir )
         size(int,2)==0 && continue
 
-        idx,phase = phases[I][i]
+        ##% phase correction
+        S_Iir = Dict(
+            rr=>s
+            for ((II,ii,rr),s) in Iir2states if (II,ii)==(I,i)
+        )
+        # find matching subspaces
+        seed_subspaces::Vector{Tuple{String,Int64}} = []
+        println("Looking for seed orbital subspaces.")
+        @show I,i
+        @show d,a
+        println("---")
+        for r_intsub in axes(int,2)
+
+            for (r_vec,s) in S_Iir
+
+                @show r_vec
+                println(s)
+
+                if !iszero(s.vec'*int[:,r_intsub])
+                    println("Found vector subspace $r_intsub for int subspace $r_vec")
+                    println("---")
+                    push!( seed_subspaces , (I,r_vec) )
+                end
+            end
+        end
+        @show seed_subspaces
+
+        #idx,phase = phases[I][i]
         if verbose
             @show d,a,I,i
-            @show phase
+            #@show phase
         end
         for r in 1:size(int,2) 
+            indices2phases = phases[seed_subspaces[r]][i]
+            @show indices2phases
             verbose && println( "pre-phase-fix:")
             state = State(int[:,r],basis_o)
+            idx = findfirst(
+                x->(!isapprox(x[2],zero(x[2]);atol=1e-6) && haskey(indices2phases,x[1])),
+                collect(enumerate(state.vec))
+            )
+            @show idx
             if verbose
                 println(state)
-                @show state.vec[idx],angle(state.vec[idx])
+                @show idx,state.vec[idx],angle(state.vec[idx])
             end
-            state.vec .*= cis(phase-angle(state.vec[idx]))
+            #state.vec .*= cis(phase-angle(state.vec[idx]))
+            state.vec .*= cis(indices2phases[idx]-angle(state.vec[idx]))
             if verbose
                 println("post-phase-fix:")
                 println(state)

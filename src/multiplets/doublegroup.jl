@@ -181,10 +181,12 @@ function compute_asymstates_N_doublegroup(
 
 
     #%% permutation and orbital symmetric states
-    dIair2states_o = get_dIair2states( dar2states_o , 
-                                       Iir2states_o ,
-                                       basis_o ;
-                                       verbose=verbose )
+    dIair2states_o = get_dIair2states_alternative( 
+        dar2states_o , 
+        Iir2states_o ,
+        basis_o ;
+        verbose=verbose 
+    )
     if verbose
         println( "=========================================" )
         println( "ORBITAL- AND PERMUTATION-SYMMETRIC STATES" )

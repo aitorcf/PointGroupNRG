@@ -6,7 +6,7 @@ function compute_multiplets( symmetry::String , # "PS": Pointgroup-Spin, "D": Do
 
     # add convention name to multiplet folder
     if multiplets_path[end]=="/"
-        multplets_path = multiplets_path[1:(end-1)] 
+        multiplets_path = multiplets_path[1:(end-1)] 
     end
     multiplets_path *= "/$(irrep)"
 
