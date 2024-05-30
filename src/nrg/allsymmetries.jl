@@ -354,12 +354,6 @@ function construct_impurity(
         until::String=""
     ) where {SF<:Union{String,Float64}}
 
-    println()
-    println( ":::::::::::::::::::::" )
-    println( "--- IMPURITY PART ---" )
-    println( ":::::::::::::::::::::" )
-    println()
-
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
@@ -540,12 +534,6 @@ function construct_impurity(
         identityrep::String ,
     ) where {SF<:Union{String,Float64}}
 
-    println()
-    println( ":::::::::::::::::::::" )
-    println( "--- IMPURITY PART ---" )
-    println( ":::::::::::::::::::::" )
-    println()
-
     #   ------------------------------- #
     #%% symstates, basis and multiplets #
     #   ------------------------------- #
@@ -622,12 +610,9 @@ function construct_impurity(
     )
 end
 
-# TODO: 
-# - Clean output
 function nrg_full_allsymmetries( 
             symmetry::String , # pointspin PS, double group D, total angular momentum J
             label::String ,
-            calculation::String ,
             L::Float64 ,
             iterations::Int64 ,
             cutoff_type::String ,
@@ -635,6 +620,8 @@ function nrg_full_allsymmetries(
             multiplets_dir::String ,
             shell_config::Dict{SF,Int64} ,
             hop_symparams::Dict{ SF , Matrix{ComplexF64} } ;
+            # calculation with impurity ("IMP") or without ("CLEAN")
+            calculation::String="IMP" ,
             # impurity input
             # - standard anderson
             impurity_config::Dict{SF,Int64}=Dict{SF,Int64}() ,
@@ -668,7 +655,7 @@ function nrg_full_allsymmetries(
             spectral_temperature::Float64=0.0 ,
             extra_iterations::Int64=0 ,
             dmnrg::Bool=false ,
-            compute_impmults::Bool=false ,
+            compute_impurity_projections::Bool=false ,
             scale_asymptotic::Bool=true ,
             band_width::Float64=1.0 
     ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
@@ -695,11 +682,11 @@ function nrg_full_allsymmetries(
         println( "CLEAN calculation → spectral function will not be computed" )
     end
 
-    # impmults only with IMP
-    if compute_impmults && calculation=="CLEAN"
+    # impurity projections only with IMP
+    if compute_impurity_projections && calculation=="CLEAN"
         println("CLEAN calculation → impurity multiplet weights will not be coputed.")
     end
-    compute_impmults = compute_impmults && (calculation=="IMP")
+    compute_impurity_projections = compute_impurity_projections && (calculation=="IMP")
 
     if isorbital(symmetry)
         if cg_o_dir==""
@@ -723,10 +710,22 @@ function nrg_full_allsymmetries(
     @show cutoff_magnitude
     @show max_SJ2
     @show spectral
-    println( "OCCUPATION ENERGIES" )
-    print_dict( epsilon_symparams ) 
-    println( "COULOMB PARAMETERS" )
-    print_dict( u_symparams ) 
+    println()
+    if model=="standard"
+        println("IMPURITY CONFIGURATION")
+        print_dict(impurity_config)
+        println("OCCUPATION ENERGIES")
+        print_dict(epsilon_symparams) 
+        println("COULOMB PARAMETERS")
+        print_dict(u_symparams) 
+    else
+        println("SPECTRUM")
+        print_dict(spectrum)
+        println("LEHMANN AMPLITUDES")
+        print_dict(lehmann_iaj)
+    end
+    println("SHELL CONFIGURATION")
+    print_dict(shell_config)
     println( "HYBRIDIZATION PARAMETERS" )
     print_dict( hop_symparams )
     println()
@@ -822,7 +821,6 @@ function nrg_full_allsymmetries(
 
     end
 
-
     # spin symmetry
     cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} = Dict{NTuple{3,Int64},Array{ComplexF64,3}}()
     if ispointspin(symmetry)
@@ -855,6 +853,11 @@ function nrg_full_allsymmetries(
     #   ===========   #
     #%% ATOMIC PART %%#
     #   ===========   #
+    println()
+    println( ":::::::::::::::::::::" )
+    println( "--- IMPURITY PART ---" )
+    println( ":::::::::::::::::::::" )
+    println()
     multiplets_atom,
     multiplets_a_atom,
     mult2index,
@@ -904,6 +907,11 @@ function nrg_full_allsymmetries(
     #   ==============   #
     #%% DISCRETIZATION %%#
     #   ==============   #
+    println()
+    println( "::::::::::::::::::::::" )
+    println( "--- DISCRETIZATION ---" )
+    println( "::::::::::::::::::::::" )
+    println()
 
     # default behavior: eta=x->1/2
     if length(channels_dos)==0 
@@ -914,6 +922,7 @@ function nrg_full_allsymmetries(
     end
 
     # channel coupling parameters
+    print("Discretizing conduction bands... ")
     channels_tridiagonal = discretize_bands( 
         channels_dos ,
         L ,
@@ -923,6 +932,7 @@ function nrg_full_allsymmetries(
         tridiagonalization=tridiagonalization ,
         enforce_particle_hole_symmetry=enforce_particle_hole_symmetry 
     )
+    println("Done.\n")
     channels_tridiagonal_int::Dict{Int64,Vector{Tuple{Vector{Float64},Vector{Float64}}}} = Dict()
     channels_codiagonals::Vector{Dict{Int64,Vector{Float64}}} = []
     if isorbital(symmetry)
@@ -996,7 +1006,8 @@ function nrg_full_allsymmetries(
             for n in 1:(iterations-1)
         ]
     end
-    println( "Scale: D(× asymptotic hopping) = $scale")
+    println()
+    println( "Scale: band-width × asymptotic hopping = $scale")
     println()
 
     # STILL NOT IMPLEMENTED
@@ -1021,6 +1032,9 @@ function nrg_full_allsymmetries(
     #   -------------------- #
     println( "RESCALED HAMILTONIAN" )
     irrEU = Dict( k=>(@.rescale(E,L,z,scale),U) for (k,(E,U)) in irrEU )
+    println("- Spectrum")
+    print_spectrum(irrEU)
+    println()
     oindices2irreps = Dict( v=>k for (k,v) in oirreps2indices )
     A_L = 0.5*(L+1)/(L-1)*log(L)  # correction factor
     hopscale = discretization=="yoshida1990" ? scale/sqrt(A_L) : scale
@@ -1035,7 +1049,8 @@ function nrg_full_allsymmetries(
 
         end
     end
-    @show hop_symparams
+    println("- hopping")
+    print_dict(hop_symparams)
     println()
 
 
@@ -1044,7 +1059,7 @@ function nrg_full_allsymmetries(
     #   ------------------------   #
     mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict()
     m_imp::Vector{Float64} = []
-    if compute_impmults
+    if compute_impurity_projections
         mm_i, m_imp = setup_impmultinfo(
             orbital_multiplets,
             irrEU,
@@ -1061,10 +1076,10 @@ function nrg_full_allsymmetries(
         println()
     end
 
+
     #   ==================   #
     #%% SHELL CONSTRUCTION %%#
     #   ==================   #
-
     println()
     println( ":::::::::::::::::::::::" )
     println( "--- SHELL STRUCTURE ---" )
@@ -1227,7 +1242,7 @@ function nrg_full_allsymmetries(
                 oirreps2indices,
                 cg_o_fullmatint,
                 cg_s_fullmatint;
-                verbose=true
+                verbose=false
             )
 
         else
@@ -1245,7 +1260,6 @@ function nrg_full_allsymmetries(
     #   ================================   #
     #%% COUPLING ATOM TO INNERMOST SHELL %%#
     #   ================================   #
-
     println()
     println( "::::::::::::::::::::::::::::::::::::::::::::" )
     println( "--- COUPLING IMPURITY TO INNERMOST SHELL ---" )
@@ -1256,6 +1270,7 @@ function nrg_full_allsymmetries(
     #%% precompute clebsch-gordan sums #
     #   ------------------------------ #
     #
+    print("Computing Clebsch-Gordan sums... ")
     dsum,ksum,fsum = begin
         if isorbital(symmetry)
 
@@ -1283,6 +1298,7 @@ function nrg_full_allsymmetries(
 
         end
     end
+    println("Done.\n")
 
     #   -------- #
     #%% spectral #
@@ -1290,6 +1306,8 @@ function nrg_full_allsymmetries(
     impurity_operators = Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}()
     spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}()
     if spectral
+
+        print("Setup for spectral function calculation... ")
 
         impurity_operators["particle"] = lehmann_iaj
         GG_a  = Set(G_a for (_,G_a,_) in keys(lehmann_iaj))
@@ -1325,6 +1343,7 @@ function nrg_full_allsymmetries(
             extra_iterations=extra_iterations
         )
 
+        println("Done.\n")
     end
 
     #   ------------------   #
@@ -1341,6 +1360,7 @@ function nrg_full_allsymmetries(
     #   ---------------------------------------   #
     #%% matrix construction and diagonalization %%#
     #   ---------------------------------------   #
+    print("Diagonalizing impurity + innermost shell... ")
     (irrEU,combinations_Gu_muiualpha) = begin
         if isorbital(symmetry)
 
@@ -1378,6 +1398,7 @@ function nrg_full_allsymmetries(
 
         end
     end
+    println("Done.\n")
 
     println( "-----------------------------------------------" )
     println( "SPECTRUM OF ATOM + INNERMOST SHELL (NORMALIZED)" )
@@ -1393,7 +1414,7 @@ function nrg_full_allsymmetries(
     #   --------------------------- #
     #%% update impurity information # 
     #   --------------------------- #
-    if compute_impmults
+    if compute_impurity_projections
         mm_i,m_imp = update_impmultinfo_allsymmetries(
             mm_i ,
             irrEU ,
@@ -1405,6 +1426,7 @@ function nrg_full_allsymmetries(
     #   --------------------------- #
     #%% update spectral information # 
     #   --------------------------- #
+    print("Updating spectral function variables... ")
     if spectral 
 
         impurity_operators["particle"] = update_operator_nonsimple( 
@@ -1433,6 +1455,7 @@ function nrg_full_allsymmetries(
         )
 
     end
+    println("Done.")
 
 
     #   =============   #
@@ -1469,7 +1492,7 @@ function nrg_full_allsymmetries(
             max_SJ2;
             mine=mine,
             z=z,
-            compute_impmults=compute_impmults,
+            compute_impmults=compute_impurity_projections,
             mult2index=mult2index,
             orbital_multiplets=orbital_multiplets,
             mm_i=mm_i,
@@ -1596,7 +1619,7 @@ function nrg_full_allsymmetries(
             max_SJ2;
             mine=mine,
             z=z,
-            compute_impmults=compute_impmults,
+            compute_impmults=compute_impurity_projections,
             mult2index=mult2index,
             orbital_multiplets=orbital_multiplets,
             mm_i=mm_i,
@@ -1851,7 +1874,7 @@ function NRG_allsymmetries(
         maximum_SJ2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
         if maximum_SJ2>max_SJ2
             error( """
-                ERROR: max_spin2 too low!
+                ERROR: max_SJ2 too low!
                 max_SJ2 = $max_SJ2
                 maximum 2S (2J) found in calculation = $maximum_SJ2
             """)

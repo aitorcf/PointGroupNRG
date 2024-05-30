@@ -51,7 +51,6 @@ function discretize_bands(
     @assert (tridiagonalization in tridiagonalizations) "Tridiagonalization not implemented."
 
     # obtain diagonal and codiagonal elements of the tridiagonal hamiltonians
-    println( "Computing discretized channels..." )
     channels_tridiagonal::Dict{SF,Vector{Tuple{Vector{Float64},Vector{Float64}}}} =
         Dict( 
             irrep => [
