@@ -125,10 +125,12 @@ function compute_asymstates_N_totalangularmomentum(
     end
 
     #%% permutation- and j-symmetric states
-    dJajr2states_j = get_dJajr2states( dar2states_j , 
-                                       Jjr2states_j ,
-                                       basis_j ;
-                                       verbose=verbose )
+    dJajr2states_j = get_dJajr2states_alternative( 
+        dar2states_j , 
+        Jjr2states_j ,
+        basis_j ;
+        verbose=verbose 
+    )
     if verbose
         println( "===================================" )
         println( "J- AND PERMUTATION-SYMMETRIC STATES" )

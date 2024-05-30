@@ -245,10 +245,11 @@ function compute_asymstates_N_doublegroup(
     # SYMMETRY-ADAPTED ANTISYMMETRIC STATES
     # .....................................
     #%%
-    ISisr = get_asym_ISisr( dSsadIair2states , 
-                            asymsubspace ,
-                            basis_c ;
-                            verbose=verbose )
+    ISisr = get_asym_ISisr_alternative( 
+        dSsadIair2states , 
+        asymsubspace ,
+        basis_c ;
+        verbose=verbose )
     clean_symstates!( ISisr )
 
     # *******

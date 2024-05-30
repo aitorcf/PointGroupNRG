@@ -59,10 +59,10 @@ function shell_coperators( shell_basis::CB ,
         tup = sfs.hilbert.states[idx] 
         # sym = ( N , I , S , mu , m , r )
         sym::ClearQNums = ( convert(Int64,1) , 
-                            convert(String,hiztegia[tup[2]]) , 
-                            convert(Float64,tup[4]=="-" ? 0.0 : 0.5) , 
-                            convert(Int64,tup[3]) , 
-                            convert(Float64,hiztegia[tup[4]]) , 
+                            convert(String,hiztegia[tup[2]]) ,
+                            convert(Float64,tup[4]=="-" ? 0.0 : 0.5) ,
+                            convert(Int64,tup[3]) ,
+                            convert(Float64,hiztegia[tup[4]]) ,
                             convert(Int64,tup[1]) )
         cop::Operator{CB} = sfs2coperator(sfs,shell_basis)
         sym2cop::Dict{ ClearQNums , Operator{CB} } = Dict{ClearQNums,Operator{CB}}( sym => cop )

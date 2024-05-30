@@ -508,11 +508,13 @@ function get_redmat_nonsimple( dictmat ,
     return redmat
 end
 
-function pcg_nonsimple_sanity_check( pcgdict::IntQPCG ,
-                                     pcgred::IntIrrepPCGNS ,
-                                     cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
-                                     cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ;
-                                     verbose::Bool=false )
+function pcg_nonsimple_sanity_check( 
+            pcgdict::IntQPCG ,
+            pcgred::IntIrrepPCGNS ,
+            cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
+            cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ;
+            verbose::Bool=false 
+    )
 
     if verbose
         println()

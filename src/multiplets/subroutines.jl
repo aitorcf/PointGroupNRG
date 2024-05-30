@@ -626,7 +626,7 @@ end
 # dIair part
 # .........
 function get_dIair2states_alternative( 
-            dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
+            partitions::Vector{Partition} ,
             Iir2states::Dict{ Tuple{String,Int64,Int64} , State } ,
             basis_o::OrbitalCanonicalBasis ;
             verbose=false 
@@ -641,13 +641,9 @@ function get_dIair2states_alternative(
     end
 
     dIair2states::Dict{ Tuple{Tuple,String,Int64,Int64,Int64} , State } = Dict()
-    for d in Set(k[1] for k in keys(dar2states))
+    for partition in partitions
 
-        partition = Partition(d)
-
-        println("Partition")
-        pp(partition)
-        println()
+        d = tuple(partition.vec...)
 
         # collect symmetrizers
         tableaux = standard_tableaux(partition)
@@ -655,10 +651,6 @@ function get_dIair2states_alternative(
 
         for (a,symmetrizer) in enumerate(symmetrizers),
             (I,i) in Set(k[1:2] for k in keys(Iir2states))
-
-            println("----")
-            pp(tableaux[a])
-            @show a,I,i
 
             # collect states
             states_r_Ii::Vector{Tuple{State,Int16}} = [
@@ -668,12 +660,6 @@ function get_dIair2states_alternative(
             ]
             sort!(states_r_Ii,by=x->x[2])
 
-            println("States with I,i")
-            for (s,r) in states_r_Ii
-                println(":::: r=$r: ", norm(s.vec),"  ", s)
-            end
-            println()
-
             # apply symmetrizer
             states_dIai::Vector{State} = [
                 symmetrizer*s
@@ -682,49 +668,59 @@ function get_dIair2states_alternative(
             filter!(s->!isapprox(s.vec,zero(s.vec);atol=1e-6),states_dIai)
             iszero(length(states_dIai)) && continue
 
-            println("Symmetrized states")
-            for (r,s) in enumerate(states_dIai)
-                println(":::: r=$r: ", norm(s.vec),"  ", s)
-            end
-            println()
+            # reduce to linearly independent
+            states_dIai = find_linearly_independent_states(
+                states_dIai,
+                basis_o
+            )
 
-            # build subspace
-            projected_subspace = hcat([ s.vec for s in states_dIai]...)
-            qr_dec = qr(projected_subspace,Val(true))
-            @show diag(qr_dec.R)
-            dim = length(filter(
-                x->!isapprox(x,zero(x);atol=1e-6),
-                diag(qr_dec.R)
-            ))
-            @show dim
-            projected_subspace_reduced =
-                (projected_subspace*qr_dec.P)[:,qr_dec.p[end+1-dim:end]]
-            @show projected_subspace_reduced
+            # Gram-Schmidt orthonormalization
+            states_dIai_matrix = hcat([s.vec for s in states_dIai]...)
+            gram_schmidt!(states_dIai_matrix)
+            states_dIai = [
+                State(states_dIai_matrix[:,i],basis_o) 
+                for i in axes(states_dIai_matrix,2)
+            ]
+
+            # store
+            for (r,s) in enumerate(states_dIai)
+                dIair2states[d,I,a,i,r] = s
+            end
+
+            # # build subspace
+            # projected_subspace = hcat([ s.vec for s in states_dIai]...)
+            # qr_dec = qr(projected_subspace,Val(true))
+            # dim = length(filter(
+            #     x->!isapprox(x,zero(x);atol=1e-6),
+            #     diag(qr_dec.R)
+            # ))
+            # projected_subspace_reduced =
+            #     (projected_subspace*qr_dec.P)[:,qr_dec.p[end+1-dim:end]]
 
             ##% intersection method
             #
             # compute independent subspaces
-            S_dar = hcat([ s.vec for (k,s) in dar2states 
-                                 if k[1:2]==(d,a) ]...)
-            S_Iir = hcat([ s.vec for (k,s) in Iir2states 
-                                 if k[1:2]==(I,i) ]...)
-            # compute intersection
-            int = subspace_intersection( S_dar , S_Iir )
-            size(int,2)==0 && continue
+            #S_dar = hcat([ s.vec for (k,s) in dar2states 
+            #                     if k[1:2]==(d,a) ]...)
+            #S_Iir = hcat([ s.vec for (k,s) in Iir2states 
+            #                     if k[1:2]==(I,i) ]...)
+            ## compute intersection
+            #int = subspace_intersection( S_dar , S_Iir )
+            #size(int,2)==0 && continue
 
-            # intersect methods
-            method_intersection = subspace_intersection(projected_subspace,int)
-            @show size(projected_subspace)
-            @show size(projected_subspace_reduced)
-            @show size(int)
-            if size(projected_subspace_reduced)!==size(int)
-                error("Methods don't match!")
-            end
+            ## intersect methods
+            #method_intersection = subspace_intersection(projected_subspace,int)
+            #@show size(projected_subspace)
+            #@show size(projected_subspace_reduced)
+            #@show size(int)
+            #if size(projected_subspace_reduced)!==size(int)
+            #    error("Methods don't match!")
+            #end
 
-            for r in 1:size(projected_subspace_reduced,2) 
-                state = State(projected_subspace_reduced[:,r],basis_o)
-                dIair2states[d,I,a,i,r] = state
-            end
+            # for r in 1:size(projected_subspace_reduced,2) 
+            #     state = State(projected_subspace_reduced[:,r],basis_o)
+            #     dIair2states[d,I,a,i,r] = state
+            # end
         end
     end
 
@@ -941,6 +937,79 @@ function get_dJajr2states( dar2states::Dict{ Tuple{Tuple,Int64,Int64} , State },
 
     return dJajr2states
 end
+function get_dJajr2states_alternative( 
+            partitions::Vector{Partition} ,
+            Jjr2states::Dict{ Tuple{Float64,Float64,Int64} , State } ,
+            basis_j::JCanonicalBasis ;
+            verbose=false 
+    )
+
+    if verbose
+        println()
+        println("************************")
+        println("Calculating dJajr2states")
+        println("************************")
+        println()
+    end
+
+    dJajr2states::Dict{ Tuple{Tuple,Float64,Int64,Float64,Int64} , State } = Dict()
+
+    for partition in partitions
+
+        d = tuple(partition.vec...)
+
+        println("Partition")
+        pp(partition)
+        println()
+
+        # collect symmetrizers
+        tableaux = standard_tableaux(partition)
+        symmetrizers = map( t->YoungSymmetrizer(t,basis_j) , tableaux )
+
+        for (a,symmetrizer) in enumerate(symmetrizers),
+            (J,j) in Set(k[1:2] for k in keys(Jjr2states))
+
+            # collect states
+            states_r_Jj::Vector{Tuple{State,Int64}} = [
+                (s,k[3]) 
+                for (k,s) in Jjr2states 
+                if k[1:2]==(J,j)
+            ]
+            sort!(states_r_Jj,by=x->x[2])
+
+            # apply symmetrizer
+            states_dJaj::Vector{State} = [
+                symmetrizer*s
+                for (s,_) in states_r_Jj
+            ]
+            filter!(s->!isapprox(s.vec,zero(s.vec);atol=1e-6),states_dJaj)
+            iszero(length(states_dJaj)) && continue
+
+            # reduce to linearly independent
+            states_dJaj = find_linearly_independent_states(
+                states_dJaj,
+                basis_j
+            )
+
+            # Gram-Schmidt orthonormalization
+            states_dJaj_matrix = hcat([s.vec for s in states_dJaj]...)
+            gram_schmidt!(states_dJaj_matrix)
+            states_dJaj = [
+                State(states_dJaj_matrix[:,i],basis_j) 
+                for i in axes(states_dJaj_matrix,2)
+            ]
+
+            # store
+            for (r,s) in enumerate(states_dJaj)
+                dJajr2states[d,J,a,j,r] = s
+            end
+
+        end
+
+    end
+
+    return dJajr2states
+end
 
 # ************
 # dSsdIar part
@@ -1053,11 +1122,13 @@ end
 function get_asymsubspace( N::Int64 ,
                            basis_c::CCBG ;
                            verbose=false ) where {CCBG<:CompoundCanonicalBasisGeneral}
+
     if verbose 
         println( "================================" )
         println( "COMPUTING ANTISYMMETRIC SUBSPACE" )
         println( "================================" )
     end
+
     asymdim = get_asymdim(basis_c)
     ap = Partition([1 for _ in 1:N])
     at = Tableau( ap , collect(1:N) )
@@ -1250,6 +1321,72 @@ function get_asym_ISisr( dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int
     end
     return ISisr
 end
+function get_asym_ISisr_alternative( 
+            dSsadIair2states::Dict{ Tuple{Tuple,Float64,Float64,Int64,Tuple,String,Int64,Int64,Int64} , State } ,
+            basis_c::CCBG ;
+            verbose=false 
+    ) where {CCBG<:CompoundCanonicalBasisGeneral}
+
+    if verbose
+        println( "===========================" )
+        println( "ANTISYMMETRIC INTERSECTIONS" )
+        println( "===========================" )
+    end
+
+    # antisymmetrizer
+    number_of_particles = get_N(basis_c)
+    antisymmetric_partition = Partition(Tuple(1 for _ in 1:number_of_particles))
+    antisymmetric_tableau = standard_tableaux(antisymmetric_partition)[1]
+    antisymmetrizer = YoungSymmetrizer(antisymmetric_tableau,basis_c)
+
+    ISisr = Dict{ Tuple{String,Float64,Int64,Float64,Int64} , State }()
+    for sym in Set( (k[1:3]...,k[5],k[6],k[8]) 
+                    for k in keys(dSsadIair2states) )
+
+        if verbose
+            @show sym
+            println( "***********************"^2 )
+        end
+
+        (_,S,s,_,I,i) = sym
+
+        # collect states
+        states_dSsdIi::Vector{State} = [
+            s 
+            for (k,s) in dSsadIair2states 
+            if (k[1:3]==sym[1:3] && (k[5],k[6],k[8])==sym[4:end])
+        ]
+
+        # antisymmetrize states
+        antisymmetrized_states_SsIi = map(s->antisymmetrizer*s,states_dSsdIi)
+        filter!(
+            s->!isapprox(s.vec,zero(s.vec);atol=1e-6),
+            antisymmetrized_states_SsIi
+        )
+        iszero(length(antisymmetrized_states_SsIi)) && continue
+
+        # linearly independent subspace
+        antisymmetrized_states_SsIi = find_linearly_independent_states(
+            antisymmetrized_states_SsIi,
+            basis_c
+        )
+
+        # Gram-Schmidt orthonormalization
+        antisymmetrized_states_matrix = hcat([s.vec for s in antisymmetrized_states_SsIi]...)
+        gram_schmidt!(antisymmetrized_states_matrix)
+        antisymmetrized_states_SsIi = [
+            State(antisymmetrized_states_matrix[:,i],basis_c) 
+            for i in axes(antisymmetrized_states_matrix,2)
+        ]
+
+        # store states
+        for (r,state) in enumerate(antisymmetrized_states_SsIi)
+            ISisr[I,S,i,s,r] = state
+        end
+
+    end
+    return ISisr
+end
 function get_asym_IJijr( dJajdIair2states::Dict{ Tuple{Tuple,Float64,Int64,Float64,Tuple,String,Int64,Int64,Int64} , State } ,
                          asymsubspace::Matrix{ComplexF64} ,
                          basis_c::CCBG ;
@@ -1336,7 +1473,7 @@ end
 
 function gram_schmidt!( sub::Matrix{T} ) where {T<:Number}
     temp = similar(sub[:,1])
-    @inbounds for j in 1:size(sub,2) 
+    @inbounds for j in axes(sub,2) 
         temp = sub[:,j]
         j==1 || (temp .-= sum([ (sub[:,j]'*sub[:,jj])*sub[:,jj] for jj=1:(j-1) ]))
         sub[:,j] .= temp ./ norm(temp)
@@ -1470,3 +1607,27 @@ function get_Iir2states_nonsimple(
     return Iir2states
 end
 
+# find linear independent subset of states
+function find_linearly_independent_states(
+            states::Vector{State} ,
+            basis::CB
+            )::Vector{State} where {CB<:CanonicalBasis}
+
+    # build matrix
+    space_matrix = hcat([ s.vec for s in states]...)
+
+    # apply qr decomposition with pivoting to find linearly independent columns
+    qr_dec = qr(space_matrix,Val(true))
+    dim = length(filter(
+        x->!isapprox(x,zero(x);atol=1e-6),
+        diag(qr_dec.R)
+    ))
+    space_matrix_reduced =
+        (space_matrix*qr_dec.P)[:,qr_dec.p[end+1-dim:end]]
+
+    # new state vector
+    return [
+        State(space_matrix_reduced[:,r],basis)
+        for r in axes(space_matrix_reduced,2)
+    ]
+end

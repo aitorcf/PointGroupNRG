@@ -538,11 +538,13 @@ function get_redmat_nonsimple( dictmat ,
     return redmat
 end
 
-function pcg_nonsimple_sanity_check( pcgdict::IntQPCG ,
-                                     pcgred::IntIrrepPCGNS ,
-                                     cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
-                                     cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ;
-                                     verbose::Bool=false )
+function pcg_nonsimple_sanity_check( 
+            pcgdict::IntQPCG ,
+            pcgred::IntIrrepPCGNS ,
+            cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
+            cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ;
+            verbose::Bool=false 
+    )
 
     if verbose
         println()
@@ -589,7 +591,7 @@ function pcg_nonsimple_sanity_check( pcgdict::IntQPCG ,
                     iu in axes(cg_o,4)
 
                     c = cg_o[α,ia,iv,iu]
-                    println( "( $ia $iv | $iu ) = $c" )
+                    !iszero(c) && println( "( $ia $iv | $iu ) = $c" )
 
                 end
                 println()
@@ -613,7 +615,11 @@ function pcg_nonsimple_sanity_check( pcgdict::IntQPCG ,
             println()
         end
         if !isapprox(matel,wignereckart;atol=1e-6)
-            error("Error in reduced matrix element.")
+            error("""
+                Error in reduced matrix element.
+                    $Gu $Ga $Gv
+                    $Iu $Ia $Iv
+            """)
         end
 
     end

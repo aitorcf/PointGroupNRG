@@ -5582,7 +5582,7 @@ function update_operator_nonsimple(
     # full-sized matrices for avoiding allocations
     R_uv_max = maximum(values(G2R_uv))
     R_a_max = maximum(values(G2R_a))
-    A_max = maximum([size(arr,1) for arr in values(redmat_iaj)])
+    A_max = maximum(values(cg_o_comb2A))
     tmp_full = zeros(ComplexF64,R_uv_max,R_uv_max)
     uav_matrix_full = zeros(ComplexF64,A_max,R_uv_max,R_a_max,R_uv_max)
 
@@ -5677,11 +5677,12 @@ function update_operator_nonsimple(
             is_matrix_zero(uav_matrix) && continue
 
             # transform matrix
-            @views for r_a in 1:G2R_a[G_a],
+            @inbounds @views for r_a in 1:G2R_a[G_a],
                        β   in 1:B_uav
 
                 mul!( tmp , uav_matrix[β,:,r_a,:] , U_v )
                 mul!( uav_matrix[β,:,r_a,:] , U_u' , tmp )
+
             end
 
             # redmat_uav

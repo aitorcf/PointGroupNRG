@@ -5,7 +5,7 @@
 # get symmetry type
 ispointspin(symmetry::String) = symmetry=="PS" || symmetry=="pointspin"
 isdoublegroup(symmetry::String) = symmetry=="D" || symmetry=="doublegroup"
-istotalangularmomentum(symmetry::String) = symmetry=="J" || symmetry=="totalangularmomentum"
+istotalangularmomentum(symmetry::String) = symmetry=="J" || symmetry=="totalangularmomentum" || symmetry=="S" || symmetry=="spin"
 isorbital(symmetry::String) = ispointspin(symmetry) || isdoublegroup(symmetry)
 
 # total angular momentum

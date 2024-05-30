@@ -23,6 +23,7 @@ module MultipletCalculator
     include( "multiplets/doublegroup.jl" )
     include( "multiplets/pointspin.jl" )
     include( "multiplets/totalangularmomentum.jl" )
+    include( "multiplets/allsymmetries.jl" )
     include( "multiplets/interface.jl" )
 
 end
