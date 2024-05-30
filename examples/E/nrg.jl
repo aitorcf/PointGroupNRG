@@ -49,25 +49,22 @@ lehmann_iaj = Dict{NTuple{3,Tuple{Int64,String,Float64}},Array{ComplexF64,4}}(
 
 # hybridization
 Γ = 0.01 # for thermo
-Γ = 0.07 # for spectral
 hop_symparams = Dict{String,Matrix{ComplexF64}}(
     "E" => [sqrt(2Γ/π);;]
 )
 
 # numerical parameters
 cutoff_type = "multiplet"
-cutoff_magnitude = 1000
-L = 3.0
+cutoff_magnitude = 500
+L = 5.0
 iterations = 100
-K_factor = 3.0
-broadening = 0.6 
 
 # choose what to calculate
-run = "spectral"
+run = "impurityprojections"
 
 if run=="multiplets"
 
-    nrg_full_allsymmetries( 
+    nrg_full_allsymmetries(
         symmetry,
         label,
         "IMP",
@@ -196,7 +193,7 @@ elseif run=="thermoionic"
 
     end
 
-elseif run=="spectral"
+elseif run=="impurityprojections"
 
     nrg_full_allsymmetries( 
         symmetry,
@@ -214,9 +211,7 @@ elseif run=="spectral"
         impurity_config=impurity_config,
         epsilon_symparams=epsilon_symparams,
         u_symparams=u_symparams,
-        spectral=true,
-        spectral_broadening=broadening,
-        K_factor=K_factor
+        compute_impurity_projections=true
     )
 
 end
