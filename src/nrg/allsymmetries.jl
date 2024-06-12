@@ -610,16 +610,18 @@ function construct_impurity(
     )
 end
 
-function nrg_full_allsymmetries( 
+#function nrg_full_allsymmetries( 
+function nrgfull( 
             symmetry::String , # pointspin PS, double group D, total angular momentum J
             label::String ,
             L::Float64 ,
             iterations::Int64 ,
-            cutoff_type::String ,
-            cutoff_magnitude::IF ,
+            cutoff::IF ,
             multiplets_dir::String ,
             shell_config::Dict{SF,Int64} ,
             hop_symparams::Dict{ SF , Matrix{ComplexF64} } ;
+            # type of cutoff: "multiplet" or "energy"
+            cutoff_type::String="multiplet" ,
             # calculation with impurity ("IMP") or without ("CLEAN")
             calculation::String="IMP" ,
             # impurity input
@@ -657,7 +659,8 @@ function nrg_full_allsymmetries(
             dmnrg::Bool=false ,
             compute_impurity_projections::Bool=false ,
             scale_asymptotic::Bool=true ,
-            band_width::Float64=1.0 
+            band_width::Float64=1.0 ,
+            print_spectrum_levels::Int64=0 ,
     ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
 
 
@@ -707,7 +710,7 @@ function nrg_full_allsymmetries(
     @show z
     @show betabar
     @show cutoff_type
-    @show cutoff_magnitude
+    @show cutoff
     @show max_SJ2
     @show spectral
     println()
@@ -804,6 +807,9 @@ function nrg_full_allsymmetries(
         @printf "%5s " oirreps[i]
     end
     println(); println()
+    print("Performing sanity check on Clebsch-Gordan coefficients... ")
+    clebsch_gordan_sanity_check(cg_o_fullmatint)
+    println("Done\n\n")
 
     # for dmnrg
     shell_dimension::Int64 = 0
@@ -1257,9 +1263,10 @@ function nrg_full_allsymmetries(
         end
     end
 
-    #   ================================   #
-    #%% COUPLING ATOM TO INNERMOST SHELL %%#
-    #   ================================   #
+
+    #   ====================================   #
+    #%% COUPLING IMPURITY TO INNERMOST SHELL %%#
+    #   ====================================   #
     println()
     println( "::::::::::::::::::::::::::::::::::::::::::::" )
     println( "--- COUPLING IMPURITY TO INNERMOST SHELL ---" )
@@ -1474,7 +1481,7 @@ function nrg_full_allsymmetries(
             calculation,
             iterations,
             cutoff_type,
-            cutoff_magnitude,
+            cutoff,
             L,
             irrEU,
             multiplets_shell,
@@ -1497,7 +1504,8 @@ function nrg_full_allsymmetries(
             orbital_multiplets=orbital_multiplets,
             mm_i=mm_i,
             channels_diagonals=channels_diagonals,
-            scale=scale
+            scale=scale,
+            print_spectrum_levels=print_spectrum_levels
         )
 
     elseif dmnrg # not updated
@@ -1506,7 +1514,7 @@ function nrg_full_allsymmetries(
                    calculation ,
                    iterations,
                    cutoff_type,
-                   cutoff_magnitude,
+                   cutoff,
                    L,
                    hop_symparams_int,
                    copy(irrEU),
@@ -1544,7 +1552,7 @@ function nrg_full_allsymmetries(
              calculation ,
              iterations,
              cutoff_type,
-             cutoff_magnitude,
+             cutoff,
              L,
              hop_symparams_int,
              irrEU,
@@ -1601,7 +1609,7 @@ function nrg_full_allsymmetries(
             calculation,
             iterations,
             cutoff_type,
-            cutoff_magnitude,
+            cutoff,
             L,
             irrEU,
             multiplets_shell,
@@ -1634,7 +1642,8 @@ function nrg_full_allsymmetries(
             extra_iterations=extra_iterations,
             multiplets_atomhop=collect(multiplets_a_atom) ,
             fsum=fsum,
-            scale=scale
+            scale=scale,
+            print_spectrum_levels=print_spectrum_levels
         )
 
     end
@@ -1696,7 +1705,8 @@ function NRG_allsymmetries(
               impurity_operators::Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}=Dict{String,Dict{IntTripleG,Array{ComplexF64,4}}}() ,
               spectral_temperature::Float64=0.0 ,
               extra_iterations::Int64=0 ,
-              compute_selfenergy::Bool=false
+              compute_selfenergy::Bool=false ,
+              print_spectrum_levels::Int64=0
     )
 
     println( "=============" )
@@ -1869,6 +1879,10 @@ function NRG_allsymmetries(
 
             end
         )
+
+        if !iszero(print_spectrum_levels)
+            print_spectrum(irrEU;multiplet_cutoff=print_spectrum_levels)
+        end
 
         # information
         maximum_SJ2 = maximum(collect( G[3] for (G,(E,U)) in irrEU ))
