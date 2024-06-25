@@ -958,10 +958,6 @@ function get_dJajr2states_alternative(
 
         d = tuple(partition.vec...)
 
-        println("Partition")
-        pp(partition)
-        println()
-
         # collect symmetrizers
         tableaux = standard_tableaux(partition)
         symmetrizers = map( t->YoungSymmetrizer(t,basis_j) , tableaux )

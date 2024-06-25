@@ -50,7 +50,6 @@ if run=="multiplets"
     nrg_full_allsymmetries( 
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,
@@ -67,7 +66,6 @@ elseif run=="spectrum"
     nrg_full_allsymmetries(
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,
@@ -88,7 +86,6 @@ elseif run=="thermo"
         nrg_full_allsymmetries( 
             symmetry,
             label,
-            calculation,
             L,
             iterations,
             cutoff_type,
@@ -96,6 +93,7 @@ elseif run=="thermo"
             multiplets_dir,
             shell_config,
             hop_symparams;
+            calculation=calculation,
             impurity_config=impurity_config,
             epsilon_symparams=epsilon_symparams,
             u_symparams=u_symparams,
@@ -108,7 +106,6 @@ elseif run=="spectral"
     nrg_full_allsymmetries( 
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,

@@ -609,41 +609,207 @@ function construct_impurity(
         irrEU
     )
 end
+# input impurity
+function construct_impurity(
+        input_file::String
+    )
+
+    #   -------   #
+    #%% reading %%#
+    #   -------   #
+
+    # read impurity input
+    number_of_impurity_orbitals,
+    impurity_spectrum,
+    impurity_symstates = read_impurity_input(input_file)
+
+    # read shell input
+    #number_of_shell_orbitals = read_shell_input(input_file)
+    number_of_shell_orbitals = sum( size(m,1) for (G,m) in hop_symparams )
+
+    # read orbital rotation input
+    orbital_rotation = read_rotation_input( input_file,
+                                            number_of_impurity_orbitals )
+    do_rotation = orbital_rotation!==diagm(map(x->ComplexF64(1.0),axes(orbital_rotation,1)))
+
+    #   --------------------- #
+    #%% atomic symstate basis #
+    #   --------------------- #
+
+    # define dictionary
+    identityrep = "A1g"
+    hiztegia = merge(
+        Dict{String,String}( 
+            "o$i" => "A1g" for i in 1:number_of_impurity_orbitals
+        ),
+        Dict{String,Float64}(
+            "u" =>  0.5,
+            "d" => -0.5
+        )
+    )
+
+    # inpurity states in simple format
+    impurity_orbital_states = reduce(vcat , 
+        [
+        [(0,"o$i",1,"u"),(0,"o$i",1,"d")]
+        for i in 1:number_of_impurity_orbitals
+        ] 
+    )
+
+    # construct hilbert space and basis
+    hilbert = HilbertSpace(impurity_orbital_states)
+    basis_0 = CanonicalBasis( hilbert )
+
+    ##   ------------------ #
+    ##%% selected symstates #
+    ##   ------------------ #
+
+    # atomic symstates
+    symstates_imp = Dict{Tuple{Int64,String,Float64,Int64,Float64,Int64},State}()
+
+    # vacuum (seed) states
+    vac = State( basis_0.states[1] , basis_0 )
+
+    # creation operators 
+    #
+    # define eigenoperators c^\dagger_a wrt J
+    impurity_creation_operators_up = [
+        Operator( SymbolCreationOperator(o_s) , basis_0 )
+        for o_s in filter( x->x[4]=="u" , impurity_orbital_states )
+    ]
+    impurity_creation_operators_do = [
+        Operator( SymbolCreationOperator(o_s) , basis_0 )
+        for o_s in filter( x->x[4]=="d" , impurity_orbital_states )
+    ]
+    impurity_creation_operators = reduce(vcat,[
+        [u,d] for (u,d) in zip(impurity_creation_operators_up,impurity_creation_operators_do)
+    ])
+    # transformed operators c^\dagger_\alpha, old basis
+    impurity_creation_operators_up_rotated = do_rotation ? map( 
+        operator->transform_creation_operator(operator,impurity_creation_operators_up,orbital_rotation) ,
+        impurity_creation_operators_up
+    ) : impurity_creation_operators_up
+    impurity_creation_operators_do_rotated = do_rotation ? map( 
+        operator->transform_creation_operator(operator,impurity_creation_operators_do,orbital_rotation) ,
+        impurity_creation_operators_do
+    ) : impurity_creation_operators_do
+    impurity_creation_operators_rotated = reduce(vcat,[
+        [u,d] for (u,d) in zip(impurity_creation_operators_up_rotated,impurity_creation_operators_do_rotated)
+    ])
+    
+    vac = State( basis_0.states[1] , basis_0 )
+    symstates_imp = Dict{ClearQNums,State}()
+    for (symQNums,slater_composition) in impurity_symstates
+
+        # zero state
+        symstates_imp[symQNums] = State(basis_0)
+
+        for (coeff,slater_determinant) in slater_composition
+            symstates_imp[symQNums] += coeff*slater_state(slater_determinant,impurity_creation_operators_rotated,vac)
+        end
+    end
+    print_dict(symstates_imp)
+    multiplets_imp = get_multiplets( symstates_imp )
+    @show multiplets_imp
+
+
+    println( "***********************************************************************")
+    println( "IMPURITY MULTIPLETS" )
+    print_multiplets_Nordered( multiplets_imp )
+    #println( "ATOMIC SELECTED SYMSTATES" )
+    #print_symstates_Nordered( symstates_atom )
+    #println( "***********************************************************************")
+    println()
+    #
+    #   ----- #
+    #%% irreu #
+    #   ----- #
+    # clean spectrum
+    irrEU_clean = get_irrEU_clean( "A1g" )
+    # impurity spectrum formatting
+    impurity_irreps_and_multiplicities = get_irreps( multiplets_imp , multiplicity=true )
+    N_0 = minimum([ N for ((N,_,_),_) in impurity_irreps_and_multiplicities ])+1
+    GG_neutral = filter( x->x[1][1]==N_0 , collect(impurity_irreps_and_multiplicities) )[1]
+    E_0 = minimum(filter( x->(x[1][1:3] in GG_neutral) , collect(impurity_spectrum) ))[2]
+    irrEU_imp = Dict{ClearIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}}( )
+    for (G,rr) in impurity_irreps_and_multiplicities
+        N,I,S = G
+        U = ComplexF64.(diagm(map(x->1,1:rr)))
+        if N==N_0
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0 for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r] for r in 1:rr],U)
+        elseif N==N_0+1
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0+chemical_potential for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r]+chemical_potential for r in 1:rr],U)
+        elseif N==N_0-1
+            #irrEU_imp[G] = ([impurity_spectrum[G...,r]-E_0-chemical_potential for r in 1:rr],U)
+            irrEU_imp[G] = ([impurity_spectrum[G...,r]-chemical_potential for r in 1:rr],U)
+        end
+    end
+    print_dict(irrEU_imp)
+    irrEU = calculation=="IMP" ? irrEU_imp : irrEU_clean
+    multiplets_block = calculation=="IMP" ? multiplets_imp :
+                                            Set([ (0,"A1g",0.0,1) ])
+    omults::Vector{ClearMultiplet} = ordered_multiplets(multiplets_block)
+    mult2index::Dict{ClearMultiplet,Int64} = Dict( m=>i for (i,m) in enumerate(omults))
+    # symops
+    symcreops_imp = Dict(
+        (1,hiztegia[orbital],0.5,i,hiztegia[spinproj],parse(Int64,orbital[2])) => impurity_creation_operators[n]
+        for (n,(_,orbital,i,spinproj)) in enumerate(impurity_orbital_states)
+    )
+
+    # hoppers
+    pcg_block = Dict{NTuple{3,Tuple{Int64,String,Float64,Int64,Float64,Int64}},ComplexF64}()
+    qq_a = sort( collect(keys(symcreops_imp)) , by=x->(x[end]*1000-x[3]) )[1:2*number_of_shell_orbitals]
+    if calculation=="IMP"
+
+        # pcg
+        for (q1,s1) in symstates_imp,
+            (q2,s2) in symstates_imp,
+            qo  in qq_a
+
+            lehmann = s1 * symcreops_imp[qo] * s2
+            isapprox(lehmann,0.0) || (pcg_block[(q1,qo,q2)]=lehmann)
+
+        end
+    end
+end
 
 #function nrg_full_allsymmetries( 
-function nrgfull( 
+function nrgfull(
             symmetry::String , # pointspin PS, double group D, total angular momentum J
             label::String ,
             L::Float64 ,
             iterations::Int64 ,
             cutoff::IF ,
-            multiplets_dir::String ,
             shell_config::Dict{SF,Int64} ,
-            hop_symparams::Dict{ SF , Matrix{ComplexF64} } ;
-            # type of cutoff: "multiplet" or "energy"
-            cutoff_type::String="multiplet" ,
+            tunneling::Dict{ SF , Matrix{ComplexF64} } ;
+            # directory containing the multiplets calculated by compute_multiplets
+            multiplets_path::String="multiplets" ,
             # calculation with impurity ("IMP") or without ("CLEAN")
             calculation::String="IMP" ,
             # impurity input
             # - standard anderson
             impurity_config::Dict{SF,Int64}=Dict{SF,Int64}() ,
-            epsilon_symparams::Dict{SF,Vector{ComplexF64}}=Dict{SF,Vector{ComplexF64}}() ,
-            u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}}=Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }() ,
+            onsite::Dict{SF,Vector{ComplexF64}}=Dict{SF,Vector{ComplexF64}}() ,
+            interaction::Dict{Tuple{String,Float64},Matrix{ComplexF64}}=Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }() ,
             # - ionic anderson
             spectrum::Dict{ClearIrrep,Vector{Float64}}=Dict{ClearIrrep,Vector{Float64}}() ,
             lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}}=Dict{ClearTripleG,Array{ComplexF64,4}}() ,
+            # - ionic from input file
+            input_file::String="" ,
             # run only until a certain point for partial information
             # - 2-particle multiplets
             # - impurity spectrum
             # - impurity-shell spectrum
             until::String = "",
             # other
-            cg_o_dir::String="" ,
+            clebschgordan_path::String="" ,
             identityrep::String="" ,
             distributed::Bool=false ,
             z::Float64=0.0 ,
             max_SJ2::Int64=10 ,
-            channels_dos::Dict{ String , Vector{Function} }=Dict{ String , Vector{Function} }() ,
+            channels_dos::Dict{ SF , Vector{Function} }=Dict{ SF , Vector{Function} }() ,
             discretization::String=discretization_default ,
             tridiagonalization::String=tridiagonalization_default ,
             enforce_particle_hole_symmetry::Bool=true,
@@ -653,7 +819,6 @@ function nrgfull(
             spectral_broadening::Float64=0.5 ,
             broadening_distribution::String="loggaussian" ,
             K_factor::Float64=2.0 ,
-            orbitalresolved::Bool=false ,
             spectral_temperature::Float64=0.0 ,
             extra_iterations::Int64=0 ,
             dmnrg::Bool=false ,
@@ -670,15 +835,42 @@ function nrgfull(
     println()
 
     # impurity model
-    model = length(spectrum)==0 ? "standard" : "ionic"
+    model = begin
+        if length(spectrum)!==0 && length(interaction)==length(impurity_config)==length(onsite)==0 && input_file==""
+            "ionic"
+        elseif (length(onsite)!==0 && length(interaction)!==0 && length(impurity_config!==0)) && length(spectrum)==0 && input_file==""
+            "standard"
+        elseif input_file!=="" && length(spectrum)==length(onsite)==length(interaction)==length(impurity_config)==0
+            "input"
+        else
+            error(
+                """Give either of these as input:
+                     - spectrum and (optionally) lehmann amplitudes.
+                     - impurity configuration, on-site energies and interaction.
+                     - input file (experimental). """
+            )
+        end
+    end
+
+    # interaction format for total angular momentum
+    if isorbital(symmetry)
+        interaction = Dict(
+            (k[1],0.0)=>v
+            for (k,v) in interaction
+        )
+    else
+        interaction = Dict(
+            ("A",k[2])=>v
+            for (k,v) in interaction
+        )
+    end
 
     # =================== #
     # ERRORS AND WARNINGS #
     # =================== #
 
-    if model=="standard"
-        length(impurity_config)==0 && error("impurity_spectrum not provided")
-    end
+    # cutoff_type from cutoff type
+    cutoff_type = IF==Int64 ? "multiplet" : "energy"
 
     # spectral only
     if (spectral && calculation=="CLEAN") 
@@ -692,8 +884,8 @@ function nrgfull(
     compute_impurity_projections = compute_impurity_projections && (calculation=="IMP")
 
     if isorbital(symmetry)
-        if cg_o_dir==""
-            error("Clebsch-Gordan directory <cg_o_dir> required for orbital symmetries.")
+        if clebschgordan_path==""
+            error("Clebsch-Gordan directory <clebschgordan_path> required for orbital symmetries.")
         elseif identityrep==""
             error("Identity irrep <identityrep> required for orbital symmetries.")
         end
@@ -717,20 +909,22 @@ function nrgfull(
     if model=="standard"
         println("IMPURITY CONFIGURATION")
         print_dict(impurity_config)
-        println("OCCUPATION ENERGIES")
-        print_dict(epsilon_symparams) 
-        println("COULOMB PARAMETERS")
-        print_dict(u_symparams) 
-    else
+        println("ON-SITE ENERGIES")
+        print_dict(onsite) 
+        println("INTERACTION PARAMETERS")
+        print_dict(interaction) 
+    elseif model=="ionic"
         println("SPECTRUM")
         print_dict(spectrum)
         println("LEHMANN AMPLITUDES")
         print_dict(lehmann_iaj)
+    elseif model=="input"
+        println("INPUT FILE: $input_file")
     end
     println("SHELL CONFIGURATION")
     print_dict(shell_config)
     println( "HYBRIDIZATION PARAMETERS" )
-    print_dict( hop_symparams )
+    print_dict( tunneling )
     println()
 
     #   ========   #
@@ -744,13 +938,18 @@ function nrgfull(
 
             collect(keys(impurity_config))
 
-        else # ionic
+        elseif model=="ionic" # ionic
 
             imp_orbital_irreps::Vector{SF} = collect(Set(
                 I for ((_,I,_),_) in spectrum
             ))
             shell_orbital_irreps::Vector{SF} = collect(keys(shell_config))
             collect(Set(vcat(imp_orbital_irreps,shell_orbital_irreps)))
+
+        elseif model=="input"
+
+            # just the identity
+            collect(keys(shell_config)) 
 
         end
     end
@@ -783,7 +982,7 @@ function nrgfull(
          oirreps2indices,
          oirreps2dimensions,
          oindex2dimensions,
-         cg_o_fullmatint) = get_cg_o_info_nonsimple( cg_o_dir , atom_orbital_irreps )
+         cg_o_fullmatint) = get_cg_o_info_nonsimple( clebschgordan_path , atom_orbital_irreps )
 
     else # total angular momentum
 
@@ -856,9 +1055,9 @@ function nrgfull(
         for (S1,S2,_) in cg_s_fullmatint_keys 
     )
 
-    #   ===========   #
-    #%% ATOMIC PART %%#
-    #   ===========   #
+    #   =============   #
+    #%% IMPURITY PART %%#
+    #   =============   #
     println()
     println( ":::::::::::::::::::::" )
     println( "--- IMPURITY PART ---" )
@@ -884,7 +1083,7 @@ function nrgfull(
 
 
         # standard anderson model
-        else
+        elseif model=="standard"
 
             ret = construct_impurity(
                 symmetry::String ,
@@ -893,16 +1092,23 @@ function nrgfull(
                 oirreps2dimensions::Dict{String,Int64} ,
                 oirreps2indices::Dict{String,Int64} ,
                 identityrep::String ,
-                multiplets_dir::String ,
+                multiplets_path::String ,
                 cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} ,
                 cg_s_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,3}} ,
                 hiztegia ,
-                epsilon_symparams::Dict{SF,Vector{ComplexF64}} ,
-                u_symparams::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ;
+                onsite::Dict{SF,Vector{ComplexF64}} ,
+                interaction::Dict{Tuple{String,Float64},Matrix{ComplexF64}} ;
                 until=until
             )
             until=="2-particle multiplets" && return
             ret
+
+        elseif model=="input"
+
+        number_of_impurity_orbitals,
+        impurity_spectrum,
+        impurity_symstates = read_impurity_input(input_file)
+
         end
     end
     if until=="impurity spectrum" || until=="2-particle multiplets"
@@ -923,7 +1129,7 @@ function nrgfull(
     if length(channels_dos)==0 
         channels_dos = Dict{SF,Vector{Function}}( 
             orbital_irrep=>Function[x->0.5 for i in 1:size(hop_matrix,1)]
-            for (orbital_irrep,hop_matrix) in hop_symparams 
+            for (orbital_irrep,hop_matrix) in tunneling 
         )
     end
 
@@ -1044,19 +1250,19 @@ function nrgfull(
     oindices2irreps = Dict( v=>k for (k,v) in oirreps2indices )
     A_L = 0.5*(L+1)/(L-1)*log(L)  # correction factor
     hopscale = discretization=="yoshida1990" ? scale/sqrt(A_L) : scale
-    hop_symparams_int::Dict{Int64,Matrix{ComplexF64}} = begin
+    tunneling_int::Dict{Int64,Matrix{ComplexF64}} = begin
         if isorbital(symmetry)
 
-            Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>(@.rescale(v,L,z,hopscale)) for (k,v) in hop_symparams )
+            Dict{Int64,Matrix{ComplexF64}}( oirreps2indices[k]=>(@.rescale(v,L,z,hopscale)) for (k,v) in tunneling )
 
         else
 
-            Dict{Int64,Matrix{ComplexF64}}( doublej(J)=>(@.rescale(v,L,z,hopscale)) for (J,v) in hop_symparams )
+            Dict{Int64,Matrix{ComplexF64}}( doublej(J)=>(@.rescale(v,L,z,hopscale)) for (J,v) in tunneling )
 
         end
     end
     println("- hopping")
-    print_dict(hop_symparams)
+    print_dict(tunneling)
     println()
 
 
@@ -1105,7 +1311,7 @@ function nrgfull(
                 shell_config,
                 oirreps2dimensions,
                 identityrep,
-                multiplets_dir,
+                multiplets_path,
                 cg_o_fullmatint ,
                 cg_s_fullmatint ,
                 oirreps2indices ;
@@ -1118,7 +1324,7 @@ function nrgfull(
                 shell_config,
                 oirreps2dimensions,
                 identityrep,
-                multiplets_dir,
+                multiplets_path,
                 cg_o_fullmatint ,
                 cg_s_fullmatint ,
                 oirreps2indices ;
@@ -1129,7 +1335,7 @@ function nrgfull(
 
             get_symstates_basis_multiplets_totalangularmomentum(
                 shell_config,
-                multiplets_dir;
+                multiplets_path;
                 verbose=true 
             )
 
@@ -1375,7 +1581,7 @@ function nrgfull(
                 multiplets_atom , 
                 multiplets_shell ,
                 irrEU , 
-                hop_symparams_int , 
+                tunneling_int , 
                 keys_as_dict_o ,
                 keys_as_dict_s ,
                 dsum ,
@@ -1393,7 +1599,7 @@ function nrgfull(
                 multiplets_atom , 
                 multiplets_shell ,
                 irrEU , 
-                hop_symparams_int , 
+                tunneling_int , 
                 dsum ,
                 lehmann_iaj ,
                 lehmann_muanu ,
@@ -1516,7 +1722,7 @@ function nrgfull(
                    cutoff_type,
                    cutoff,
                    L,
-                   hop_symparams_int,
+                   tunneling_int,
                    copy(irrEU),
                    multiplets_shell,
                    cg_o_fullmatint,
@@ -1554,7 +1760,7 @@ function nrgfull(
              cutoff_type,
              cutoff,
              L,
-             hop_symparams_int,
+             tunneling_int,
              irrEU,
              multiplets_shell,
              cg_o_fullmatint,

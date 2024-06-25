@@ -32,6 +32,7 @@ using .MultipletCalculator
 # NRG calculation submodule
 module NRGCalculator
 
+    # TODO: remove unnecessary
     export multiplets_2particles
     export multiplets_2particles_allsymmetries
     export impurity_spectrum
@@ -42,7 +43,7 @@ module NRGCalculator
     export nrg_full_doublegroup_nonsimple
     export nrg_full_totalangularmomentum
     export nrg_full_pointspin
-    export nrg_full_allsymmetries
+    export nrgfull
     export generate_Z 
     export generate_Zlaps
     export zavg_thermo 

@@ -1116,4 +1116,176 @@ function print_symstates_Nordered( symstates )
     end
 end
 
+# #####################
+# CLEBSCH-GORDAN CHECKS
+# .....................
+function check_cg_array_permutation(
+            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,4}}
+    )::Tuple{Bool,String}
 
+    for ((I1,I2,I3),arr) in cg_o_fullmatint
+
+        I1==I2 && continue
+
+        # irrep permutation check
+        if !haskey(cg_o_fullmatint,(I2,I1,I3))
+            return false, "combination I1=$I1, I2=$I2, I3=$I3 lacks permuted counterpart in dictionary"
+        end
+
+        arr_original = arr
+        arr_permuted = cg_o_fullmatint[I2,I1,I3]
+
+        # check sizes
+        size_original = size(arr_original)
+        size_permuted = size(arr_permuted)
+        if size_original[1]!==size_permuted[1]
+            return false, "I1=$I1, I2=$I2, I3=$I3: different outer multiplicity indices"
+        elseif size_original[2]!==size_permuted[3] 
+            return false, "I1=$I1, I2=$I2, I3=$I3: different dimension for I1"
+        elseif size_original[3]!==size_permuted[2]
+            return false, "I1=$I1, I2=$I2, I3=$I3: different dimensions for permuted index i2 (original)"
+        elseif size_original[4]!==size_permuted[4]
+            return false, "I1=$I1, I2=$I2, I3=$I3: different dimensions for permuted index i3 (original)"
+        end
+
+        for i1 in axes(arr_original,2),
+            i2 in axes(arr_original,3)
+
+            if !isapprox(arr_original[:,i1,i2,:],arr_permuted[:,i2,i1,:];atol=1e-6)
+                return false, "I1=$I1, I2=$I2, I3=$I3: arrays for i1=$i1 and i2=$i2 are not permutation-symmetric"
+            end
+
+        end
+    end
+
+    return true, ""
+end
+function check_cg_orthogonality_1( cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} )
+
+    irrep_decompositions = Dict{ NTuple{2,Int64} , Vector{Int64} }(
+        (I1,I2)=>[
+            I_3
+            for ((I_1,I_2,I_3),arr) in cg_o_fullmatint
+            if (I_1,I_2)==(I1,I2)
+        ]
+        for (I1,I2) in Set(k[1:2] for k in keys(cg_o_fullmatint))
+    )
+
+    irreps2dimensions = Dict(
+        I=>size(arr,1+i)
+        for (k,arr) in cg_o_fullmatint
+        for (i,I) in enumerate(k)
+    )
+
+    for ((I1,I2),decomposition) in irrep_decompositions
+
+        dim_I1 = irreps2dimensions[I1]
+        dim_I2 = irreps2dimensions[I2]
+
+        for i1 in 1:dim_I1,
+            j1 in 1:dim_I1,
+            i2 in 1:dim_I2,
+            j2 in 1:dim_I2
+
+            c::ComplexF64 = 0.0
+
+            for I3 in decomposition
+
+                arr = cg_o_fullmatint[I1,I2,I3]
+
+                for α  in axes(arr,1),
+                    i3 in axes(arr,4)
+
+                    c += arr[α,i1,i2,i3]*conj(arr[α,j1,j2,i3])
+
+                end
+            end
+
+            if (i1==j1 && i2==j2)
+                if !isapprox(c,one(c);atol=1e-6)
+                    return false, "I1=$I1 ⊗ I2=$I2: orthogonality (1) error with sum c=$c"
+                end
+            else
+                if !isapprox(c,zero(c);atol=1e-6)
+                    return false, "I1=$I1 ⊗ I2=$I2: orthogonality (1) error with sum c=$c"
+                end
+            end
+        end
+    end
+    return true,""
+end
+function check_cg_orthogonality_2( cg_o_fullmatint::Dict{NTuple{3,Int64},Array{ComplexF64,4}} )
+
+    irrep_decompositions = Dict{ NTuple{2,Int64} , Vector{Int64} }(
+        (I1,I2)=>[
+            I_3
+            for ((I_1,I_2,I_3),arr) in cg_o_fullmatint
+            if (I_1,I_2)==(I1,I2)
+        ]
+        for (I1,I2) in Set(k[1:2] for k in keys(cg_o_fullmatint))
+    )
+
+    irreps2dimensions = Dict(
+        I=>size(arr,1+i)
+        for (k,arr) in cg_o_fullmatint
+        for (i,I) in enumerate(k)
+    )
+
+    for ((I1,I2),decomposition) in irrep_decompositions
+
+        dim_I1 = irreps2dimensions[I1]
+        dim_I2 = irreps2dimensions[I2]
+
+        for I3 in decomposition,
+            J3 in decomposition
+
+            arr_norm = cg_o_fullmatint[I1,I2,I3]
+            arr_conj = cg_o_fullmatint[I1,I2,J3]
+
+            for α in axes(arr_norm,1),
+                β in axes(arr_conj,1),
+                i3 in axes(arr_norm,4),
+                j3 in axes(arr_conj,4)
+
+                c::ComplexF64 = 0.0
+
+                for i1 in axes(arr_norm,2),
+                    i2 in axes(arr_norm,3)
+
+                    c += arr_norm[α,i1,i2,i3]*conj(arr_conj[β,i1,i2,j3])
+
+                end
+
+                if (I3,α,i3)==(J3,β,j3)
+                    if !isapprox(c,one(c);atol=1e-6)
+                        return false, "$I1 ⊗ $I2 : orthogonality (2) error with sum c=$c"
+                    end
+                else
+                    if !isapprox(c,zero(c);atol=1e-6)
+                        return false, "$I1 ⊗ $I2 : orthogonality (2) error with sum c=$c"
+                    end
+                end
+            end
+        end
+    end
+    return true,""
+end
+function clebsch_gordan_sanity_check(
+            cg_o_fullmatint::Dict{ NTuple{3,Int64} , Array{ComplexF64,4}} ;
+            verbose::Bool=true
+    )
+
+    permutation_ok, permutation_error = check_cg_array_permutation(cg_o_fullmatint)
+    if !permutation_ok
+        error(permutation_error)
+    end
+
+    is_orthogonal_1, error_orthogonal_1 = check_cg_orthogonality_1(cg_o_fullmatint)
+    if !is_orthogonal_1
+        error(error_orthogonal_1)
+    end
+    is_orthogonal_2, error_orthogonal_2 = check_cg_orthogonality_2(cg_o_fullmatint)
+    if !is_orthogonal_2
+        error(error_orthogonal_2)
+    end
+end

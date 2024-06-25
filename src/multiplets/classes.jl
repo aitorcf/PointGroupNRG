@@ -96,6 +96,10 @@ struct OrbitalNullBasisElement <: SimpleBasisElement
     occupations::Vector{Nothing} 
 end
 
+function show( io::IO , be::OrbitalNullBasisElement )
+    print(io, "| "*"- "^length(be.occupations)*")")
+end
+
 # ******************
 # SPIN BASIS ELEMENT
 # ..................

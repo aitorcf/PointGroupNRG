@@ -67,7 +67,6 @@ if run=="multiplets"
     nrg_full_allsymmetries(
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,
@@ -86,7 +85,6 @@ elseif run=="impurity spectrum"
     nrg_full_allsymmetries( 
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,
@@ -107,7 +105,6 @@ elseif run=="impurity-shell spectrum"
     nrg_full_allsymmetries( 
         symmetry,
         label,
-        "IMP",
         L,
         iterations,
         cutoff_type,
@@ -130,7 +127,6 @@ elseif run=="thermo"
         nrg_full_allsymmetries( 
             symmetry,
             label,
-            calculation,
             L,
             iterations,
             cutoff_type,
@@ -138,6 +134,7 @@ elseif run=="thermo"
             multiplets_dir,
             shell_config,
             hop_symparams;
+            calculation=calculation,
             cg_o_dir=cg_o_dir,
             identityrep=identityrep,
             impurity_config=impurity_config,
@@ -154,7 +151,6 @@ elseif run=="thermoionic"
         nrg_full_allsymmetries( 
             symmetry,
             label,
-            calculation,
             L,
             iterations,
             cutoff_type,
@@ -162,6 +158,7 @@ elseif run=="thermoionic"
             multiplets_dir,
             shell_config,
             hop_symparams;
+            calculation=calculation,
             cg_o_dir=cg_o_dir,
             identityrep=identityrep,
             spectrum=spectrum,

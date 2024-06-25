@@ -16,25 +16,26 @@ epsilon_symparams = Dict{String,Vector{ComplexF64}}(
     "A1g" => [-0.1]
 )
 u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
-    ("A1g",0.0) => [3.0;;]
+    ("A1g",0.0) => [0.2;;]
 )
 
 # additional input for run=="thermo"
 label = "A1g"
-L = 10.0
-iterations = 42
+L = 2.0
+iterations = 60
 cutoff_type = "multiplet"
-cutoff_magnitude = 100
+cutoff_magnitude = 300
 shell_config = atom_config 
+gam = 0.01
 hop_symparams = Dict{String,Matrix{ComplexF64}}(
-    "A1g" => [0.1;;]
+    "A1g" => [sqrt(2gam/pi);;]
 )
 
 # additional input for run=="spectral"
-K_factor = 3.0
+K_factor = 2.0
 
 # choose what to calculate
-run = "imp"
+run = "spectral"
 
 if run=="multiplets"
 

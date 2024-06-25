@@ -1,5 +1,5 @@
-function compute_multiplets( symmetry::String , # "PS": Pointgroup-Spin, "D": Doublegroup, "J": Total angular momentum
-                             multiplets_path::String ; # where to store the output
+function compute_multiplets( symmetry::String ; # "PS": Pointgroup-Spin, "D": Doublegroup, "J": Total angular momentum
+                             multiplets_path::String="multiplets" , # where to store the output
                              irrep::SF="" ,
                              clebschgordan_path::String="" ,
                              verbose::Bool=false ) where {SF<:Union{String,Float64}}
