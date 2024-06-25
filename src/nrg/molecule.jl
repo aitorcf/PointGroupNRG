@@ -525,7 +525,7 @@ function nrg_molecule(
     print( "Impurity multiplet setup... " )
     @time begin 
     mm_i,m_imp = setup_impmultinfo( 
-                    multiplets_block ,
+                    collect(multiplets_block),
                     irrEU ,
                     betabar ,
                     oindex2dimensions )
@@ -690,7 +690,7 @@ function nrg_molecule(
         extra_iterations = (dmnrg || iszero(spectral_temperature)) ? 0 : extra_iterations
         spectral_functions = Dict{String,Dict{IntMultiplet,Matrix{Float64}}}(
             "spectral"=>Dict(
-            (G_a...,r_a)=>reduce(vcat,sort([[sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
+            (G_a...,r_a)=>reduce(vcat,sort([[K_factor*sign*iterscale(scale,L,n) 0.0] for n in 0:(iterations+extra_iterations) for sign in [-1,1]],by=x->x[1]))
                 for (G_a,R_a) in G2R_a for r_a in 1:R_a
             )
         )
@@ -798,7 +798,7 @@ function nrg_molecule(
             kondotemp = 0.4*
                         first_excited_energy*
                         sqrt(abs(rhoJ))*
-                        exp(-ground_multiplet[3]/(2*rhoJ))
+                        exp(-1.0/rhoJ)
             println( "-----------------------------" )
             println( "Magnetic coupling constants:" )
             print( "j = ")

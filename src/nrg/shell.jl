@@ -1061,7 +1061,6 @@ function NRG( label::String ,
         # impurity info
         if compute_impmults
             mm_i = imp_mults( irrEU ,
-                              oindex2dimensions ,
                               combinations_uprima ,
                               mm_i )
             m_imp::Vector{Float64} = mult_thermo( irrEU ,

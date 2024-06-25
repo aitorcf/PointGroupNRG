@@ -345,6 +345,31 @@ function setup_impmultinfo(
 
     return mm_i,m_imp
 end
+function setup_impmultinfo( 
+            orbital_multiplets_int::Vector{IntMultiplet} ,
+            irrEU ,
+            betabar ,
+            oindex2dimensions
+    )::Tuple{Dict{IntMultiplet,Vector{Float64}},Vector{Float64}}
+
+    mult2index = Dict( m=>i for (i,m) in 
+                       enumerate(orbital_multiplets_int))
+    mm_i::Dict{IntMultiplet,Vector{Float64}} = Dict(
+        m=>[
+            (i==mult2index[m] ? 1.0 : 0.0)
+            for i in 1:length(orbital_multiplets_int)
+        ]
+        for m in orbital_multiplets_int
+    )
+    m_imp::Vector{Float64} = mult_thermo( 
+        irrEU ,
+        betabar ,
+        oindex2dimensions ,
+        mm_i
+    )
+
+    return mm_i,m_imp
+end
 function update_impmultinfo( 
                 mm_i ,
                 irrEU ,
