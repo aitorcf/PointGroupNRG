@@ -838,7 +838,7 @@ function nrgfull(
     model = begin
         if length(spectrum)!==0 && length(interaction)==length(impurity_config)==length(onsite)==0 && input_file==""
             "ionic"
-        elseif (length(onsite)!==0 && length(interaction)!==0 && length(impurity_config!==0)) && length(spectrum)==0 && input_file==""
+        elseif length(impurity_config!==0) && length(spectrum)==0 && input_file==""
             "standard"
         elseif input_file!=="" && length(spectrum)==length(onsite)==length(interaction)==length(impurity_config)==0
             "input"
