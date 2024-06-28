@@ -442,10 +442,6 @@ method. It can be used to calculate thermodynamic functions
         interaction::{Tuple{String,Float64},Matrix{ComplexF64}}=Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }() ,
         spectrum::Dict{ClearIrrep,Vector{Float64}}=Dict{ClearIrrep,Vector{Float64}}() ,
         lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}}=Dict{ClearTripleG,Array{ComplexF64,4}}() ,
-        # run only until a certain point for partial information
-        # - 2-particle multiplets
-        # - impurity spectrum
-        # - impurity-shell spectrum
         until::String = "",
         clebschgordan_path::String="" ,
         identityrep::String="" ,
@@ -1112,4 +1108,8 @@ This is not implemented in \texttt{PointGroupNRG}.
 \label{nrg_bandwidth}
 Half band-width $D$ used in the NRG calculation.
 
+\subsubsection{\texttt{print\_spectrum\_levels::Int64=0}}
+If \texttt{print\_spectrum\_levels!==0}, the lowest $M$
+multiplet eigenenergies are printed after each NRG step,
+where $M$ is the value of \texttt{print\_spectrum\_levels}.
 \end{document}
