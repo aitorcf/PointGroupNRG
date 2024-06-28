@@ -813,7 +813,7 @@ function nrgfull(
             discretization::String=discretization_default ,
             tridiagonalization::String=tridiagonalization_default ,
             enforce_particle_hole_symmetry::Bool=true,
-            mine::Float64=0.0 ,
+            minimum_eigenenergy::Float64=0.0 ,
             betabar::Float64=1.0 ,
             spectral::Bool=false ,
             spectral_broadening::Float64=0.5 ,
@@ -824,7 +824,7 @@ function nrgfull(
             dmnrg::Bool=false ,
             compute_impurity_projections::Bool=false ,
             scale_asymptotic::Bool=true ,
-            band_width::Float64=1.0 ,
+            half_band_width::Float64=1.0 ,
             print_spectrum_levels::Int64=0 ,
     ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
 
@@ -1201,7 +1201,7 @@ function nrgfull(
     # largest among the first asymptotic codiagonal coupling terms, is just 
     # 1.0 because for the sake of generality we do not assume the asymptotic
     # form (yet?).
-    scale::Float64 = band_width
+    scale::Float64 = half_band_width
     # 
     if scale_asymptotic
         codiagonals_first = collect(values(channels_codiagonals[10]))[1][1]
@@ -1703,7 +1703,7 @@ function nrgfull(
             oindex2dimensions,
             channels_codiagonals,
             max_SJ2;
-            mine=mine,
+            mine=minimum_eigenenergy,
             z=z,
             compute_impmults=compute_impurity_projections,
             mult2index=mult2index,
@@ -1739,7 +1739,7 @@ function nrgfull(
                    oindex2dimensions,
                    channels_codiagonals ,
                    max_spin2 ;
-                   mine=mine ,
+                   mine=minimum_eigenenergy ,
                    distributed=distributed ,
                    z=z ,
                    dmnrg=dmnrg ,
@@ -1778,7 +1778,7 @@ function nrgfull(
              oindex2dimensions,
              channels_codiagonals ,
              max_spin2 ;
-             mine=mine ,
+             mine=minimum_eigenenergy ,
              distributed=distributed ,
              z=z ,
              dmnrg=dmnrg ,
@@ -1831,7 +1831,7 @@ function nrgfull(
             oindex2dimensions,
             channels_codiagonals,
             max_SJ2;
-            mine=mine,
+            mine=minimum_eigenenergy,
             z=z,
             compute_impmults=compute_impurity_projections,
             mult2index=mult2index,
@@ -2461,7 +2461,7 @@ function NRG_allsymmetries(
         isdir("impurityprojections") || mkdir("impurityprojections")
 
         if calculation=="IMP" 
-            write_impurity_info( impmults , orbital_multiplets , mult2index , label , z )
+            write_impurity_info( impmults , orbital_multiplets , mult2index , label , z , temperatures_evenodd)
         end
 
     end

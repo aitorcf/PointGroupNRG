@@ -541,12 +541,14 @@ function write_impurity_info(
         orbital_multiplets,
         mult2index::Dict{ClearMultiplet,Int64},
         label::String,
-        z::Float64)
+        z::Float64,
+        temperatures::Vector{Float64})
+
     # name of the output file
     filename = "impurityprojections/imp_proj_$(label)_z$z.dat"
 
     # data as matrix
-    impurity_multiplet_weights_with_iterations = [ Any[Int64(i),weights...] for (i,weights) in enumerate(impurity_multiplet_weights) ]
+    impurity_multiplet_weights_with_iterations = [ Any[Int64(i),temperatures[end-(i-1)],weights...] for (i,weights) in enumerate(impurity_multiplet_weights[2:end]) ]
     impurity_multiplet_weights_matrix = Matrix(hcat(impurity_multiplet_weights_with_iterations...)')
 
     # write to file
@@ -554,7 +556,7 @@ function write_impurity_info(
 
         # header
         header = """# thermodynamic weights of orbital multiplets (columns)
-                    # for each NRG iteration (rows)\n# iteration"""
+                    # for each NRG iteration (rows)\n# iteration | temperature"""
         for orbital_multiplet in orbital_multiplets 
             header *= " | $orbital_multiplet"
         end
