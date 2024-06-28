@@ -1,0 +1,1115 @@
+\documentclass[notitlepage]{article}
+
+\usepackage[T1]{fontenc}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+
+\usepackage{hyperref}
+
+\usepackage{biblatex}
+\addbibresource{manual.bib}
+
+\newcommand{\ket}[1]{|#1\rangle}
+\newcommand{\bra}[1]{\langle #1 |}
+
+\title{PointGroupNRG Manual}
+\author{Aitor Calvo-Fernández, acalvo049@ehu.eus}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\section{Overview}\label{overview}
+This manual describes how to use the \texttt{PointGroupNRG}
+code. Some context and theory are introduced at certain
+points, but it does not serve as a comprehensive guide to
+the NRG technique. For a comprehensive review of the NRG method, see
+Ref. \cite{bulla2008}. For a description of the theory and
+implementation specific to \texttt{PointGroupNRG}, see Refs.
+\cite{calvo-fernandez2024} and [new arxiv], which also
+contain useful references specific to the applications of
+symmetry in the NRG.
+\par
+This manual starts in Section \ref{workflow} by describing
+the typical steps in the preparation and execution of an NRG
+calculation. Section \ref{clebsch-gordan} describes the
+format for the Clebsch-Gordan coefficients that have to be
+provided in order to use finite point or double group
+symmetries. Sections \ref{multiplet_calculation} and
+\ref{nrg} deal with the main functions provided
+by the code and are organized by describing first the
+required arguments and then the optional ones, introducing
+the necessary information along the way. Section
+\ref{multiplet_calculation} covers the
+\texttt{compute\_multiplets} function of the
+\texttt{PointGroupNRG.MultipletCalculator} submodule, which
+constitutes the first step in the setup of a model. Section
+\ref{nrg} gives information about the
+\texttt{nrgfull} function of the
+\texttt{PointGroupNRG.NRGCalculator} submodule, which
+constructs the model and solves it using the NRG.
+\par
+The functions \texttt{compute\_multiplets} and
+\texttt{nrgfull} as they are defined in their respective
+submodules have more optional keyword arguments than those
+described here. The arguments not described here
+are in general related to features in development and
+changing their value might cause the program to crash.
+
+\section{Julia basics}
+To make the manual self-contained, here we describe the
+variable types required to use the code and how to construct
+them. Usage examples can be found in the 
+\texttt{examples/} directory. Nonetheless, we encourage
+using the official Julia documentation \cite{juliadoc}.
+\par
+The main functions in \texttt{PointGroupNRG} have typed
+arguments, meaning that the variables given as input need to
+be of the required type for the function to recognize them. 
+Since it is not possible in Julia to define a variable to be
+of a definite type in global scope as one would do inside a
+function, \textit{e.g.} \texttt{n::Int64=1}, here we describe 
+how to initialize variables to match the desired type.
+
+\subsection{Simple variables}
+\begin{itemize}
+    \item \texttt{Int64}: Integer numbers with 64-bit
+        precision. For example, \texttt{n=1} initializes
+        \texttt{n} as an \texttt{Int64}.
+    \item \texttt{Float64}: Real floating point number with
+        64-bit precision. For example, \texttt{f=1.0}
+        initializes \texttt{f} as a \texttt{Float64}.
+    \item \texttt{ComplexF64}: Complex floating point number
+        with 64-bit precision. For example,
+        \texttt{c=1.0+0.0im} or \texttt{c=ComplexF64(1.0)}
+        initialize \texttt{c} as the same
+        \texttt{ComplexF64}.
+    \item \texttt{String}: For example,
+        \texttt{s="PointGroupNRG"} initializes \texttt{s} as
+        a \texttt{String}.
+    \item \texttt{Function}: A function is a variable type
+        in Julia just as any of the ones mentioned above.
+        For example, $f=x->0.5$, $f(x)=0.5$ and 
+        \begin{verbatim}
+            function f(x)
+                return 0.5
+            end
+        \end{verbatim}
+        define equal functions mapping any value \texttt{x}
+        to \texttt{0.5}.
+\end{itemize}
+
+\subsection{Containers}
+\begin{itemize}
+    \item \texttt{Tuple\{T1,T2,...,Tn\}}: immutable
+        aggregation of \texttt{n} values, each with its own
+        type. For example, \texttt{t=(1,"a",1.0)} is a tuple
+        with type \texttt{Tuple\{Int64,String,Float64\}}.
+    \item \texttt{Array\{T,N\}}: \texttt{N}-dimensional array 
+        containing elements of type \texttt{T}. For example, 
+        \texttt{zeros(ComplexF64,2,3,4)} creates a 3-dimensional
+        array of complex numbers with dimensions \texttt{2},
+        \texttt{3} and \texttt{4} in the indices 1, 2 and 3,
+        respectively.
+    \item \texttt{Vector\{T\}}: 1-dimensional array containing
+        elements of type \texttt{T}. For example,
+        \texttt{v=[1.0 2.0 3.0]} and \texttt{v=Float64[1 2 3]}
+        create equal vectors of \texttt{Float64} elements.
+    \item \texttt{Matrix\{T\}}: 2-dimensional array containing
+        elements of type \texttt{T}. For example,
+        \texttt{m=[1.0+0.0im 0.0im; 0.0im 1.0+0.0im]} and
+        \texttt{m=ComplexF64[1 0; 0 1]} create equal
+        matrices containing elements of type
+        \texttt{ComplexF64}. One-dimensional matrices can be
+        created as, \textit{e.g.},
+        \texttt{m1d=[1.0+0.0im;;]}.
+    \item \texttt{Dict\{Tk,Tv\}}: Dictionary containing keys
+        of type \texttt{Tk} pointing to values of type
+        \texttt{Tv}. For example, \texttt{d=Dict("a"=>[1.0])}
+        and
+        \texttt{d=Dict\{String,Vector\{Float64\}\}("a"=>[1.0])}
+        create equal dictionaries of type
+        \texttt{Dict\{String,Vector\{Float64\}\}}.
+\end{itemize}
+
+\section{Symmetry and irreducible representations}
+\label{symmetry_and_irreducible_representations}
+The code works for three symmetry types, one for each
+symmetry-breaking situation and each with its own
+irreducible representations, although the latter share the
+same structure:
+\begin{itemize}
+    \item Crystal field:
+        \begin{equation}
+            G_\text{UPS} = 
+            U(1)_\text{C} \otimes
+            P_\text{O} \otimes
+            SU(2)_\text{S}
+        \end{equation}
+        is the combination of the unitary charge symmetry
+        $U(1)_\text{C}$ leading to particle conservation, the
+        orbital point group symmetry $P_\text{O}$, and the
+        rotational symmetry in spin space $SU(2)_\text{S}$ leading
+        to total spin conservation. The irreps are 
+        \begin{equation}
+            \Gamma_\text{UPS} = (N,I,S),
+        \end{equation}
+        where $N$ is the particle number, $I$ is the point
+        group irrep, and $S$ is the total spin, and they are
+        represented in the code with variables of the type
+        \texttt{Tuple\{Int64,String,Float64\}}, for instance 
+        \texttt{(2,"A1g",2.0)} represents the irrep of
+        states with $N=2$ particles, orbital symmetry
+        $I=A_{1g}$ and total spin $S=2$; this
+        is the same representation that is going to be used
+        for all symmetry groups: the \texttt{Int64} slot is
+        used for the particle number, the \texttt{String}
+        slot for the finite (point or double) group irrep,
+        and the \texttt{Float64} for the total spin or total
+        angular momentum.
+    \item Spin-orbit coupling:
+        \begin{equation}
+            G_\text{UJ} =
+            U(1)_\text{C} \otimes
+            SU(2)_\text{OS}
+        \end{equation}
+        is the combination of the unitary charge symmetry
+        $U(1)_\text{C}$ leading to particle conservation and
+        the spin-orbital rotation group $SU(2)_\text{OS}$
+        leading to the conservation of total angular
+        momentum. The irreps are of the type
+        \texttt{(2,"anything",3.5)}, which is the irrep of
+        states with $N=2$ particles and total angular momentum
+        $J=3.5$; \texttt{"anything"} in the \texttt{String} slot 
+        just means that the slot is unused,
+        so it can be filled with any \texttt{String} and the
+        code will internally handle it as an identity irrep.
+    \item Crystal field and spin-orbit coupling:
+        \begin{equation}
+            G_\text{UD} =
+            U(1)_\text{C} \otimes
+            D_\text{OS}
+        \end{equation}
+        is the combination of the unitary charge symmetry
+        $U(1)_\text{C}$ leading to particle conservation and
+        the spin-orbital double group $D_\text{OS}$. 
+        The irreps are of the type \texttt{(2,"A1g",0.0)}, which 
+        is the irrep of states with $N=2$ particles
+        and belonging to the double group irrep $I="A1g"$;
+        \texttt{0.0} is the identity irrep of angular
+        momentum (spin $S$ or total angular momentum $J$),
+        which serves to turn off the continuous rotation
+        symmetry $SU(2)$.
+\end{itemize}
+When requiring irreps with particle numbers $N=1$ or $N=2$,
+the code follows the following convention:
+\begin{itemize}
+    \item $N=1$: One-particle irreps are completely
+        specified by one quantum number depending of the
+        symmetry of the model:
+        \subitem  ad
+\end{itemize}
+
+$G_\text{UD}$ and $G_\text{UJ}$.
+
+\section{Workflow}\label{workflow}
+The number of steps required for an NRG calculation varies
+depending on the amount of setup information that is already
+available. Here we describe all the necessary steps for a
+full calculation starting from scratch for a model requiring
+Clebsch-Gordan coefficients for a point or double group.
+The workflow consists of three main steps:
+\begin{enumerate}
+    \item Prepare the directory containing the
+        Clebsch-Gordan coefficients following the format
+        specificed in Section \ref{clebsch-gordan}. These
+        coefficients will then be read by the functions
+        executed in the next steps. This step is not
+        required for models with total angular momentum
+        conservation, since the Clebsch-Gordan coefficients
+        for the $SU(2)$ spin-orbital symmetry group are
+        computed by the program.
+    \item Compute the multiplet states for the electronic
+        degrees of freedom of the conduction band and, if
+        necessary, for the impurity (see Section
+        \ref{nrg_calculation}). This is achieved with the
+        \texttt{compute\_multiplets} function described in
+        Section \ref{multiplet_calculation}, which
+        calculates the multiplet states and stores them into
+        an appropriate format. This step has to be performed
+        only once for each irrep of the electronic degrees
+        of freedom of a given model, so it is recommended to
+        include it in an independent script separate from
+        step 3.
+    \item Construct the model and perform the NRG
+        calculation using the \texttt{nrgfull} function
+        described in Section \ref{nrg_calculation}.
+\end{enumerate}
+
+\section{Clebsch-Gordan coefficients}\label{clebsch-gordan}
+Calculations for models with point or double group
+symmetries require the Clebsch-Gordan coefficients for the
+group given in the following format: The coefficients are
+organized according to the reduction of irrep products. If
+\texttt{A} and \texttt{B} are the user-given names of two
+irreps of the finite group $G$, then their decomposition is
+\begin{equation}
+    \texttt{A} \boxtimes \texttt{B}
+    =
+    \oplus_\texttt{C} \texttt{L(C)} \texttt{C},
+\label{eq:A_times_B}
+\end{equation}
+where \texttt{C} are irreps of $G$ and \texttt{L(C)} is the
+number of times \texttt{C} appears in the decomposition. On
+top of the names, the irreps of $G$ must be arbitrarily
+numbered by the user, starting from 0. If \texttt{A},
+\texttt{B} and \texttt{C} are the \texttt{a}-th,
+\texttt{b}-th and \texttt{c}-th irreps of $G$, respectively,
+then the Clebsch-Gordan coefficients of the irrep
+decomposition of \texttt{A}$\boxtimes$\texttt{B} must be
+contained in a file called \texttt{axb\_AxB.txt}. That file
+should be organized in paragraphs separated by blank lines,
+each paragrah containing the Clebsch-Gordan coefficients
+associated to the subspaces belonging to each irrep in the
+following format:
+\begin{verbatim}
+    c C l
+    ( 1 1 | 1 ) = <( A, 1 ; B, 1 | C, 1 )>
+    ...
+\end{verbatim}
+where \texttt{l}$=1,\dots,$\texttt{L} labels the distinct
+subspaces belonging to \texttt{C} that arise in the
+decomposition of \texttt{A}$\boxtimes$\texttt{B},  and
+\texttt{<( A, 1 ; B, 1 | C, 1 )>} is meant to be substituted by
+the value of the Clebsch-Gordan coefficient given in any
+format that Julia can parse into a complex number. The dots
+\texttt{...} have to be filled with the rest of the
+Clebsch-Gordan coefficients following the same format,
+\begin{verbatim}
+    ( gA gB | gC ) = <( A, gA ; B, gB | C, gC )
+\end{verbatim}
+where \texttt{gA}, \texttt{gB} and \texttt{gC} are the
+partner numbers of the irreps \texttt{A}, \texttt{B} and
+\texttt{C}, respectively. Only the non-zero coefficients are
+necessary. To compare this with the notation in Refs.
+\cite{calvo-fernandez2024} and [new arxiv], substitute the
+irreps (partners) following the rule
+$\Gamma_A\leftrightarrow$\texttt{A}
+($\gamma_A\leftrightarrow$\texttt{gA}),
+$\Gamma_B\leftrightarrow$\texttt{B}
+($\gamma_B\leftrightarrow$\texttt{gB}) and
+$\Gamma_C\leftrightarrow$\texttt{C}
+($\gamma_C\leftrightarrow$\texttt{gC}). The files for all
+the irrep combinations \texttt{A}$\boxtimes$\texttt{B} with
+\texttt{a}$\geq$\texttt{b} (to avoid redundancy) must be
+stored into a directory. 
+
+\section{Multiplet calculation: \texttt{compute\_multiplets}}
+\label{multiplet_calculation}
+The function \texttt{compute\_multiplets} computes the
+many-body multiplet states arising from the combination of
+electrons in states belonging to the same one-electron
+irrep. If the impurity and conduction electrons occupy
+states belonging to irreps $\Gamma_1$ and $\Gamma_2$, for
+instance, with dimensions $\text{dim}(\Gamma_1)$ and
+$\text{dim}(\Gamma_2)$, respectively, then
+\texttt{compute\_multiplets} has to be run once for
+$\Gamma_1$ and once for $\Gamma_2$. This is also the case if
+there are several multiplet subspaces belonging to
+$\Gamma_1$, for example, because the resulting states are
+distinguished only by an outer multiplicity label that is
+taken care of by \texttt{nrgfull} (see Section
+\ref{nrg}). The function is defined as
+itemize\begin{verbatim}
+function compute_multiplets( 
+    symmetry::String ;
+    irrep::SF="" ,
+    multiplets_path::String="multiplets" ,
+    clebschgordan_path::String=""
+) where {SF<:Union{String,Float64}}
+\end{verbatim}
+\subsection{Necessary arguments}
+
+\subsubsection{\texttt{symmetry::String}}
+\label{multiplets_symmetry}
+Determines the type of symmetry. The accepted values are:
+\begin{itemize}
+    \item \texttt{"pointspin"} or \texttt{"PS"}: Uses
+        the symmetry type
+        \begin{equation}
+            G_\text{UPS} = 
+            U(1)_\text{C} \otimes
+            P_\text{O} \otimes
+            SU(2)_\text{S},
+        \end{equation}
+        which is the outer direct product of unitary charge
+        symmetry $U(1)_\text{C}$ (particle conservation),
+        the orbital point group $P_\text{O}$, and spin
+        rotation symmetry $SU(2)_\text{S}$ (conservation of
+        total spin).
+    \item \texttt{"doublegroup"} or \texttt{"D"}: Uses 
+        the symmetry type
+        \begin{equation}
+            G_\text{UOS} =
+            U(1)_\text{C} \otimes
+            D_\text{OS},
+        \end{equation}
+        which is the outer direct product of unitary charge
+        symmetry $U(1)_\text{C}$ (particle conservation) and
+        the spin-orbital double group $D_\text{OS}$.
+    \item \texttt{"totalangularmomentum"} or \texttt{"J"}:
+        Uses the symmetry type
+        \begin{equation}
+            G_\text{UJ} =
+            U(1)_\text{C} \otimes
+            SU(2)_\text{OS},
+        \end{equation}
+        which is the outer direct product of unitary charge
+        symmetry $U(1)_\text{C}$ (particle conservation) and
+        spin-orbital rotational invariance (conservation of
+        total angular momentum).
+\end{itemize}
+
+\subsection{Optional keyword arguments}
+
+\subsubsection{\texttt{irrep::SF=""}}
+\label{multiplets_irrep}
+One-electron irrep for which to compute the multiplet
+states. The specification of the irrep changes depending on
+the value of \texttt{symmetry} (\ref{multiplets_symmetry}):
+\begin{itemize}
+    \item If \texttt{symmetry=="PS"} or
+    \texttt{symmetry=="pointspin"}, then \texttt{irrep}
+    must be a \texttt{String} and is the name of the name of
+    the point group irrep as it appears in the
+    Clebsch-Gordan coefficient files (see \ref{clebsch-gordan}).
+    \item If \texttt{symmetry=="D"} or
+    \texttt{symmetry=="doublegroup"}, then \texttt{irrep}
+    must be a \texttt{String} and is the name of the name of
+    the double group irrep as it appears in the
+    Clebsch-Gordan coefficient files (see \ref{clebsch-gordan}).
+    \item If \texttt{symmetry=="J"} or
+    \texttt{symmetry="totalangularmomentum"}, then
+    \texttt{irrep} must be a \texttt{Float} and is the value
+    of the total angular momentum $J$ of the electrons,
+    where $\mathbf J=\mathbf L + \mathbf S$.
+\end{itemize}
+
+\subsubsection{\texttt{clebschgordan\_path::String=""}}
+\label{multiplets_clebschgordan}
+Absolute or relative path of the directory where the
+Clebsch-Gordan coefficients are stored (see
+\ref{clebsch-gordan}). It must be provided only if
+\texttt{symmetry=="D"}, \texttt{symmetry=="doublegroup"},
+\texttt{symmetry=="PS"}, \texttt{symmetry=="pointspin"},
+as the Clebsch-Gordan coefficients of $SU(2)$ are computed
+by the program.
+
+\subsubsection{\texttt{multiplets\_path::String="multiplets"}}
+\label{multiplets_multipletspath}
+Absolute or relative path of the parent directory where the
+directories containing the multiplet states for the chosen
+irreps (see \ref{multiplets_irrep}) will be stored. It must
+be the same for irreps intented to be used in the same NRG
+calculation. If it does not already exist, it is
+automatically created.
+
+\section{NRG calculation: \texttt{nrgfull}}\label{nrg}
+The \texttt{nrgfull} function constructs the model from the
+input and the multiplet states computed by
+\texttt{compute\_multiplets} (see
+\ref{multiplet_calculation}), and it solves it using the NRG
+method. It can be used to calculate thermodynamic functions
+(see \ref{nrg_calculation}), spectral functions (see
+\ref{nrg_spectral}), and/or thermodynamic weights (see)
+
+\begin{verbatim}
+    function nrgfull(
+        symmetry::String ,
+        label::String ,
+        L::Float64 ,
+        iterations::Int64 ,
+        cutoff::IF ,
+        shell_config::Dict{SF,Int64} ,
+        tunneling::Dict{SF,Matrix{ComplexF64}} ;
+        multiplets_path::String="multiplets" ,
+        calculation::String="IMP" ,
+        impurity_config::Dict{SF,Int64}=Dict{SF,Int64}() ,
+        onsite::Dict{SF,Vector{ComplexF64}}=Dict{SF,Vector{ComplexF64}}() ,
+        interaction::{Tuple{String,Float64},Matrix{ComplexF64}}=Dict{ Tuple{String,Float64} , Matrix{ComplexF64} }() ,
+        spectrum::Dict{ClearIrrep,Vector{Float64}}=Dict{ClearIrrep,Vector{Float64}}() ,
+        lehmann_iaj::Dict{ClearTripleG,Array{ComplexF64,4}}=Dict{ClearTripleG,Array{ComplexF64,4}}() ,
+        # run only until a certain point for partial information
+        # - 2-particle multiplets
+        # - impurity spectrum
+        # - impurity-shell spectrum
+        until::String = "",
+        clebschgordan_path::String="" ,
+        identityrep::String="" ,
+        z::Float64=0.0 ,
+        max_SJ2::Int64=10 ,
+        channels_dos::Dict{ SF , Vector{Function} }=Dict{ SF , Vector{Function} }() ,
+        minimum_eigenenergy::Float64=0.0 ,
+        betabar::Float64=1.0 ,
+        spectral::Bool=false ,
+        broadening_distribution::String="loggaussian" ,
+        spectral_broadening::Float64=0.5 ,
+        K_factor::Float64=2.0 ,
+        compute_impurity_projections::Bool=false ,
+        half_band_width::Float64=1.0 ,
+        print_spectrum_levels::Int64=0 ,
+    ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
+\end{verbatim}
+
+\subsection{Necessary arguments}
+\subsubsection{\texttt{symmetry::String}}
+\label{nrg_symmetry}
+See \ref{multiplets_symmetry}.
+
+\subsubsection{\texttt{label::String}}
+\label{nrg_label}
+Label or name given to the system. It will appear in the
+names of the output files: thermodynamic functions, spectral
+functions and impurity projections. Output files are
+ovewritten by subsequent calculations with the same value of
+\texttt{label}.
+
+\subsubsection{\texttt{L::Float64}}
+\label{nrg_L}
+Discretization parameter $\Lambda$. See Ref. \cite{bulla2008}.
+Lower values provide more accurate results, larger values
+result in convergence for lower cutoffs (see
+\ref{nrg_cutoff}). Large values of $\Lambda$ usually produce
+low resolution thermodynamic and spectral functions that can
+contain spurious oscillations. Oscillations can be removed
+in many cases by averaging over even and odd step results,
+which is done automatically, resulting in improved spectral
+functions and often completely satisfactory thermodynamic
+functions. It is possible to go further by averaging over
+various discretizations (see \ref{nrg_z}). In general,
+it is recommended to use low values $\Lambda\in[2,3]$ for the spectral
+functions, while for thermodynamic functions values as large
+as $\Lambda=10$ often give satisfactory results.
+
+\subsubsection{\texttt{iterations::Int64}}
+\label{nrg_iterations}
+Number of iterations in the NRG calculation. Lower
+temperatures (for thermodynamic function calculations) and
+lower energies (for spectral function calculations) are
+reached with more iterations.
+
+\subsubsection{\texttt{cutoff:IF}}
+\label{nrg_cutoff}
+Cutoff imposed on the multiplets: after each iterations,
+multiplets above the cutoff are discarded. The type of
+cutoff varies depending on the type of the input
+\texttt{cutoff}:
+\begin{itemize}
+    \item If \texttt{cutoff} is an \texttt{Int},
+    \textit{e.g.} \texttt{300}, then it
+    specifies the number of multiplets kept at each
+    iteration.
+    \item If \texttt{cutoff} is a \texttt{Float},
+    \textit{e.g.} \texttt{7.0}, then it
+    specifies the cutoff energy: multiplets with energies
+    larger than that are discarded.
+\end{itemize}
+In both cases, the program tries to avoid breaking
+accidental degeneracies by checking for a small energy
+window above the imposed cutoff and keeping also those
+states.
+
+\subsubsection{\texttt{shell\_config::Dict\{SF,Matrix\{ComplexF64\}\}}}
+\label{nrg_shellconfig}
+It specifies the configuration of the conduction channels.
+It has the structure
+\begin{verbatim}
+    Dict( 
+        G1 => n1,
+        G2 => n2,
+        ...
+    )
+\end{verbatim}
+where \texttt{Gi} are the irreps in the format described in
+\ref{multiplets_irrep} and \texttt{ni} specify
+the number of channels with the symmetry defined by the
+irrep. The multiplet states for each irrep \texttt{Gi} must
+have been calculated previously with
+\texttt{compute\_multiplets} (\ref{multiplet_calculation}).
+
+\subsubsection{\texttt{tunneling::Dict\{SF,Matrix\{ComplexF64\}\}}}
+\label{nrg_tunnneling}
+It specifies the tunneling amplitudes $V(\Gamma_a)_{r_a
+r_b}$ as a dictionary with the format
+\begin{verbatim}
+    Dict(
+        G1 => amplitudes1,
+        G2 => amplitudes2,
+        ...
+    )
+\end{verbatim}
+where \texttt{Gi} are the irreps $\Gamma_a$ in the format 
+described in \ref{multiplets_irrep} and \texttt{amplitudesi} are the
+amplitudes given as a \texttt{Matrix{ComplexF64}} with indices $r_a,r_b$.
+
+\subsection{Optional keyword arguments}
+
+\subsubsection{\texttt{multiplets\_path::String="multiplets"}}
+\label{nrg_multipletspath}
+Same as \ref{multiplets_multipletspath}.
+
+\subsubsection{\texttt{calculation::String="IMP"}}
+\label{nrg_calculation}
+The value of this variable sets whether the impurity is
+included in the calculation or not, and is relevant in
+particular for the calculation of thermodynamic functions,
+which is performed automatically in every case. These are
+the possible values:
+\begin{itemize}
+    \item \texttt{calculation="IMP"}: the impurity is
+    included in the calculation, which is necessary for
+    spectral function calculations (\ref{nrg_spectral}) and
+    impurity projection
+    (\ref{nrg_computeimpurityprojections}) calculations. The
+    thermodynamic functions for the model are stored in the
+    directory \texttt{thermodata/}, which is created
+    automatically if it does not previously exist, and are
+    distinguished by containing \texttt{imp} in their names.
+    If a \texttt{calculation="CLEAN"} run has been performed
+    (see below), the impurity contribution to the
+    thermodynamic functions is automatically computed by
+    subtracting the \texttt{"CLEAN"} results from the
+    \texttt{"IMP"} results (see Ref. \cite{bulla2008} for
+    more details), and the resulting functions are stored in
+    \texttt{thermodata} and distinguished by containing
+    \texttt{diff} in their names. 
+    \item \texttt{calculation="CLEAN"}: the impurity is
+    excluded for the calculation, leaving only the
+    conduction channels in the model. The resulting
+    thermodynamic functions are stored in
+    \texttt{thermodata} and distinguished by containing
+    \texttt{clean} in their names. This is typically only
+    used for calculating the impurity contribution to the
+    thermodynamic functions. 
+\end{itemize}
+
+\subsubsection{\texttt{impurity\_config::Dict\{SF,Int64\}}}
+\label{nrg_impurityconfig}
+It defines the degrees of freedom of the impurity for the
+standard Anderson model (not the ionic model) defined in
+terms of the on-site energies (\ref{nrg_onsite}) and the
+interaction term (\ref{nrg_interaction}). The program
+assumes that one model or the other is intended based on the
+value of \ref{nrg_spectrum} and it checks whether the rest
+of the necessary variables for that model are provided.
+\texttt{impurity\_config} follows the
+same format as \ref{nrg_shellconfig} and it also requires
+the previous calculation of the multiplet states using
+\texttt{compute\_multiplets} (\ref{multiplet_calculation}).
+
+\subsubsection{\texttt{onsite::Dict\{SF,Vector\{ComplexF64\}\}=Dict\{...\}\}()}}
+\label{nrg_onsite}
+On-site energy term 
+\begin{equation}
+    \sum_a
+    \epsilon(\Gamma_a)_{r_a}
+    c^\dagger_a c_a
+\end{equation}
+given in the format
+\begin{verbatim}
+    Dict(
+        G1 => energies1,
+        G2 => energies2
+        ...
+    )
+\end{verbatim}
+where \texttt{Ga} is the irrep $\Gamma_a$ given in the same
+format as \ref{multiplets_irrep} and \texttt{energiesa} is a
+vector with index $r_a$ containing the eigenenergies
+corresponding to the multiplets $m_a=(\Gamma_a,r_a)$. For
+more information, see Refs. \cite{calvo-fernandez2024} and
+[new arxiv].
+
+\subsubsection{\texttt{interaction::Dict\{Tuple\{String,Float64\},Matrix\{ComplexF64\}\}=Dict\{...\}()}}
+\label{nrg_interaction}
+Parameters of the interaction term
+\begin{equation}
+    \sum_{a,b,c,d} U_{abcd} 
+    c^\dagger_a c^\dagger_b
+    c_c c_d
+\end{equation}
+defined by the set of parameters $U(\Gamma_u)_{r_u r_v}$
+from which the rest are constructed following the procedure
+described in Ref. \cite{calvo-fernandez2024}. The argument
+\texttt{interaction} contains the parameters $U(\Gamma_u)_{r_u r_v}$
+in the format
+\begin{verbatim}
+    Dict(
+        G1 => matrix_elements1,
+        G2 => matrix_elements2
+        ...
+    )
+\end{verbatim}
+where \texttt{Gu} are the two-particle irreps $\Gamma_u$ and
+\texttt{matrix\_elements} are the matrix elements
+$U(\Gamma_u)_{r_u r_v}$ for that irrep $\Gamma_u$ with
+$r_u,r_v$ as indices. The irreps \texttt{Gu} are given in 
+\texttt{Tuple\{String,Float64\}}, which has to fulfill the
+following conditions depending on the symmetry of the
+system:
+\begin{itemize}
+    \item First entry (\texttt{String}): It is the point or
+    double group irrep. If \texttt{symmetry=="J"} or
+    \texttt{symmetry=="totalangularmomentum"}, the program
+    will automatically transform the given value to the
+    standard identity irrep value \texttt{"A"}.
+    \item Second entry (\texttt{Float64}): If
+    \texttt{symmetry=="PS"} or
+    \texttt{symmetry=="pointspin"}, it is the total spin
+    quantum number. If \texttt{symmetry=="J"} or
+    \texttt{symmetry=="totalangularmomentum"}, it is the
+    total angular momentum quantum number. Otherwise, the
+    given value will be transformed to the identity irrep value 
+    \texttt{0.0}.
+\end{itemize}
+See also \ref{nrg_spectrum}.
+
+
+\subsubsection{\texttt{spectrum::Dict\{Tuple\{Int64,String,Float64\},Vector\{Float64\}\}=Dict\{...\}()}}
+\label{nrg_spectrum}
+It is the spectrum of the impurity in the ionic model, which
+defines the impurity term in the Hamiltonian (see [new
+arxiv])
+\begin{equation}
+    H_\text{imp}
+    =
+    \sum_i
+    \epsilon(\Gamma_i)_{r_i}
+    \ket{i}\bra{i}.
+\end{equation}
+The spectrum is provided in the format
+\begin{verbatim}
+    Dict(
+        G_1 => energies_1,
+        G_2 => energies_2,
+        ...
+    )
+\end{verbatim}
+where \texttt{G\_i} is the many-body irrep defined as a
+\texttt{Tuple\{Int64,String,Float64\}}, with the first entry
+being the particle number and the second and third entries
+defined in \ref{nrg_interaction}. All together, an irrep
+\texttt{G\_i} ($\Gamma_i$) takes the full form
+\texttt{G\_i=(N\_i,I\_i,SJ\_i)} ($\Gamma_i=(N_i,I_i,S_i)$ or
+$\Gamma_i=(N_i,I_i,J_i)$), where \texttt{N\_i} ($N_i$) is
+the number of particles, \texttt{I\_i} ($I_i$) is the point
+or double group irrep, and \texttt{SJ\_i} ($S_i$ or $J_i$)
+is the total spin or total angular momentum. For each irrep
+key \texttt{G\_i} ($\Gamma_i$) there is a
+\texttt{Vector\{Float64\}} \texttt{energies\_i} ($\epsilon(\Gamma_i)_{r_i}$ with fixed
+$\Gamma_i$) associated vector with indices $r_i$
+\par
+If this argument is set to a value different from the
+default, the ionic model is used.
+
+\subsubsection{\texttt{lehmann\_iaj::Dict\{G3,Array\{ComplexF64,4\}\}=Dict\{...\}()}}
+\label{nrg_lehmanniaj}
+Reduced Lehmann amplitudes (matrix elements of the creation
+operator), used in the ionic model.
+\begin{equation}
+    \bra{\Gamma_i,r_i}| 
+    f^\dagger_{\Gamma_a,r_a}
+    |\ket{\Gamma_j,r_j}
+\end{equation}
+Here \texttt{G3} means
+\texttt{NTuple\{3,Tuple\{Int64,String,Float64\}\}}. The
+format of \texttt{spectrum} is
+\begin{verbatim}
+    Dict(
+        (G_i,G_a,G_j)_1 => amplitudes_1
+        (G_i,G_a,G_j)_2 => amplitudes_2
+        ...
+    )
+\end{verbatim}
+where the irreps \texttt{G\_i} ($\Gamma_i$), \texttt{G\_a}
+($\Gamma_a$) and \texttt{G\_j} ($\Gamma_j$) are the ones
+appearing in the reduced matrix elements and 
+\texttt{amplitudes\_i} are \texttt{Array\{ComplexF64,4\}} 
+with indices $\alpha,r_i,r_a,r_j$ containing the amplitudes
+for the irreps specified in the key.
+
+\subsubsection{\texttt{until::String=""}}
+\label{nrg_until}
+Setting \texttt{until} to a value different from the default
+\texttt{until=""} causes \texttt{nrgfull} to stop at a
+certain stage of the calculation, which varies depending on
+the value given to \texttt{until}:
+\begin{itemize}
+    \item \texttt{until="2-particle multplets"}:
+        \texttt{nrgfull} runs until it computes the impurity
+        part of the Hamiltonian, after which it prints out
+        information about the 2-particle multiplet states
+        and then stops. This is particularly useful in order
+        to know the symmetry-adapted parameters determining
+        the Coulomb interaction that make up the input
+        variable \texttt{interaction} (see Ref. \cite{calvo-fernandez2024})
+    \item \texttt{until="impurity spectrum"}:
+        \texttt{nrgfull} runs until it computes the impurity
+        spectrum, after which it prints it out and then
+        stops. This is useful for checking the spectrum
+        resulting from a given choice of symmetry-adapted
+        Hamiltonian parameters \texttt{onsite} and
+        \texttt{interaction}.
+    \item \texttt{until="impurity-shell spectrum"}:
+        \texttt{nrgfull} runs until it computes the spectrum
+        of the impurity plus the innermost conduction shell,
+        after which it prints it out and then stops. This is
+        useful for checking the spectrum resulting from the
+        impurity spectrum plus the coupling to the
+        conduction band via tunnneling.
+\end{itemize}
+
+\subsubsection{\texttt{clebschgordan\_path::String=""}}
+Same as \ref{multiplets_clebschgordan}.
+
+\subsubsection{\texttt{identityrep::String=""}}
+\label{nrg_identityrep}
+Identity irrep of the point group or the double group as it
+appears in the Clebsch-Gordan coefficients given in the
+directory \texttt{clebschgordan\_path}
+(see \ref{multiplets_clebschgordan}). It is not necessary if
+\texttt{symmetry=="J"} or
+\texttt{symmetry=="totalangularmomentum"} (see
+\ref{nrg_symmetry}).
+
+\subsubsection{\texttt{z::Float64::String=""}}
+\label{nrg_z}
+Twisting parameter $z$ used for the interleaved discretization
+scheme following the procedure described in Ref.
+\cite{campo2005}. Results from calculations with different
+$z$ values, both thermodynamic and spectral functions, can
+be averaged to improve smoothness and remove spurious
+oscillations arising for large values of $\Lambda$. The
+spurious oscillations are already removed to a great extent
+by averaging over even and odd calculations, which is done
+automatically (\ref{nrg_calculation} and
+\ref{nrg_spectral}). Averaging over various $z$ is still
+relevant, however, as it allows for an effectively more
+dense grid of energy values, which can be especially useful
+for better spectral functions.
+\par
+The first step in a $z$-averaged calculations is to call
+\texttt{nrgfull} for all the desired values of $z$. We can
+do so using the function \texttt{generate\_Z} to generate
+the values of $z$ and then iterating over them, each time
+calling \texttt{nrgfull} for a different \texttt{z} value. 
+Then we call the \texttt{zavg\_thermo} or
+\texttt{zavg\_spectral} functions to compute the average
+thermodynamic or spectral functions, respectively. For
+instance, we could do
+\begin{verbatim}
+    # normal input
+    ...
+
+    Z = generate_Z(4)
+    for z in Z
+        for calculation in ["CLEAN","IMP"]
+            nrgfull(
+                ...;
+                calculation=calculation,
+                z=z
+                ...
+            )
+        end
+        zavg_thermo(label, Z)
+    end
+\end{verbatim}
+for computing $z$-averaged thermodynamic functions, or
+\begin{verbatim}
+    # normal input
+    ...
+    Nz = 4
+    Z = generate_Z(Nz)
+    for z in Z
+        nrgfull(
+            ...;
+            spectral=true,
+            z=z
+            ...
+        )
+        end
+        zavg_spectral(label, Z; orbitalresolved_number=2)
+    end
+\end{verbatim}
+where the \texttt{orbitalresolved\_number} variable tells
+\texttt{zavg\_spectral} how many tunneling electron
+multiplets are there, and therefore which spectral files
+have to be taken into account when averaging
+(\ref{nrg_spectral}). 
+\par
+One of the main advantages of $z$-averaged calculations is
+that they can are completely independent from one another
+and can therefore be performed in parallel. This is very
+simple in Julia, and it can be done as
+\begin{verbatim}
+    using Distributed
+    Nz = 4
+    Z = generate_Z(Nz)
+    addprocs(Nz)
+    @everywhere begin
+        # define input in all the processors here
+        ...
+    end
+    @sync @distributed for z in Z
+        nrgfull(
+            ...;
+            z=z,
+        )
+    end
+\end{verbatim}
+
+\subsubsection{\texttt{max\_SJ2::Int64=10}}
+\label{nrg_maxsj2}
+Maximum value of twice the total spin, $2S$, (for
+\texttt{symmetry="PS"} or \texttt{symmetry="pointspin"}) or
+twice the total angular momentum, $2J$, (for \texttt{symmetry="J"} or
+\texttt{symmetry="totalangularmomentum"}) that is expected
+to appear in the NRG calculations (see \ref{nrg_symmetry}).
+This is used for computing sums over Clebsch-Gordan
+coefficients, which is done at the beginning of the
+calculation. If a value of \texttt{max\_SJ2} larger than the
+given one is needed, the program will give an error.
+
+\subsubsection{\texttt{channels\_dos::Dict\{SF,Vector{Function}\}=Dict\{SF,Vector{Function}\}()}}
+\label{nrg_channelsdos}
+Density of state (DOS) functions $\rho(\Gamma_b;\epsilon)_{r_b}$ of the
+conduction electron channel multiplet $(\Gamma_b,r_b)$. In
+the code, the density of states is defined as (i) carrying the
+energy-dependence of the hybridization,
+\begin{equation}
+    \Delta(\Gamma_b;\epsilon)_{r_b}
+    :=
+    \pi
+    \rho(\Gamma_b;\epsilon)_{r_b}
+    V(\Gamma_b)_{r_b r_b}^2
+\end{equation}
+and (ii) normalized as
+\begin{equation}
+    \int_{-D}^D d\epsilon \rho(\Gamma_b;\epsilon)_{r_b} = 1,
+    \label{eq:dos_normalization}
+\end{equation}
+where $D$ is the half band-width.
+\par
+For instance,
+\begin{verbatim}
+    channels_dos_1 = Dict(
+        "E" => [x->0.5]
+    )
+    channels_dos_2 = Dict(
+        "E" => [x->1.0]
+    )
+\end{verbatim}
+define two equal constant DOS functions because the code
+automatically normalizes the density of states functions
+according to Eq. \ref{eq:dos_normalization}. The
+discretization is performed for general DOS functions
+following the procedure described in Ref. \cite{chen1995}.
+
+
+\subsubsection{\texttt{minimum\_eigenenergy::Float64=0.0}}
+\label{nrg_minimumeigenenergy}
+If the largest eigenergy remaining after applying the
+multiplet cutoff according to \ref{nrg_cutoff} is lower than
+\texttt{minimum\_eigenenergy}, the number of multiplets kept
+is increased until reaching the eigenenergy
+\texttt{minimum\_eigenenergy}.
+
+\subsubsection{\texttt{betabar::Float64=1.0}}
+\label{nrg_betabar}
+Parameter $\bar\beta$ used in thermodynamic calculations.
+When calculating thermodynamic functions, the Boltzmann
+factors $\exp(-\beta E_N)$, where $\beta=(k_B T)^-1$ and
+$E_N$ is an eigenenergy in the $N$-th NRG step, are
+substituted by $\exp(-\bar\beta \bar E _N)$, where
+\begin{equation}
+    \bar\beta=\omega_N \beta=\frac{\omega_N}{k_B T}
+\end{equation}
+is a constant that fixes the ratio between the energy scale
+$\omega_N$ of each iteration and the temperature $T$,
+thereby defining the temperature scale 
+\begin{equation}
+    T_N = \frac{\omega_N}{k_B \bar\beta}
+\end{equation}
+associated to each iteration $N$. For more detailed
+information, see Ref. \cite{bulla2008}.
+
+\subsubsection{\texttt{spectral::Bool=false}}
+\label{nrg_spectral}
+If \texttt{spectral==true} and \texttt{calculation=="IMP"}
+(\ref{nrg_calculation}), \texttt{nrgfull} computes the
+zero-temperature orbital-resolved spectral functions
+\begin{equation}
+    A_{\Gamma_a,r_a}(\omega) 
+    = 
+    \sum_g 
+    |\bra{e} 
+    f^\dagger_{\Gamma_a,r_a}
+    \ket{g}|^2
+    \delta(\epsilon-(\epsilon_e-\epsilon_g))
+\label{eq:spectral_function}
+\end{equation}
+which it then stores
+in files
+\begin{verbatim}
+    spectral/spectral\_<label>\_z<z>\_o<o>.dat
+\end{verbatim}
+where \texttt{<label>} is the value of \texttt{label}
+(\ref{nrg_label}), \texttt{<z>} is the value of \texttt{z}
+\ref{nrg_z}, and \texttt{<o>} is a number assigned by the
+code to each orbital multiplet $\Gamma_a,r_a$. Which orbital
+multiplet corresponds to each number is indicated in the
+file header. The spectral function contained in the file is
+obtained by averaging the spectral functions for the even
+and odd iterations [REF]; information about the latter is
+stored in the files
+\begin{verbatim}
+    spectral/spectral\_<label>\_z<z>\_o<o>_even.dat
+    spectral/spectral\_<label>\_z<z>\_o<o>_odd.dat
+\end{verbatim}
+
+
+\subsubsection{\texttt{broadening\_distribution::String="loggaussian"}}
+\label{nrg_broadeningdistribution}
+Broadening kernel used to obtain continuous spectral
+functions from the set of delta peaks calculated using Eq.
+\ref{eq:spectral_function}. Three options are available:
+\begin{itemize}
+    \item \texttt{broadening\_distribution="loggaussian"}:
+        \begin{equation}
+            \delta(\epsilon-(\epsilon_e-\epsilon_g))
+            \rightarrow
+            \frac{1}{\eta \sqrt{\pi} |\epsilon_e-\epsilon_g|}
+            \exp \left(
+                \frac{\log^2
+                |\frac{\epsilon}{\epsilon_e-\epsilon_g}|}{\eta^2}-
+                \frac{\eta^2}{4}
+            \right)
+        \end{equation}
+    \item \texttt{broadening\_distribution="gaussian"}:
+        \begin{equation}
+            \delta(\epsilon-(\epsilon_e-\epsilon_g))
+            \rightarrow
+            \frac{1}{\sqrt{\pi}\eta}
+            \exp\left[
+                -\left(
+                    \frac{
+                        \epsilon-(\epsilon_e-\epsilon_g)
+                    }{
+                        \eta
+                    }
+                \right)^2
+            \right]
+        \end{equation}
+    \item \texttt{broadening\_distribution="lorentzian"}:
+        \begin{equation}
+            \delta(\epsilon-(\epsilon_e-\epsilon_g))
+            \rightarrow
+            \frac{1}{2\pi}
+            \frac{
+                \eta
+            }{
+                (\epsilon-(\epsilon_e-\epsilon_g))^2
+                +\eta^2
+            }
+        \end{equation}
+\end{itemize}
+In all cases, $\eta$ is the broadening fractor fixed by the
+argument \texttt{spectral\_broadening}
+(\ref{nrg_spectralbroadening}).
+
+\subsubsection{\texttt{spectral\_broadening::Float64=0.5}}
+\label{nrg_spectralbroadening}
+Broadening factor $\eta$ to be used in the broadening kernel
+(see \ref{nrg_broadeningdistribution}).
+
+\subsubsection{\texttt{K\_factor::Float64=2.0}}
+\label{nrg_Kfactor}
+When calculating the spectral functions
+$A_{\Gamma_a,r_a}(\omega)$ (see Eq.
+\ref{eq:spectral_function}), each NRG step is used to obtain
+the value $A_{\Gamma_a,r_a}(\omega)$ at an energy
+$K\omega_N$, where $\omega_N$ is the energy scale of the
+$N$-th step and $K$ is the quantity fixed by
+\texttt{K\_factor} (see Ref. \cite{bulla2008}).
+
+\subsubsection{\texttt{compute\_impurity\_projections::Bool=false}}
+\label{nrg_computeimpurityprojections}
+If \texttt{compute\_impurity\_projections==true},
+\texttt{nrgfull} computes the thermodynamic weights of the
+impurity projections,
+\begin{equation}
+    P_{\Gamma_i,r_i}(T_N)=\frac{\text{Tr}\{\hat P
+    _{\Gamma_i,r_i} e^{-\beta_N \hat H}\}}{\mathcal Z},
+\label{eq:impurity_projections}
+\end{equation}
+where $\mathcal Z$ is the partition function and
+$\hat{P}_{\Gamma_i,r_i}$ are operators that project the
+impurity-conduction states $\ket{u}_N$ obtained in the
+$N$-th NRG step onto the impurity multiplet $\Gamma_i,r_i$,
+\begin{equation}
+    \hat P_{\Gamma_i,r_i} = \sum_{\gamma_i}
+    \ket{\Gamma_i,\gamma_i,r_i}_\text{imp}
+    \hat I _\text{con}
+    \bra{\Gamma_i,\gamma_i,r_i}_\text{imp},
+\label{eq:impurity_projection_operator}
+\end{equation}
+where $\ket{\Gamma_i,r_i,r_i}_\text{imp}$ are impurity
+eigenstates belonging to the impurity multiplet
+$\Gamma_i,r_i$ and $\hat I_\text{con}$ is the identity
+operator of the conduction electron subspace. They are
+computed in the same way as other thermodynamic quantities
+(see \ref{nrg_calculation} and Ref. \cite{bulla2008}). 
+\par
+The results are stored in 
+\begin{verbatim}
+    impurityprojections/imp_proj_<label>_z<z>.dat
+\end{verbatim}
+and the directory \texttt{impurityprojections} is
+automatically created if it does not exist already. The
+first column of the file contains the NRG iteration, the
+second column contains the temperature, and subsequent
+columns contain $P_{\Gamma_i,r_i}(T_N)$ for the impurity
+multiplets $\Gamma_i,r_i$ (information in the header of the
+file). 
+\par
+The information provided by $P_{\Gamma_i,r_i}$ is useful in
+itself in order to obtain information about the impurity
+state at all temperatures, but it can also be used to
+compute the thermodynamic function of an impurity operator 
+that only depends on the impurity multiplet: if $\hat
+X=X(\Gamma_i,r_i) \hat{P}_{\Gamma_i,r_i}$ is the operator,
+then
+\begin{equation}
+    X(T_N) 
+    = 
+    \frac{
+        \text{Tr}
+        \{\hat X e^{-\beta_N\hat H}\}
+    }{
+        \mathcal Z
+    }
+    =
+    \sum_{\Gamma_i,r_i}
+    X(\Gamma_i,r_i)
+    P_{\Gamma_i,r_i}.
+\end{equation}
+This is not implemented in \texttt{PointGroupNRG}.
+
+\subsubsection{\texttt{half\_band\_width::Float64=1.0}}
+\label{nrg_bandwidth}
+Half band-width $D$ used in the NRG calculation.
+
+\end{document}
