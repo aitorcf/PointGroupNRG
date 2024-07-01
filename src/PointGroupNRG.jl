@@ -1,15 +1,5 @@
 module PointGroupNRG
 
-# user interface
-export compute_multiplets
-export multiplets_2particles
-export impurity_spectrum
-export nrg_full
-export generate_Z 
-export generate_Zlaps
-export zavg_thermo 
-export zavg_spectral
-
 # multiplet calculation submodule
 module MultipletCalculator
 
@@ -32,24 +22,12 @@ using .MultipletCalculator
 # NRG calculation submodule
 module NRGCalculator
 
-    # TODO: remove unnecessary
-    export multiplets_2particles
-    export multiplets_2particles_allsymmetries
-    export impurity_spectrum
-    export impurity_spectrum_allsymmetries
-    #export impurity_spectrum_doublegroups
-    export nrg_full
-    export nrg_full_doublegroup
-    export nrg_full_doublegroup_nonsimple
-    export nrg_full_totalangularmomentum
-    export nrg_full_pointspin
     export nrgfull
     export generate_Z 
-    export generate_Zlaps
     export zavg_thermo 
     export zavg_spectral
-    export discretization_default
-    export tridiagonalization_default
+    # export discretization_default
+    # export tridiagonalization_default
 
     include( "nrg/symbols.jl" )
     include( "nrg/numericals.jl" )
