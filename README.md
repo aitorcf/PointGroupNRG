@@ -6,6 +6,9 @@ can be found in the `doc/` directory. The presentation of
 the code and a comprehensive exposition of the implemented
 procedure can be found in [this paper](https://arxiv.org/abs/2307.03658)
 
+# Version information
+- This version corresponds to the code presented in [this paper](https://arxiv.org/abs/2307.03658).
+
 # Installation
 PointGroupNRG is not in the General Registry, so it cannot
 be installed using the standard  
