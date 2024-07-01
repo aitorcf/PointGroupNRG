@@ -8,15 +8,10 @@ using PointGroupNRG.MultipletCalculator
 symmetry = "spin"
 
 # spin
-S = 0.5
-
-# directory where multiplet folder will be stored
-multiplets_path =  "multiplets"
+spin = 0.5
 
 # Compute multiplet states.
 compute_multiplets( 
-    symmetry,
-    multiplets_path;
-    irrep=S,
-    verbose=true
+    symmetry;
+    irrep=spin
 )

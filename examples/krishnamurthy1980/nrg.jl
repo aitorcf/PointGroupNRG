@@ -26,96 +26,108 @@ u = 1e-3
 ϵ = -0.5*abs(u)
 Γ = u/(π*1.013)
 Γ = u/(π*12.66)
-epsilon_symparams = Dict{Float64,Vector{ComplexF64}}(
+onsite = Dict{Float64,Vector{ComplexF64}}(
     S => [ϵ]
 )
-u_symparams = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
+interaction = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
     ("A",0.0) => [u;;]
 )
-hop_symparams = Dict{Float64,Matrix{ComplexF64}}(
+tunneling = Dict{Float64,Matrix{ComplexF64}}(
     S => [sqrt(2Γ/π);;]
 )
 
 # numerical parameters
-cutoff_type = "multiplet"
-cutoff_magnitude = 500
-L = 2.0
+cutoff = 500
+L = 2.5
 iterations = 100
 
-# choose what to calculate
-run = "thermo"
+# choose what to calculate among:
+# - "multiplets"
+# - "impurity spectrum"
+# - "impurity-shell spectrum"
+# - "thermodynamics"
+# - "spectral"
+run = "spectral"
 
 if run=="multiplets"
 
-    nrg_full_allsymmetries( 
+    nrgfull( 
         symmetry,
         label,
         L,
         iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
+        cutoff,
         shell_config,
-        hop_symparams;
-        impurity_config,
+        tunneling;
+        impurity_config=impurity_config,
         until="2-particle multiplets"
     )
 
-elseif run=="spectrum"
+elseif run=="impurity spectrum"
 
-    nrg_full_allsymmetries(
+    nrgfull( 
         symmetry,
         label,
         L,
         iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
+        cutoff,
         shell_config,
-        hop_symparams;
+        tunneling;
         impurity_config=impurity_config,
-        until="impurity spectrum",
-        epsilon_symparams=epsilon_symparams,
-        u_symparams=u_symparams
+        onsite=onsite,
+        interaction=interaction,
+        until="impurity spectrum"
     )
 
-elseif run=="thermo"
+elseif run=="impurity-shell spectrum"
+
+    nrgfull( 
+        symmetry,
+        label,
+        L,
+        iterations,
+        cutoff,
+        shell_config,
+        tunneling;
+        impurity_config=impurity_config,
+        onsite=onsite,
+        interaction=interaction,
+        until="impurity-shell spectrum"
+    )
+
+elseif run=="thermodynamics"
 
     for calculation in ["CLEAN","IMP"]
 
-        nrg_full_allsymmetries( 
+        nrgfull( 
             symmetry,
             label,
             L,
             iterations,
-            cutoff_type,
-            cutoff_magnitude,
-            multiplets_dir,
+            cutoff,
             shell_config,
-            hop_symparams;
+            tunneling;
             calculation=calculation,
             impurity_config=impurity_config,
-            epsilon_symparams=epsilon_symparams,
-            u_symparams=u_symparams,
+            onsite=onsite,
+            interaction=interaction
         )
 
     end
 
 elseif run=="spectral"
 
-    nrg_full_allsymmetries( 
+    nrgfull(
         symmetry,
         label,
         L,
         iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
+        cutoff,
         shell_config,
-        hop_symparams;
+        tunneling;
         impurity_config=impurity_config,
-        epsilon_symparams=epsilon_symparams,
-        u_symparams=u_symparams,
+        onsite=onsite,
+        interaction=interaction,
         spectral=true
     )
 
