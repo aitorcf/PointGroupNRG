@@ -853,12 +853,12 @@ function nrgfull(
     end
 
     # interaction format for total angular momentum
-    if isorbital(symmetry)
+    if isdoublegroup(symmetry)
         interaction = Dict(
             (k[1],0.0)=>v
             for (k,v) in interaction
         )
-    else
+    elseif istotalangularmomentum(symmetry)
         interaction = Dict(
             ("A",k[2])=>v
             for (k,v) in interaction

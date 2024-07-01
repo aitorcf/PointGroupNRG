@@ -39,14 +39,14 @@ L = 2.5
 iterations = 100
 
 # choose what to calculate among:
-# - "multiplets"
+# - "2-particle multiplets"
 # - "impurity spectrum"
 # - "impurity-shell spectrum"
 # - "thermodynamics"
 # - "spectral"
 run = "spectral"
 
-if run=="multiplets"
+if run=="2-particle multiplets"
 
     nrgfull( 
         symmetry,
