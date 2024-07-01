@@ -940,9 +940,18 @@ function nrgfull(
 
         elseif model=="ionic" # ionic
 
-            imp_orbital_irreps::Vector{SF} = collect(Set(
-                I for ((_,I,_),_) in spectrum
-            ))
+            imp_orbital_irreps::Vector{SF} = begin
+                if SF==String
+                    collect(Set(
+                        I for ((_,I,_),_) in spectrum
+                    ))
+                elseif SF==Float64
+                    collect(Set(
+                        J for ((_,_,J),_) in spectrum
+                    ))
+                end
+            end
+
             shell_orbital_irreps::Vector{SF} = collect(keys(shell_config))
             collect(Set(vcat(imp_orbital_irreps,shell_orbital_irreps)))
 
