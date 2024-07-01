@@ -1,6 +1,11 @@
 #!/usr/bin/env julia
 
-# system with J=1 total angular momentum
+# Infinite-U (where U refers to the Coulomb) interaction
+# for an impurity with electrons having total angular
+# momentum J. The value of J can be changed (here and
+# in multiplets.jl), but beware of increasing it past
+# the threshold dimensionality (2J+1=6, equivalent to 
+# a standard 3-channel Kondo model, is too much).
 
 # load modules
 package_dir = "../.."
@@ -8,7 +13,7 @@ import Pkg; Pkg.activate(package_dir)
 using PointGroupNRG.NRGCalculator
 
 # label for the system
-label = "J1"
+label = "IU" # infinite U
 
 # symmetry and total angular momentum
 symmetry = "J"
@@ -18,87 +23,60 @@ J = 1.0
 multiplets_dir = "multiplets"
 
 # system configuration
-impurity_config = Dict{Float64,Int64}( J => 1 )
-shell_config = impurity_config
+shell_config = Dict{Float64,Int64}( J => 1 )
 
-# hamiltonian parameters
-ϵ = -0.1
-u = 0.2
-Γ = 0.002
-Γ = 0.005
-onsite = Dict{Float64,Vector{ComplexF64}}(
-    J => [ϵ]
+# ionic model
+Δ = 0.1  # spectral
+Δ = 1e-3 # thermodynamics
+G_ground = (1,"A",J)
+G_tunnel = G_ground
+G_excited = (0,"A",0.0)
+spectrum = Dict{Tuple{Int64,String,Float64},Vector{Float64}}(
+    G_ground => [0.0],
+    G_excited => [Δ]
 )
-interaction = Dict{Tuple{String,Float64},Matrix{ComplexF64}}(
-    ("B",1.0) => [u;;]
+lehmann_iaj = Dict(
+    (G_ground,G_tunnel,G_excited) => ones(ComplexF64,1,1,1,1)
 )
-tunneling = Dict{Float64,Matrix{ComplexF64}}(
-    J => [sqrt(2Γ/π);;]
+
+# hybridization
+Γ = 0.03Δ # thermodynamics
+Γ = 0.1Δ  # spectral
+tunneling = Dict(
+    J => ComplexF64[sqrt(2Γ/π);;]
 )
 
 # numerical parameters
-cutoff = 100
-L = 2.0
-iterations = 100
+cutoff = 500
+L = 2.5 # spectral
+L = 5.0 # thermodynamics
+iterations = 60
 
-# choose what to calculate
-run = "spectral"
+# choose what to calculate among:
+# - "impurity-shell spectrum"
+# - "thermodynamics"
+# - "spectral"
+run = "thermodynamics"
 
-if run=="multiplets"
+if run=="impurity-shell spectrum"
 
-    nrg_full_allsymmetries( 
+    nrgfull( 
         symmetry,
         label,
         L,
         iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
+        cutoff,
         shell_config,
-        hop_symparams;
-        impurity_config,
+        tunneling;
+        spectrum=spectrum,
+        lehmann_iaj=lehmann_iaj,
         until="2-particle multiplets"
     )
 
-elseif run=="impurity spectrum"
-
-    nrg_full_allsymmetries( 
-        symmetry,
-        label,
-        L,
-        iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
-        shell_config,
-        hop_symparams;
-        impurity_config,
-        epsilon_symparams=epsilon_symparams,
-        u_symparams=u_symparams,
-        until="impurity spectrum"
-    )
-
-elseif run=="impurity-shell spectrum"
-
-    nrg_full_allsymmetries( 
-        symmetry,
-        label,
-        L,
-        iterations,
-        cutoff_type,
-        cutoff_magnitude,
-        multiplets_dir,
-        shell_config,
-        hop_symparams;
-        impurity_config,
-        epsilon_symparams=epsilon_symparams,
-        u_symparams=u_symparams,
-        until="impurity-shell spectrum"
-    )
-
-elseif run=="thermo"
+elseif run=="thermodynamics"
 
     for calculation in ["CLEAN","IMP"]
+
         nrgfull( 
             symmetry,
             label,
@@ -107,12 +85,12 @@ elseif run=="thermo"
             cutoff,
             shell_config,
             tunneling;
+            max_SJ2=16,
             calculation=calculation,
-            impurity_config,
-            onsite=onsite,
-            interaction=interaction,
-            max_SJ2=16
+            spectrum=spectrum,
+            lehmann_iaj=lehmann_iaj
         )
+
     end
 
 elseif run=="spectral"
@@ -125,11 +103,10 @@ elseif run=="spectral"
         cutoff,
         shell_config,
         tunneling;
-        impurity_config=impurity_config,
         max_SJ2=16,
-        onsite=onsite,
-        interaction=interaction,
-        spectral=true
+        spectral=true,
+        spectrum=spectrum,
+        lehmann_iaj=lehmann_iaj
     )
 
 end

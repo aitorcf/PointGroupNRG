@@ -11,4 +11,4 @@ J = 1.0
 compute_multiplets( 
     symmetry;
     irrep=J
-);
+)
