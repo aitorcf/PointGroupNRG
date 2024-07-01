@@ -14,9 +14,6 @@ label = "KM"
 symmetry = "spin"
 S = 0.5
 
-# path to multiplet states
-multiplets_dir = "multiplets"
-
 # system configuration
 impurity_config = Dict{Float64,Int64}( S => 1 )
 shell_config = impurity_config

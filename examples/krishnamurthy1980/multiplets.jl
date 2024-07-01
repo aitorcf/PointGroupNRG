@@ -7,7 +7,7 @@ using PointGroupNRG.MultipletCalculator
 # spin SU(2)
 symmetry = "spin"
 
-# spin
+# electron spin
 spin = 0.5
 
 # Compute multiplet states.
