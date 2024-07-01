@@ -1,4 +1,4 @@
-function compute_multiplets( symmetry::String ; # "PS": Pointgroup-Spin, "D": Doublegroup, "J": Total angular momentum
+function compute_multiplets( symmetry::String ;
                              multiplets_path::String="multiplets" , # where to store the output
                              irrep::SF="" ,
                              clebschgordan_path::String="" ,
