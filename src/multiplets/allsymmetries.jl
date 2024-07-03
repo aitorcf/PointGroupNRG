@@ -83,7 +83,7 @@ function compute_asymstates_N_allsymmetries(
                 end
             end
             s_string = begin
-                if isorbital(symmetry)
+                if !isdoublegroup(symmetry)
                     reduce( (x,y)->"$x $y" , s_part )
                 else
                     reduce( (x,y)->"- -" , s_part )
