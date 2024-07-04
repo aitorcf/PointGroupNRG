@@ -10,7 +10,7 @@ exposition of the implemented procedure can be found in
 ARXIV].
 
 # Compatibility
-- Working from Julia 1.10.0
+- Tested and working for Julia 1.10.0
 - Issues have been found in Julia 1.8.x
 
 # Changes
