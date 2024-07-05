@@ -1,5 +1,5 @@
 # Overview
-PointGroupNRG is a Julia pacakage designed to perform
+PointGroupNRG is a Julia package designed to perform
 Numerical Renormalization Group calculations for magnetic
 impurity Anderson Hamiltonians with several charge, orbital
 and spin symmetries, including finite point and double group
@@ -34,6 +34,26 @@ add it:
     julia> using Pkg
     julia> Pkg.activate(".") # in the project directory
     julia> Pkg.add("<path_to_PointGroupNRG>")
+
+# Examples
+Examples for several systems are provided in the `examples/`
+directory. To run them, go to the corresponding directory,
+_e.g._ `examples/krishnamurthy1980`, and run the scripts:
+
+    $ cd <...>/PointGroupNRG&/examples/krishnamurthy1980
+    $ ./multiplets.jl
+
+This computes the multiplet states to be used in the
+NRG calculation. Afterwards, edit the `nrg.jl` script to set
+the variable `run` to the desired value, perform any other
+modifications, and run the script:
+
+    $ julia
+    julia> include("nrg.jl")
+
+Loading the script within a Julia session allows to skip
+package loading time for subsequent runs. Check the output
+in the generated directories (see `manual/manual.pdf`).
 
 # Precompilation
 To avoid the package loading latency, it is possible to
