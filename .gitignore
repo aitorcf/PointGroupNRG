@@ -1,31 +1,26 @@
-# main dir
-./* 
-!README.md
+*.so
 
-# test
-!test/runtests.jl
-!test/multiplets_A1g.jl
-!test/nrg_A1g.jl
-!test/clebschgordan/
+TODO.txt
 
-# template
-!templates/
-!templates/nrg_TEMPLATE.jl 
-!templates/multiplets_TEMPLATE.jl
+examples/**/thermodata
+examples/**/spectral
+examples/**/impurityprojections
+examples/**/multiplets
+examples/A1g
+examples/A1g_nonsimple
+examples/CobaltInChain
+examples/old
+examples/SIAM
+examples/D_T
 
-# doc files 
-!doc/Tutorial.md
-!doc/Manual.md
+**/*.ipynb
 
-# package files
-!Project.toml
-!Manifest.toml
+doc
 
-# src files
-!src/
-!src/*
+examples/clebschgordan/Oh
 
-# precompile
-!precompile/
-!precompile/clebschgordan
-!precompile/*.jl
+manual/*
+!manual/manual.tex
+!manual/manual.bib
+!manual/manual.pdf
+
