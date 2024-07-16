@@ -1,4 +1,4 @@
-#/usr/bin/env julia
+#!/usr/bin/env julia
 
 # Two multiplet uranium model introduced in Phys. Rev. Lett. 59, 1240
 
