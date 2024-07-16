@@ -34,6 +34,9 @@ add it to your project:
     pkg> activate <path_to_project> 
     pkg> add <path_to_PointGroupNRG>
 
+The `pkg>` mode is entered by typing `]` in the `julia>`
+shell.
+
 # Examples
 Examples for several systems are provided in the `examples/`
 directory. To run them, go to the corresponding directory,
