@@ -2441,27 +2441,22 @@ function NRG_allsymmetries(
     # save data to file (spectral is saved from within the function)
     #
     # thermodynamics
-    if !spectral
-
-        # directory
-        isdir("thermodata") || mkdir("thermodata")
-
-        # thermodynamic data for this given value of z
-        write_thermodata_onez( thermo_average , calculation , label , z )
-        write_thermodata_onez( thermo_evenodd , calculation , label*"_evenodd" , z )
-
-        # impurity contribution (diff)
-        if calculation=="IMP"
-            thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
-            println()
-            if length(glob(thermo_clean_filename))!==0
-                println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
-                write_thermodiff( label , z )
-                write_thermodiff( label*"_evenodd" , z )
-            end
+    # directory
+    isdir("thermodata") || mkdir("thermodata")
+    # thermodynamic data for this given value of z
+    write_thermodata_onez( thermo_average , calculation , label , z )
+    write_thermodata_onez( thermo_evenodd , calculation , label*"_evenodd" , z )
+    # impurity contribution (diff)
+    if calculation=="IMP"
+        thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+        println()
+        if length(glob(thermo_clean_filename))!==0
+            println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
+            write_thermodiff( label , z )
+            write_thermodiff( label*"_evenodd" , z )
         end
-
     end
+
     # impurity properties 
     if compute_impmults
 
