@@ -19,9 +19,6 @@ label = "IU" # infinite U
 symmetry = "J"
 J = 1.0
 
-# path to multiplet states
-multiplets_dir = "multiplets"
-
 # system configuration
 shell_config = Dict{Float64,Int64}( J => 1 )
 

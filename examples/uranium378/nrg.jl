@@ -16,9 +16,6 @@ symmetry = "D"
 identityrep = "A1"
 clebschgordan_path = "../clebschgordan/O"
 
-# multiplet states
-multiplets_dir = "multiplets"
-
 # system configuration
 shell_config = Dict{String,Int64}( "F32"=>1 )
 
