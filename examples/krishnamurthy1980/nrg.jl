@@ -21,8 +21,8 @@ shell_config = impurity_config
 # hamiltonian parameters
 u = 1e-3
 ϵ = -0.5*abs(u)
-Γ = u/(π*1.013)
-Γ = u/(π*12.66)
+Γ = u/(π*1.013) # Free Orbital to Strong Coupling
+Γ = u/(π*12.66) # Free Orbital to Local Moment to Strong Coupling
 onsite = Dict{Float64,Vector{ComplexF64}}(
     S => [ϵ]
 )
