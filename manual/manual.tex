@@ -449,7 +449,28 @@ the case if there are several multiplet subspaces belonging
 to $\Gamma_1$, for example, because the resulting states are
 distinguished only by an outer multiplicity label that is
 taken care of by \texttt{nrgfull} (see Section \ref{nrg}).
-The function is defined as itemize
+\par
+The function stores the multiplet states for the irrep
+\texttt{G} in
+\begin{verbatim}
+    $(multiplets_path)/$(G)/N$(N).txt
+\end{verbatim}
+\texttt{N} is the number of particles and \texttt{G} and
+\texttt{multiplets\_path} are described in
+\ref{multiplets_irrep} and \ref{multiplets_multipletspath},
+respectively. These files are intended to be read by
+\texttt{nrgfull} (\ref{nrg}). The
+\texttt{compute\_multiplets} function also generates files 
+\begin{verbatim}
+    $(multiplets_path)/$(G)/N$(N)basis.txt
+\end{verbatim}
+containig the basis states expressed as a sequence of
+\texttt{N} partner numbers for the finite (point or double)
+group and another sequence for the $SU(2)$ group; if only
+one group type is used, the numbers of the unused group are
+substituted by \texttt{-}. 
+\par
+The function is defined as
 \begin{verbatim}
     function compute_multiplets( 
         symmetry::String ;
