@@ -28,14 +28,18 @@ ARXIV].
 
 # Installation
 PointGroupNRG is not in the General Registry. To use it from
-your own Julia environment, download `PointGroupNRG` and
+your own Julia environment, download or clone `PointGroupNRG` and
 add it to your project:
 
     pkg> activate <path_to_project> 
     pkg> add <path_to_PointGroupNRG>
 
 The `pkg>` mode is entered by typing `]` in the `julia>`
-shell.
+shell. Alternatively, the downloaded/cloned repository can
+be activated and instantiated:
+
+    pkg> activate <path_to_PointGroupNRG>
+    pkg> instantiate # only the first time
 
 # Examples
 Examples for several systems are provided in the `examples/`
