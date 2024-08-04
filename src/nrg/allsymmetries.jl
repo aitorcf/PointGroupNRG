@@ -1137,7 +1137,7 @@ function nrgfull(
     # default behavior: eta=x->1/2
     if length(channels_dos)==0 
         channels_dos = Dict{SF,Vector{Function}}( 
-            orbital_irrep=>Function[x->0.5 for i in 1:size(hop_matrix,1)]
+            orbital_irrep=>Function[x->0.5 for i in 1:size(hop_matrix,2)]
             for (orbital_irrep,hop_matrix) in tunneling 
         )
     end

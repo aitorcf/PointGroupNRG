@@ -149,7 +149,8 @@ function cg_reduce_product_states_totalangularmomentum(
 
                 r_3 = (r_1,r_2,ro_3)
 
-                c_j = clebschgordan(J_1,j_1,J_2,j_2,J_3,j_3)
+                doub(x) = Int64(2x)
+                c_j = PartialWaveFunctions.clebschgordan_doublearg(doub.(tuple(J_1,j_1,J_2,j_2,J_3,j_3))...)
 
                 q_3::Tuple{ NTuple{3,Int64} , NTuple{3,String} , NTuple{3,Float64} , Int64 , Float64 , NTuple{3,Int64} } = 
                     ((N_1,N_2,N_3),(I_1,I_2,I_3),(J_1,J_2,J_3),1,j_3,r_3)
