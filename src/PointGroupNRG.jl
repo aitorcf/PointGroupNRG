@@ -41,7 +41,7 @@ module NRGCalculator
     include( "nrg/reddiag.jl" )
     include( "nrg/automatization.jl" )
     include( "nrg/zavg.jl" )
-    include( "nrg/molecule.jl" )
+    # include( "nrg/molecule.jl" )
 #    include( "nrg/doublegroups_old.jl" )
 #    include( "nrg/doublegroupsnonsimple_old.jl" ) # old
     include( "nrg/doublegroup.jl" )
@@ -52,11 +52,11 @@ module NRGCalculator
 end
 using .NRGCalculator
 
-# DMFT submodule (experimental)
-module DMFT
-using ..NRGCalculator
-include( "dmft/dmft.jl" )
-end
-using .DMFT
+# # DMFT submodule (experimental)
+# module DMFT 
+# using ..NRGCalculator
+# include( "dmft/dmft.jl" )
+# end
+# using .DMFT
 
 end # module PointGroupNRG
