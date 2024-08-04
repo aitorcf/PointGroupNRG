@@ -711,6 +711,21 @@ $\Gamma_a$ in the format described in \ref{multiplets_irrep}
 and \texttt{amplitudes1}, \texttt{amplitudes2}, etc. are the
 amplitudes given as a \texttt{Matrix{ComplexF64}} with
 indices $r_a,r_b$.
+\par
+In order to couple more than one channel to an orbital,
+non-zero amplitudes have to be given for $r_a,r_b$
+combinations with the same $r_a$ and different $r_b$. For
+instance, to 
+\begin{verbatim}
+    impurity_config = Dict( "A" => 1 )
+    shell_config = Dict( "A" => 2 )
+    tunneling = Dict(
+        "A" = ComplexF64[
+            1.0 1.0
+        ]
+    )
+\end{verbatim}
+
 
 \subsection{Optional keyword arguments}
 
