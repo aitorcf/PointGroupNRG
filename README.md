@@ -34,7 +34,7 @@ branches. The `master` branch contains the latest changes.
 
 #### 2.0.0 (4/8/2024):
     - Stable version with functionality introduced in
-    [1/7/2024](#1/7/2024).
+    [1/7/2024](#master-(1/7/2024)).
 
 # Installation
 PointGroupNRG is not in the General Registry. To use it from
