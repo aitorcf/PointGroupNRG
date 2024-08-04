@@ -24,7 +24,7 @@ ARXIV].
     - New examples in `examples/`.
     - Precompilation scripts in `precompile/` removed.
     - Working version with the functionality described in [this paper](https://arxiv.org/abs/2307.03658)
-    moved to branch `v1.0`.
+    moved to branch `v1.0.0`.
 
 # Installation
 PointGroupNRG is not in the General Registry. To use it from
