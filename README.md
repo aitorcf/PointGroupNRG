@@ -22,19 +22,19 @@ branches. The `master` branch contains the latest changes.
 - Working version with the functionality described in [this paper](https://arxiv.org/abs/2307.03658)
 
 #### master (1/7/2024)
-    - Double group symmetries and total angular momentum conservation
-    available.
-    - Modified documentation:
-        - `doc/Manual.md` replaced by `manual/manual.pdf`.
-        - `doc/Tutorial.md` removed.
-    - Interface changed, see `manual/manual.pdf`.
-    - New examples in `examples/`.
-    - Precompilation scripts in `precompile/` removed.
-    - Incompatible with v1.0.0.
+- Double group symmetries and total angular momentum conservation
+available.
+- Modified documentation:
+    - `doc/Manual.md` replaced by `manual/manual.pdf`.
+    - `doc/Tutorial.md` removed.
+- Interface changed, see `manual/manual.pdf`.
+- New examples in `examples/`.
+- Precompilation scripts in `precompile/` removed.
+- Incompatible with v1.0.0.
 
 #### 2.0.0 (4/8/2024):
-    - Stable version with functionality introduced in
-    [1/7/2024](#master-(1/7/2024)).
+- Stable version with functionality introduced in
+[1/7/2024](#master-(1/7/2024)).
 
 # Installation
 PointGroupNRG is not in the General Registry. To use it from
