@@ -14,7 +14,14 @@ ARXIV].
 - Issues have been found in Julia 1.8.x
 
 # Changes
-- 1/7/2024
+
+Specific stable versions X.Y.Z of the code are contained in
+branches. The `master` branch contains the latest changes.
+
+#### 1.0.0 (1/7/2024)
+- Working version with the functionality described in [this paper](https://arxiv.org/abs/2307.03658)
+
+#### master (1/7/2024)
     - Double group symmetries and total angular momentum conservation
     available.
     - Modified documentation:
