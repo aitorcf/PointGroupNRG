@@ -1435,7 +1435,7 @@ function cut_off_nonsimple!(
             type::String="multiplet" , 
             cutoff::T=200 , 
             safeguard::Bool=true , 
-            safeguard_tol::Float64=1e-5 ,
+            safeguard_tol::Float64=1e-2 ,
             safeguard_max::Int64=200 ,
             minmult::Int64=0 , 
             mine::Float64=-1.0 ,
