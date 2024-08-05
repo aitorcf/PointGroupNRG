@@ -15,10 +15,10 @@ ARXIV].
 
 # Changes
 
-Specific stable versions X.Y.Z of the code are contained in
+Specific stable versions vX.Y.Z of the code are contained in
 branches. The `master` branch contains the latest changes.
 
-#### 1.0.0 (1/7/2024)
+#### v1.0.0 (1/7/2024)
 - Working version with the functionality described in [this paper](https://arxiv.org/abs/2307.03658)
 
 #### master (1/7/2024)
@@ -32,7 +32,7 @@ available.
 - Precompilation scripts in `precompile/` removed.
 - Incompatible with v1.0.0.
 
-#### 2.0.0 (4/8/2024):
+#### v2.0.0 (4/8/2024):
 - Stable version with functionality introduced in
 [1/7/2024](#master-(1/7/2024)).
 
