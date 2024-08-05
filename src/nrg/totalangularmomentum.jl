@@ -894,11 +894,11 @@ function construct_and_diagonalize_uHv_totalangularmomentum(
                                 hoparam_matrix = hop_symparams[G_a[3]]
 
                                 # hopping contribution as matrix operation
-                                @views hblock[r_u,r_v,2] += d * dot(
-                                    lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
+                                @views hblock[r_u,r_v,2] += d * conj(dot(
+                                    lehmann_array_iaj[α,r_i,:,r_j],
                                     hoparam_matrix,
-                                    lehmann_array_iaj[α,r_i,:,r_j]
-                                )
+                                    lehmann_array_nuamu[β,r_nu,:,r_mu] # automatically complex-conjugated
+                                ))
 
                             end # end of α,β iteration
                         end # end of u,i,mu,v,j,nu multiplet iteration
