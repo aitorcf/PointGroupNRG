@@ -45,8 +45,15 @@ add it to your project:
     pkg> add <path_to_PointGroupNRG>
 
 The `pkg>` mode is entered by typing `]` in the `julia>`
-shell. Alternatively, the downloaded/cloned repository can
-be activated and instantiated:
+shell. If a new version is pulled from GitHub, for the
+changes to apply it is necessary to update the added
+PointGroupNRG package in the local project using
+
+    pkg> up
+
+Instead of adding the package from a local project, the
+downloaded/cloned repository can be activated and
+instantiated:
 
     pkg> activate <path_to_PointGroupNRG>
     pkg> instantiate # only the first time
