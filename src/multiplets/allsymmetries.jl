@@ -185,13 +185,13 @@ function compute_asymstates_N_allsymmetries(
     @printf  "%-14s %-3s %-3s %-3s\n" "P" "p" "S/J" "s/j"
     @printf        "state\n"
     if istotalangularmomentum(symmetry)
-        for ((d,J,a,j,r),state) in sort(states_s,by=x->x[1])
+        for ((d,J,a,j,r),state) in sort(collect(states_s),by=x->x[1])
             @printf "%-14s %-3i %-3.1f %-3.1f\n" d a J j
             println(state)
             println()
         end
     else
-        for ((d,S,s,a),state) in sort(states_s,by=x->x[1])
+        for ((d,S,s,a),state) in sort(collect(states_s),by=x->x[1])
             @printf "%-14s %-3i %-3.1f %-3.1f\n" d a S s
             println(state)
             println()
