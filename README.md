@@ -6,8 +6,7 @@ and spin symmetries, including finite point and double group
 symmetries. A comprehensive user's manual can be found in
 `manual/`. The presentation of the code and a comprehensive
 exposition of the implemented procedure can be found in
-[this paper](https://arxiv.org/abs/2307.03658) and [NEW
-ARXIV].
+[this paper](https://arxiv.org/abs/2307.03658) and [this paper](https://doi.org/10.48550/arXiv.2409.12050).
 
 # Compatibility
 - Tested and working for Julia 1.10.0
