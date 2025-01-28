@@ -511,16 +511,18 @@ const thermoheader = "# 1 temperature | 2 magnetic susceptibility | 3 entropy | 
 function thermo_filename_one_z( 
             label::String ,
             imp_clean_diff::String ,
-            z::Float64 )
+            z::Float64 ;
+            thermodir::String="thermodata")
 
-    return "thermodata/thermo_$(label)_$(imp_clean_diff)_z$(z).dat"
+    return "$(thermodir)/thermo_$(label)_$(imp_clean_diff)_z$(z).dat"
 
 end
 function thermo_filename_zavg(
             label::String ,
-            imp_clean_diff::String )
+            imp_clean_diff::String ;
+            thermodir::String="thermodata" )
 
-    return "thermodata/thermo_$(label)_$(imp_clean_diff)_zavg.dat"
+    return "$(thermodir)/thermo_$(label)_$(imp_clean_diff)_zavg.dat"
 end
 
 # generic thermodynamic data writer
@@ -542,10 +544,11 @@ function write_impurity_info(
         mult2index::Dict{ClearMultiplet,Int64},
         label::String,
         z::Float64,
-        temperatures::Vector{Float64})
+        temperatures::Vector{Float64};
+        impurityprojectionsdir::String="impurityprojections")
 
     # name of the output file
-    filename = "impurityprojections/imp_proj_$(label)_z$z.dat"
+    filename = "$(impurityprojectionsdir)/imp_proj_$(label)_z$z.dat"
 
     # data as matrix
     impurity_multiplet_weights_with_iterations = [ Any[Int64(i),temperatures[end-(i-1)],weights...] for (i,weights) in enumerate(impurity_multiplet_weights[2:end]) ]
@@ -570,15 +573,17 @@ function write_impurity_info(
 end
 
 function write_thermodata_onez(
-        data,
-        calculation,
-        label,
-        z)
+            data ,
+            calculation ,
+            label ,
+            z ;
+            thermodir::String="thermodir")
 
     filename = thermo_filename_one_z(
         label ,
         lowercase(calculation) ,
-        z
+        z ;
+        thermodir=thermodir
     )
 
     println("Saving thermodynamic data to $filename...\n\n" )
@@ -587,15 +592,15 @@ function write_thermodata_onez(
 
 end
 
-function write_thermodiff(label, z)
+function write_thermodiff(label, z; thermodir::String="thermodata")
 
     # clean data
-    th_clean_filename = thermo_filename_one_z( label , "clean" , z )
+    th_clean_filename = thermo_filename_one_z( label , "clean" , z ; thermodir=thermodir)
     th_clean = readdlm( th_clean_filename , skipstart=1 )
     t = th_clean[:, 1]
 
     # imp data
-    th_imp_filename = thermo_filename_one_z( label , "imp" , z )
+    th_imp_filename = thermo_filename_one_z( label , "imp" , z ; thermodir=thermodir)
     th_imp = readdlm( th_imp_filename , skipstart=1 )
 
     # check whether impurity and clean calculation have the same number of iterations
@@ -610,7 +615,7 @@ function write_thermodiff(label, z)
     th_diff[:, 1] .= th_imp[:, 1]
 
     # write impurity contribution
-    th_diff_filename = thermo_filename_one_z( label , "diff" , z )
+    th_diff_filename = thermo_filename_one_z( label , "diff" , z ; thermodir=thermodir)
     write_thermo_data( th_diff_filename , th_diff )
 
 end

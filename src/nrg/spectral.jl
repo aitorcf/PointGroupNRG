@@ -14,11 +14,13 @@ function spectral_filename(
             z::Float64=0.0 ,
             zavg::Bool=false ,
             orbital::Int64=0 ,
-            tail::String="" )
+            tail::String="" ,
+            spectraldir::String="spectral"
+        )
 
     z_string = zavg ? "_zavg" : "_z$(z)"
     o_string = orbital==0 ? "" : "_o$(orbital)"
-    return "spectral/spectral_$(label)$(z_string)$(o_string)$(tail).dat"
+    return "$(spectraldir)/spectral_$(label)$(z_string)$(o_string)$(tail).dat"
 
 end
 
@@ -33,7 +35,7 @@ function write_spectral_function(
         if orbitalresolved_header!==""
             write( f , orbitalresolved_header )
         end
-        write( f , spectralheader )
+        write( f , header )
         writedlm( f , spectral_data )
     end
 
@@ -4647,7 +4649,8 @@ end
 function save_correlation_spectral_decomposition(
             spectral_functions::Dict{String,Dict{IntMultiplet,Matrix{Float64}}} ,
             label::String ,
-            z::Float64 
+            z::Float64 ;
+            spectraldir::String="spectral"
     )
 
     spectral_function = spectral_functions["spectral"]
@@ -4684,17 +4687,17 @@ function save_correlation_spectral_decomposition(
         # write to file
         orbital_header = "# Excitation multiplet: $m_a , index=$orbital_idx\n"
         write_spectral_function( 
-            spectral_filename(label,z=z,tail="_even",orbital=orbital_idx) ,
+            spectral_filename(label,z=z,tail="_even",orbital=orbital_idx,spectraldir=spectraldir) ,
             spectral_function_even ,
             orbitalresolved_header=orbital_header
         )
         write_spectral_function(
-            spectral_filename(label,z=z,tail="_odd",orbital=orbital_idx) ,
+            spectral_filename(label,z=z,tail="_odd",orbital=orbital_idx,spectraldir=spectraldir) ,
             spectral_function_odd ,
             orbitalresolved_header=orbital_header
         )
         write_spectral_function(
-            spectral_filename(label,z=z,orbital=orbital_idx) ,
+            spectral_filename(label,z=z,orbital=orbital_idx,spectraldir=spectraldir) ,
             spectral_function_evenodd ,
             orbitalresolved_header=orbital_header
         )

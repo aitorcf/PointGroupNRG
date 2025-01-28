@@ -826,6 +826,10 @@ function nrgfull(
             scale_asymptotic::Bool=true ,
             half_band_width::Float64=1.0 ,
             print_spectrum_levels::Int64=0 ,
+            # custom directories for results
+            thermodir::String="thermodata" ,
+            spectraldir::String="spectral" ,
+            impurityprojectionsdir::String="impurityprojections"
     ) where {SF<:Union{String,Float64},IF<:Union{Int64,Float64}}
 
 
@@ -1720,7 +1724,10 @@ function nrgfull(
             mm_i=mm_i,
             channels_diagonals=channels_diagonals,
             scale=scale,
-            print_spectrum_levels=print_spectrum_levels
+            print_spectrum_levels=print_spectrum_levels,
+            thermodir=thermodir,
+            spectraldir=spectraldir,
+            impurityprojectionsdir=impurityprojectionsdir
         )
 
     elseif dmnrg # not updated
@@ -1858,7 +1865,10 @@ function nrgfull(
             multiplets_atomhop=collect(multiplets_a_atom) ,
             fsum=fsum,
             scale=scale,
-            print_spectrum_levels=print_spectrum_levels
+            print_spectrum_levels=print_spectrum_levels,
+            thermodir=thermodir,
+            spectraldir=spectraldir,
+            impurityprojectionsdir=impurityprojectionsdir
         )
 
     end
@@ -1921,7 +1931,10 @@ function NRG_allsymmetries(
               spectral_temperature::Float64=0.0 ,
               extra_iterations::Int64=0 ,
               compute_selfenergy::Bool=false ,
-              print_spectrum_levels::Int64=0
+              print_spectrum_levels::Int64=0 ,
+              thermodir::String="thermodata" ,
+              spectraldir::String="spectral" ,
+              impurityprojectionsdir::String="impurityprojections"
     )
 
     println( "=============" )
@@ -1958,7 +1971,7 @@ function NRG_allsymmetries(
     kept_discarded_ratios = Float64[]
 
     # create spectral directory
-    spectral && (isdir("spectral") || mkdir("spectral"))
+    spectral && (isdir(spectraldir) || mkpath(spectraldir))
 
     # dmnrg
     diagonalizers::Vector{Dict{IntIrrep,Matrix{ComplexF64}}} = Dict{IntIrrep,Matrix{ComplexF64}}[]
@@ -2271,7 +2284,7 @@ function NRG_allsymmetries(
     thermo_average = copy(thermo_even_interpolated)
     thermo_average[:,2:end] = 0.5*( thermo_even_interpolated[:,2:end] + thermo_odd_interpolated[:,2:end] )
 
-    spectral && save_correlation_spectral_decomposition(spectral_functions,label,z)
+    spectral && save_correlation_spectral_decomposition(spectral_functions,label,z;spectraldir=spectraldir)
 
     # reduced density matrices for all steps
     if dmnrg && dmnrg_run==1
@@ -2442,18 +2455,18 @@ function NRG_allsymmetries(
     #
     # thermodynamics
     # directory
-    isdir("thermodata") || mkdir("thermodata")
+    ispath(thermodir) || mkpath(thermodir)
     # thermodynamic data for this given value of z
-    write_thermodata_onez( thermo_average , calculation , label , z )
-    write_thermodata_onez( thermo_evenodd , calculation , label*"_evenodd" , z )
+    write_thermodata_onez( thermo_average , calculation , label , z ; thermodir=thermodir )
+    write_thermodata_onez( thermo_evenodd , calculation , label*"_evenodd" , z ; thermodir=thermodir )
     # impurity contribution (diff)
     if calculation=="IMP"
-        thermo_clean_filename = thermo_filename_one_z( label , "clean" , z )
+        thermo_clean_filename = thermo_filename_one_z( label , "clean" , z ; thermodir=thermodir )
         println()
         if length(glob(thermo_clean_filename))!==0
             println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
-            write_thermodiff( label , z )
-            write_thermodiff( label*"_evenodd" , z )
+            write_thermodiff( label , z ; thermodir=thermodir)
+            write_thermodiff( label*"_evenodd" , z ; thermodir=thermodir)
         end
     end
 
@@ -2462,10 +2475,18 @@ function NRG_allsymmetries(
 
         println( "Saving impurity projections..." )
         # directory
-        isdir("impurityprojections") || mkdir("impurityprojections")
+        isdir(impurityprojectionsdir) || mkpath(impurityprojectionsdir)
 
         if calculation=="IMP" 
-            write_impurity_info( impmults , orbital_multiplets , mult2index , label , z , temperatures_evenodd)
+            write_impurity_info(
+                impmults ,
+                orbital_multiplets ,
+                mult2index ,
+                label ,
+                z ,
+                temperatures_evenodd ;
+                impurityprojectionsdir=impurityprojectionsdir
+            )
         end
 
     end
