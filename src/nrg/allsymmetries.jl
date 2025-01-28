@@ -2463,7 +2463,7 @@ function NRG_allsymmetries(
     if calculation=="IMP"
         thermo_clean_filename = thermo_filename_one_z( label , "clean" , z ; thermodir=thermodir )
         println()
-        if length(glob(thermo_clean_filename))!==0
+        if ispath(thermo_clean_filename)!==0
             println( "Saving thermodynamic impurity contribution to $(thermo_filename_one_z(label,"diff",z))..." )
             write_thermodiff( label , z ; thermodir=thermodir)
             write_thermodiff( label*"_evenodd" , z ; thermodir=thermodir)
