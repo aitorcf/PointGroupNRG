@@ -23,20 +23,43 @@ function cg_orbital_nonsimple( I_1::String , I_2::String , path ; verbose=false 
 
     inverted = (I_2!==I_1 && occursin("$(I_2)x$(I_1)",file))
 
+    sline1::String = ""
+    sline2::String = ""
+    sline3::String = ""
+    sline4::String = ""
+
+    i1::Int64 = 0
+    i2::Int64 = 0
+    i3::Int64 = 0
+    c::ComplexF64 = 0.0
+
     I_3::String = "a"
     r_3::Int64 = 1
-    for line in readlines( "$(path)/$(file)" ) 
-        line=="" && continue
-        sline = split(strip(line)," ")
+    for sline::Vector{String} in split.(strip.(eachline("$(path)/$(file)"),' ')) 
+
+        length(sline)==0 && continue
+
         I_3,r_3 = length(sline)==3 ? (sline[2],parse(Int64,sline[3])) : (I_3,r_3)
         length(sline)==3 && continue
-        sline = [sline[2:3]...,sline[5],reduce(*,sline[8:end])]
-        sline[end] = reduce( * , replace.( sline[end] , "I"=>"im" ) )
-        sline = map( x -> eval(Meta.parse(x)) , sline )
+
+        sline1 = sline[2]
+        sline2 = sline[3]
+        sline3 = sline[5]
+        @views sline4 = reduce(*,replace.(sline[8:end],"I"=>"im"))
+        # sline = [sline[2:3]...,sline[5],reduce(*,sline[8:end])]
+        # sline[end] = reduce( * , replace.( sline[end] , "I"=>"im" ) )
+        
+        i1 = parse(Int64,sline1)
+        i2 = parse(Int64,sline2)
+        i3 = parse(Int64,sline3)
+        c  = ComplexF64(eval(Meta.parse(sline4)))
+        # sline = map( x -> eval(Meta.parse(x)) , sline )
         if ! inverted
-            push!( cg , (I_1,sline[1]::Int64,I_2,sline[2]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
+            push!( cg , (I_1,i1,I_2,i2,I_3,i3,r_3)=>c )
+            # push!( cg , (I_1,sline[1]::Int64,I_2,sline[2]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
         else
-            push!( cg , (I_1,sline[2]::Int64,I_2,sline[1]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
+            push!( cg , (I_1,i2,I_2,i1,I_3,i3,r_3)=>c )
+            # push!( cg , (I_1,sline[2]::Int64,I_2,sline[1]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
         end
     end
     return cg
@@ -1174,7 +1197,9 @@ function construct_and_diagonalize_uHv_orbitalsym(
         mapreduce( length , + , values(GmuGi2combinations) )
         for (G_u,GmuGi2combinations) in Gu2GmuGi2rmuiualpha
     )
-    hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+    # hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+    hblock1_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
+    hblock2_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
 
     # construct new irrEU
     irrEU_new::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
@@ -1185,15 +1210,21 @@ function construct_and_diagonalize_uHv_orbitalsym(
 
         # hblock
         R_uv::Int64 = length( combinations_Gu_muiualpha_new[G_uv] )
-        @views hblock = hblock_full[1:R_uv,1:R_uv,:]
-        hblock .= zero(ComplexF64)
+        # @views hblock = hblock_full[1:R_uv,1:R_uv,:]
+        @views begin
+            hblock1 = hblock1_full[1:R_uv,1:R_uv]
+            hblock2 = hblock2_full[1:R_uv,1:R_uv]
+        end
+        # hblock .= zero(ComplexF64)
+        hblock1 .= zero(ComplexF64)
+        hblock2 .= zero(ComplexF64)
 
         # iterate through u decompositions only, for diagonal part
         for ((G_mu,G_i),rmuiualphas) in GmuGi2rmuiualpha
 
             # diagonal part 
             @inbounds for (r_mu,r_i,r_u,α_u) in rmuiualphas
-                hblock[r_u,r_u,1] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
+                hblock1[r_u,r_u] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
             end
 
             # hopping part
@@ -1242,11 +1273,16 @@ function construct_and_diagonalize_uHv_orbitalsym(
                                 hoparam_matrix = hop_symparams[G_a[2]]
 
                                 # hopping contribution as matrix operation
-                                @views hblock[r_u,r_v,2] += d * dot(
+                                @views hblock2[r_u,r_v] += d * dot(
                                     lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
                                     hoparam_matrix,
                                     lehmann_array_iaj[α,r_i,:,r_j]
                                 )
+                                # @views hblock[r_u,r_v,2] += d * dot(
+                                #     lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
+                                #     hoparam_matrix,
+                                #     lehmann_array_iaj[α,r_i,:,r_j]
+                                # )
 
                             end # end of α,β iteration
                         end # end of u,i,mu,v,j,nu multiplet iteration
@@ -1256,13 +1292,15 @@ function construct_and_diagonalize_uHv_orbitalsym(
         end # end of u decomposition
 
         # add hopping part with hermitian conjugate
-        @inbounds for r_v::Int64 in 1:R_uv, 
-                      r_u::Int64 in 1:R_uv
-            hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
-        end
+        # @inbounds for r_v::Int64 in 1:R_uv, 
+        #               r_u::Int64 in 1:R_uv
+        #     hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
+        # end
+        @. hblock1 += hblock2 + hblock2'
 
         # diagonalize
-        @views F = eigen( hblock[:,:,1] )
+        # @views F = eigen( hblock[:,:,1] )
+        F = eigen!(Hermitian(hblock1))
         e, u = real.(F.values), F.vectors
 
         # insert in irrEU
