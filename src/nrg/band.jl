@@ -32,6 +32,7 @@ const integrate_methods = Set([
     "left" ,
     "middle"
 ])
+const FloatRepresentation = Float64
 
 # ========= #
 # Interface #
@@ -132,10 +133,10 @@ function discretize_band(
     # maximum discretization interval to be considered
     maximum_j = iseven(number_of_shells_to_compute) ? number_of_shells_to_compute÷2 : number_of_shells_to_compute÷2+1
 
-    # convert all parameters to BigFloat
-    ddooss(x) = BigFloat(dos(x))
-    LL = BigFloat(L)
-    zz = BigFloat(z)
+    # convert all parameters to FloatRepresentation
+    ddooss(x) = FloatRepresentation(dos(x))
+    LL = FloatRepresentation(L)
+    zz = FloatRepresentation(z)
 
     # hamiltonian in diagonal basis according to discretization
     Hcon_diagonal = construct_nontransformed_hamiltonian(
@@ -207,10 +208,10 @@ function integrate( f::Function ,
     @assert (method in integrate_methods) "Integration method not implemented."
 
     # finite value step
-    step::BigFloat = (interval[2]-interval[1])/number_of_subintervals
+    step::FloatRepresentation = (interval[2]-interval[1])/number_of_subintervals
 
     # interval starting point
-    start::BigFloat = interval[1]
+    start::FloatRepresentation = interval[1]
 
     # integrate using chosen method
     if method=="left"
@@ -223,12 +224,12 @@ function integrate( f::Function ,
 end
 function integrate_left( f::Function ,
                          number_of_subintervals::Int64 ,
-                         start::BigFloat ,
-                         step::BigFloat )
+                         start::FloatRepresentation ,
+                         step::FloatRepresentation )
 
-    integral::BigFloat = 0.0 
+    integral::FloatRepresentation = 0.0 
 
-    x::BigFloat = start
+    x::FloatRepresentation = start
 
     for _ in 1:number_of_subintervals
         integral += f(x)*step
@@ -239,12 +240,12 @@ function integrate_left( f::Function ,
 end
 function integrate_middle( f::Function ,
                            number_of_subintervals::Int64 ,
-                           start::BigFloat ,
-                           step::BigFloat )
+                           start::FloatRepresentation ,
+                           step::FloatRepresentation )
 
-    integral::BigFloat = 0.0 
+    integral::FloatRepresentation = 0.0 
 
-    x::BigFloat = start+step/2.0
+    x::FloatRepresentation = start+step/2.0
 
     for _ in 1:number_of_subintervals
         integral += f(x)*step
@@ -299,15 +300,15 @@ end
 # ============== #
 # Discretization #
 # ============== #
-function discretization_energy( L::BigFloat , j::Int64 , z::BigFloat )::BigFloat
+function discretization_energy( L::FloatRepresentation , j::Int64 , z::FloatRepresentation )::FloatRepresentation
 
-    absolute_energy::BigFloat = abs(j)==1 ? 1.0 : L^(1-abs(j)+z)
+    absolute_energy::FloatRepresentation = abs(j)==1 ? 1.0 : L^(1-abs(j)+z)
 
     return j<0 ? -absolute_energy : absolute_energy
 end
 
 # energy interval 
-function energy_interval( L::BigFloat , j::Int64 , z::BigFloat )::Tuple{BigFloat,BigFloat}
+function energy_interval( L::FloatRepresentation , j::Int64 , z::FloatRepresentation )::Tuple{FloatRepresentation,FloatRepresentation}
 
     # positive interval
     j>0 && return ( discretization_energy(L,j+1,z) , discretization_energy(L,j,z) )
@@ -319,10 +320,10 @@ end
 
 # representative energy 
 function representative_energy( dos::Function , 
-                                L::BigFloat ,
+                                L::FloatRepresentation ,
                                 j::Int64 , 
-                                z::BigFloat ,
-                                discretization::String )::BigFloat
+                                z::FloatRepresentation ,
+                                discretization::String )::FloatRepresentation
 
     interval = energy_interval(L,j,z)
 
@@ -355,10 +356,10 @@ end
 # ============================================== #
 function construct_nontransformed_hamiltonian(
             dos::Function ,
-            L::BigFloat ,
+            L::FloatRepresentation ,
             maximum_j::Int64 ,
-            z::BigFloat ,
-            discretization::String )::Matrix{BigFloat}
+            z::FloatRepresentation ,
+            discretization::String )::Matrix{FloatRepresentation}
 
     representative_energies = collect( representative_energy(dos,L,j,z,discretization) for j in jiter(maximum_j) )
 
@@ -367,11 +368,11 @@ function construct_nontransformed_hamiltonian(
 end
 
 function innermost_shell_vector( dos::Function ,
-                                 L::BigFloat ,
+                                 L::FloatRepresentation ,
                                  maximum_j::Int64 ,
-                                 z::BigFloat )::Vector{BigFloat}
+                                 z::FloatRepresentation )::Vector{FloatRepresentation}
 
-    f0::Vector{BigFloat} = [
+    f0::Vector{FloatRepresentation} = [
         sqrt(integrate( dos , energy_interval(L,j,z) )) 
         for j in jiter(maximum_j)
     ]
@@ -384,11 +385,11 @@ end
 # ================== #
 # Tridiagonalization #
 # ================== #
-function lanczos( H::Matrix{BigFloat} , 
-                  v_1::Vector{BigFloat} ,
-                  L::BigFloat ; 
+function lanczos( H::Matrix{FR} , 
+                  v_1::Vector{FR} ,
+                  L::FloatRepresentation ; 
                   method="chen1995" ,
-                  enforce_particle_hole_symmetry::Bool=false )::Tuple{Vector{BigFloat},Vector{BigFloat}}
+                  enforce_particle_hole_symmetry::Bool=false )::Tuple{Vector{FR},Vector{FR}} where {FR<:Union{Float64,FloatRepresentation}}
 
     if method=="matrix"
 
@@ -406,12 +407,12 @@ function lanczos( H::Matrix{BigFloat} ,
 end
 
 # Yoshida, Whitaker, Oliveira (1990)
-function lanczos_matrix( H::Matrix{BigFloat} , v_1::Vector{BigFloat} ) 
+function lanczos_matrix( H::Matrix{FloatRepresentation} , v_1::Vector{FloatRepresentation} ) 
 
     M = size(H,1)
 
     # unitary diagonalization matrix
-    U::Matrix{BigFloat} = similar(H)
+    U::Matrix{FloatRepresentation} = similar(H)
     U[1,:] .= v_1
 
     # iterate
@@ -439,22 +440,22 @@ function lanczos_matrix( H::Matrix{BigFloat} , v_1::Vector{BigFloat} )
 end
 
 # Chen, Jayaprakash (1995)
-function lanczos_chen1995( H::Matrix{BigFloat} , 
-                           v_1::Vector{BigFloat} ,
-                           L::BigFloat ,
+function lanczos_chen1995( H::Matrix{FR} , 
+                           v_1::Vector{FR} ,
+                           L::FloatRepresentation ,
                            enforce_particle_hole_symmetry::Bool ;
-                           verbose::Bool=false )::Tuple{Vector{BigFloat},Vector{BigFloat}}
+                           verbose::Bool=false )::Tuple{Vector{FR},Vector{FR}} where {FR<:Union{Float64,FloatRepresentation}}
 
     # maximum shell
     N = Int64(size(H,1))
     representative_energies = collect( H[i,i] for i in axes(H,1) )
 
-    U::Matrix{BigFloat} = similar(H)
+    U::Matrix{FR} = similar(H)
     U[1,:] .= v_1
 
     # diagonal and codiagonal entries
-    diagonals = zeros(BigFloat,N)
-    codiagonals = zeros(BigFloat,N-1)
+    diagonals = zeros(FR,N)
+    codiagonals = zeros(FR,N-1)
     # intitialization
     diagonals[1] = enforce_particle_hole_symmetry ? 0.0 : sum( representative_energies[:].*(U[1,:].^2) )
     codiagonals[1] = sqrt(dot( (representative_energies.-diagonals[1]).^2 , U[1,:].^2 ))
@@ -560,22 +561,22 @@ function lanczos_chen1995( H::Matrix{BigFloat} ,
 
 end
 
-function lanczos_gonzalezbuxton1998( H::Matrix{BigFloat} , 
-                                     v_1::Vector{BigFloat} ,
-                                     L::BigFloat ;
+function lanczos_gonzalezbuxton1998( H::Matrix{FloatRepresentation} , 
+                                     v_1::Vector{FloatRepresentation} ,
+                                     L::FloatRepresentation ;
                                      verbose::Bool=false ,
-                                     enforce_particle_hole_symmetry::Bool=false )::Tuple{Vector{BigFloat},Vector{BigFloat}}
+                                     enforce_particle_hole_symmetry::Bool=false )::Tuple{Vector{FloatRepresentation},Vector{FloatRepresentation}}
 
     # maximum shell
     N = Int64(size(H,1))
     representative_energies = collect( H[i,i] for i in axes(H,1) )
 
-    U::Matrix{BigFloat} = similar(H)
+    U::Matrix{FloatRepresentation} = similar(H)
     U[1,:] .= v_1
 
     # diagonal and codiagonal entries
-    diagonals = zeros(BigFloat,N)
-    codiagonals = zeros(BigFloat,N-1)
+    diagonals = zeros(FloatRepresentation,N)
+    codiagonals = zeros(FloatRepresentation,N-1)
     # intitialization
     diagonals[1] = enforce_particle_hole_symmetry ? 0.0 : sum( representative_energies[:].*(U[1,:].^2) )
     codiagonals[1] = sqrt(dot( (representative_energies.-diagonals[1]).^2 , U[1,:].^2 ))
@@ -660,7 +661,7 @@ function lanczos_gonzalezbuxton1998( H::Matrix{BigFloat} ,
 end
 
 
-function obtain_diagonals_codiagonals( H::Matrix )::Tuple{Vector{BigFloat},Vector{BigFloat}}
+function obtain_diagonals_codiagonals( H::Matrix )::Tuple{Vector{FloatRepresentation},Vector{FloatRepresentation}}
 
     N = size(H,1)
 
@@ -701,11 +702,11 @@ end
 # ======================== #
 # Check by rediagonalizing #
 # ======================== #
-function check_tridiagonalization( diagonals::Vector{BigFloat} ,
-                                   codiagonals::Vector{BigFloat} ,
-                                   H_diagonal::Matrix{BigFloat} ;
+function check_tridiagonalization( diagonals::Vector{FloatRepresentation} ,
+                                   codiagonals::Vector{FloatRepresentation} ,
+                                   H_diagonal::Matrix{FloatRepresentation} ;
                                    enforce_asymptotic_behavior::Bool=enforce_asymptotic_behavior_default ,
-                                   L::BigFloat=1.0 ) #L is needed if enforce_particle_hole_symmetry
+                                   L::FloatRepresentation=1.0 ) #L is needed if enforce_particle_hole_symmetry
 
     codiags = copy(codiagonals)
     if enforce_asymptotic_behavior
