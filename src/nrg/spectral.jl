@@ -3018,6 +3018,14 @@ function is_matrix_zero( matrix::SubArray{ComplexF64,4} )
     end
     return true
 end
+function is_matrix_zero( matrix::Array{ComplexF64,4} )
+    s::Float64 = zero(Float64)
+    @inbounds for i in eachindex(matrix)
+        s += abs2(matrix[i])
+        s > zero(s) && return false
+    end
+    return true
+end
 
 # ------ #
 # DM-NRG #
@@ -5581,6 +5589,13 @@ function update_operator_nonsimple(
         )
         for (G_u,multiplet_combinations_Gu) in combinations_Gu_muiualpha
     )
+    # Gu2GmuGi2rmuiualpha = (
+    #     G_u::IntIrrep => (
+    #     (G_mu,G_i)::NTuple{2,IntIrrep} => [(m_mu[4],m_i[4],m_u[4],α_u)::NTuple{4,Int64} for (m_mu,m_i,m_u,α_u) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+    #             for (G_mu,G_i)::NTuple{2,IntIrrep} in Set( (m_mu[1:3],m_i[1:3]) for (m_mu,m_i,_,_) in multiplet_combinations_Gu )::Set{NTuple{2,IntIrrep}}
+    #     )
+    #     for (G_u,multiplet_combinations_Gu) in combinations_Gu_muiualpha
+    # )
 
     # full-sized matrices for avoiding allocations
     R_uv_max = maximum(values(G2R_uv))
@@ -5627,6 +5642,7 @@ function update_operator_nonsimple(
             iszero(B_uav) && continue
 
             # < Γ_u || f†_{Γ_a} || Γ_v >_β
+            # @views uav_matrix = uav_matrix_full[1:B_uav,1:R_u,1:R_a,1:R_v]
             @views uav_matrix = uav_matrix_full[1:B_uav,1:R_u,1:R_a,1:R_v]
             uav_matrix .= zero(ComplexF64)
 
@@ -5649,7 +5665,7 @@ function update_operator_nonsimple(
                 (iszero(f_spin_and_sign) && iszero(length(f_orbital_array))) && continue
 
                 # ⟨ Γ_i || f†_{Γ_a} || Γ_j ⟩_α
-                iaj_matrix = get( redmat_iaj , (G_i,G_a,G_j) , zeros(ComplexF64,0,0,0,0) )
+                iaj_matrix::Array{ComplexF64,4} = get( redmat_iaj , (G_i,G_a,G_j) , zeros(ComplexF64,0,0,0,0) )
                 iszero(length(iaj_matrix)) && continue
 
                 # maximum outer multiplicity α=1,…,A_iaj
@@ -5667,7 +5683,7 @@ function update_operator_nonsimple(
 
                         f = f_spin_and_sign * f_orbital_array[α_u,α_v,α,β]
 
-                        for r_a in 1:R_a
+                        @inbounds for r_a in 1:R_a
                             uav_matrix[β,r_u,r_a,r_v] += f * iaj_matrix[α,r_i,r_a,r_j]
                         end
                     end
@@ -5681,7 +5697,7 @@ function update_operator_nonsimple(
 
             # transform matrix
             @inbounds @views for r_a in 1:G2R_a[G_a],
-                       β   in 1:B_uav
+                                 β   in 1:B_uav
 
                 mul!( tmp , uav_matrix[β,:,r_a,:] , U_v )
                 mul!( uav_matrix[β,:,r_a,:] , U_u' , tmp )
@@ -5689,7 +5705,9 @@ function update_operator_nonsimple(
             end
 
             # redmat_uav
-            push!( redmat_uav , (G_u,G_a,G_v) => uav_matrix[:,:,:,:] )
+            # @inbounds push!( redmat_uav , (G_u,G_a,G_v) => uav_matrix[:,:,:,:] )
+            res::Array{ComplexF64,4} = copy(uav_matrix)
+            @inbounds push!( redmat_uav , (G_u,G_a,G_v) => res )
             #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix_full[1:R_u,1:R_a,1:R_v]
             #@inbounds redmat_uav[(G_u,G_a,G_v)] = uav_matrix[:,:,:]
 
