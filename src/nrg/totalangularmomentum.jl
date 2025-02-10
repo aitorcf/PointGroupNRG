@@ -826,7 +826,9 @@ function construct_and_diagonalize_uHv_totalangularmomentum(
         mapreduce( length , + , values(GmuGi2combinations) )
         for (G_u,GmuGi2combinations) in Gu2GmuGi2rmuiualpha
     )
-    hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+    # hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+    hblock1_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
+    hblock2_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
 
     # construct new irrEU
     irrEU_new::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
@@ -837,15 +839,21 @@ function construct_and_diagonalize_uHv_totalangularmomentum(
 
         # hblock
         R_uv::Int64 = length( combinations_Gu_muiualpha_new[G_uv] )
-        @views hblock = hblock_full[1:R_uv,1:R_uv,:]
-        hblock .= zero(ComplexF64)
+        # @views hblock = hblock_full[1:R_uv,1:R_uv,:]
+        @views begin
+            hblock1 = hblock1_full[1:R_uv,1:R_uv]
+            hblock2 = hblock2_full[1:R_uv,1:R_uv]
+        end
+        # hblock .= zero(ComplexF64)
+        hblock1 .= zero(ComplexF64)
+        hblock2 .= zero(ComplexF64)
 
         # iterate through u decompositions only, for diagonal part
         for ((G_mu,G_i),rmuiualphas) in GmuGi2rmuiualpha
 
             # diagonal part 
             @inbounds for (r_mu,r_i,r_u,α_u) in rmuiualphas
-                hblock[r_u,r_u,1] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
+                hblock1[r_u,r_u,1] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
             end
 
             # hopping part
@@ -894,7 +902,12 @@ function construct_and_diagonalize_uHv_totalangularmomentum(
                                 hoparam_matrix = hop_symparams[G_a[3]]
 
                                 # hopping contribution as matrix operation
-                                @views hblock[r_u,r_v,2] += d * conj(dot(
+                                # @views hblock[r_u,r_v,2] += d * conj(dot(
+                                #     lehmann_array_iaj[α,r_i,:,r_j],
+                                #     hoparam_matrix,
+                                #     lehmann_array_nuamu[β,r_nu,:,r_mu] # automatically complex-conjugated
+                                # ))
+                                @views hblock2[r_u,r_v] += d * conj(dot(
                                     lehmann_array_iaj[α,r_i,:,r_j],
                                     hoparam_matrix,
                                     lehmann_array_nuamu[β,r_nu,:,r_mu] # automatically complex-conjugated
@@ -908,13 +921,15 @@ function construct_and_diagonalize_uHv_totalangularmomentum(
         end # end of u decomposition
 
         # add hopping part with hermitian conjugate
-        @inbounds for r_v::Int64 in 1:R_uv, 
-                      r_u::Int64 in 1:R_uv
-            hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
-        end
+        # @inbounds for r_v::Int64 in 1:R_uv, 
+        #               r_u::Int64 in 1:R_uv
+        #     hblock[r_u,r_v,1] += hblock[r_u,r_v,2] + conj(hblock[r_v,r_u,2])
+        # end
+        @. hblock1 += hblock2 + hblock2'
 
         # diagonalize
-        @views F = eigen( hblock[:,:,1] )
+        # @views F = eigen( hblock[:,:,1] )
+        @views F = eigen!(Hermitian(hblock1))
         e, u = real.(F.values), F.vectors
 
         # insert in irrEU
