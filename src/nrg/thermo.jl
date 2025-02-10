@@ -429,6 +429,9 @@ function imp_mults_nonsimple(
     M::Int64 = length(collect(values(mm_ip))[1])
     mm_u::Dict{NTuple{4,Int64},Vector{Float64}} = Dict()
 
+    # temporary matrix
+    tmp_m_u::Vector{Float64} = zeros(Float64,M)
+
     # iterate over irrep blocks
     for (G, (_, U)) in irrEU
 
@@ -437,7 +440,7 @@ function imp_mults_nonsimple(
         for (_,_,m_u,_) in combinations_Gu_muiualpha[G]
 
             # qnum temp setup
-            tmp_m_u = zeros(Float64,M)
+            tmp_m_u .= 0.0
 
             # outer multiplicity
             r_u = m_u[4]
@@ -493,7 +496,7 @@ function mult_thermo(
         # weighted sum over Γ
         for r_g in 1:R_G
             m_u = (G..., r_g)
-            mult_imp .+= D * mm_u[m_u] * exp(-betabar * E[r_g])
+            @. mult_imp += D * mm_u[m_u] * exp(-betabar * E[r_g])
         end
 
     end
