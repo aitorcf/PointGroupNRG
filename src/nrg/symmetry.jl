@@ -1171,7 +1171,7 @@ function check_cg_orthogonality_1( cg_o_fullmatint::Dict{NTuple{3,Int64},Array{C
         for (I1,I2) in Set(k[1:2] for k in keys(cg_o_fullmatint))
     )
 
-    irreps2dimensions = Dict(
+    irreps2dimensions = Dict{Int64,Int64}(
         I=>size(arr,1+i)
         for (k,arr) in cg_o_fullmatint
         for (i,I) in enumerate(k)
@@ -1179,13 +1179,13 @@ function check_cg_orthogonality_1( cg_o_fullmatint::Dict{NTuple{3,Int64},Array{C
 
     for ((I1,I2),decomposition) in irrep_decompositions
 
-        dim_I1 = irreps2dimensions[I1]
-        dim_I2 = irreps2dimensions[I2]
+        dim_I1::Int64 = irreps2dimensions[I1]
+        dim_I2::Int64 = irreps2dimensions[I2]
 
-        for i1 in 1:dim_I1,
-            j1 in 1:dim_I1,
-            i2 in 1:dim_I2,
-            j2 in 1:dim_I2
+        for i1::Int64 in 1:dim_I1,
+            j1::Int64 in 1:dim_I1,
+            i2::Int64 in 1:dim_I2,
+            j2::Int64 in 1:dim_I2
 
             c::ComplexF64 = 0.0
 
@@ -1193,8 +1193,8 @@ function check_cg_orthogonality_1( cg_o_fullmatint::Dict{NTuple{3,Int64},Array{C
 
                 arr = cg_o_fullmatint[I1,I2,I3]
 
-                for α  in axes(arr,1),
-                    i3 in axes(arr,4)
+                for α::Int64  in axes(arr,1),
+                    i3::Int64 in axes(arr,4)
 
                     c += arr[α,i1,i2,i3]*conj(arr[α,j1,j2,i3])
 
