@@ -132,18 +132,46 @@ function cg_orbital_nonsimple( I_1 , I_2 , path ; verbose=false )
 
     I_3::String = "a"
     r_3::Int64 = 1
-    for line in readlines( "$(path)/$(file)" ) 
-        line=="" && continue
-        sline = split(strip(line)," ")
-        I_3,r_3 = length(sline)==3 ? (sline[2],parse(Int64,sline[3])) : (I_3,r_3)
+
+    sline1::String = ""
+    sline2::String = ""
+    sline3::String = ""
+    sline4::String = ""
+
+    i1::Int64 = 0
+    i2::Int64 = 0
+    i3::Int64 = 0
+    c::ComplexF64 = 0.0
+
+    # iterate over lines in file
+    for sline::Vector{String} in split.(strip.(eachline("$(path)/$(file)"),' '))
+
+        # skip empty lines
+        length(sline)==0 && continue
+
+        # header line --> assign irrep and multiplicity, then continue
+        I_3,r_3 = length(sline)==3 ? (sline[2]::String,parse(Int64,sline[3])) : (I_3,r_3)
         length(sline)==3 && continue
-        sline = [sline[2:3]...,sline[5],reduce(*,sline[8:end])]
-        sline[end] = reduce( * , replace.( sline[end] , "I"=>"im" ) )
-        sline = map( x -> eval(Meta.parse(x)) , sline )
+
+        sline1 = sline[2]
+        sline2 = sline[3]
+        sline3 = sline[5]
+        @views sline4 = reduce(*,replace.(sline[8:end],"I"=>"im"))
+        # sline4 = reduce( * , replace.( sline4 , "I"=>"im" ) )
+        # sline = [sline[2:3]...,sline[5],reduce(*,sline[8:end])]
+        # sline[end] = reduce( * , replace.( sline[end] , "I"=>"im" ) )
+
+        i1 = eval(parse(Int64,sline1))
+        i2 = eval(parse(Int64,sline2))
+        i3 = eval(parse(Int64,sline3))
+        c  = ComplexF64(eval(Meta.parse(sline4)))
+        # sline = map( x -> eval(Meta.parse(x)) , sline )
         if ! inverted
-            push!( cg , (I_1,sline[1]::Int64,I_2,sline[2]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
+            push!( cg , (I_1,i1,I_2,i2,I_3,i3,r_3)=>c )
+            # push!( cg , (I_1,sline[1]::Int64,I_2,sline[2]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
         else
-            push!( cg , (I_1,sline[2]::Int64,I_2,sline[1]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
+            push!( cg , (I_1,i2,I_2,i1,I_3,i3,r_3)=>c )
+            # push!( cg , (I_1,sline[2]::Int64,I_2,sline[1]::Int64,I_3,sline[3]::Int64,r_3)=>sline[4] )
         end
     end
     return cg
