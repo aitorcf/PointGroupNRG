@@ -44,6 +44,7 @@ module NRGCalculator
     # include( "nrg/molecule.jl" )
 #    include( "nrg/doublegroups_old.jl" )
 #    include( "nrg/doublegroupsnonsimple_old.jl" ) # old
+    include( "nrg/parallelization.jl" )
     include( "nrg/doublegroup.jl" )
     include( "nrg/pointspin.jl" )
     include( "nrg/totalangularmomentum.jl" )

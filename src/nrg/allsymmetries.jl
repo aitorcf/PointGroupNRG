@@ -2075,7 +2075,7 @@ function NRG_allsymmetries(
         diagonalization_performance = @timed (irrEU,combinations_Gu_muiualpha) = (
             if isorbital(symmetry)
 
-                construct_and_diagonalize_uHv_orbitalsym(
+                uHv(
                     multiplets_block,
                     multiplets_shell,
                     irrEU,
@@ -2089,6 +2089,20 @@ function NRG_allsymmetries(
                     multiplets_a;
                     conduction_diagonals=channels_diagonals[1]
                 )
+                # construct_and_diagonalize_uHv_orbitalsym(
+                #     multiplets_block,
+                #     multiplets_shell,
+                #     irrEU,
+                #     hop_symparams,
+                #     keys_as_dict_o,
+                #     keys_as_dict_s,
+                #     dsum,
+                #     lehmann_iaj,
+                #     lehmann_muanu,
+                #     multiplets_a,
+                #     multiplets_a;
+                #     conduction_diagonals=channels_diagonals[1]
+                # )
 
             else # totalangularmomentum
 

@@ -1,3 +1,6 @@
+using FLoops
+using MicroCollections
+using BangBang
 # utilities 
 spin_doubleint2index( s2::Float64 , S2::Float64 ) = Int64(0.5*(s2+S2)+1)
 spin_index2doubleint( si::Int64 , S2::Int64 ) = Int64(2*(si-(S2+2)/2.0))
@@ -1306,6 +1309,187 @@ function construct_and_diagonalize_uHv_orbitalsym(
         # insert in irrEU
         irrEU_new[G_uv] = (e,u)
 
+    end 
+
+    minE = minimum([e for (E,U) in values(irrEU_new) for e in E])
+    irrEU_new = Dict( G=>(E.-minE,U) for (G,(E,U)) in irrEU_new )
+
+    return ( irrEU_new , combinations_Gu_muiualpha_new )
+end
+function uHv( 
+        multiplets_block::Set{NTuple{4,Int64}} , 
+        multiplets_shell::Set{NTuple{4,Int64}} ,
+        irrEU::Dict{ NTuple{3,Int64} , Tuple{Vector{Float64},Matrix{ComplexF64}} } ,
+        hop_symparams::Dict{ Int64 , Matrix{ComplexF64} } ,
+        keys_as_dict_o::Dict{NTuple{2,Int64},Vector{NTuple{2,Int64}}} ,
+        keys_as_dict_s::Dict{NTuple{2,Int64},Vector{Int64}} ,
+        dsum::DSum ,
+        lehmann_iaj::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } , # ⟨i||f†_a||j⟩^[n-1]
+        lehmann_nuamu::Dict{ NTuple{3,NTuple{3,Int64}} , Array{ComplexF64,4} } , # ⟨ν||f†_a||μ⟩^[n]
+        multiplets_a_block::Vector{NTuple{4,Int64}} ,
+        multiplets_a_shell::Vector{NTuple{4,Int64}} ;
+        conduction_diagonals::Dict{IntIrrep,Vector{Float64}}=Dict{IntIrrep,Vector{Float64}}() ,
+        impinfo::Bool=false ,
+        verbose::Bool=false )
+
+    # Compute matrix elements 
+    #
+    #   ⟨u,αu||H||v,αv⟩
+    #
+    # from the block multiplets 
+    #
+    #   |i⟩,|j⟩
+    #
+    # and the local multiplets
+    #
+    #   |μ⟩,|ν⟩
+
+    verbose && println( "CALCULATION OF <u||H||v> MATRIX\n" )
+
+    ## block-shell combination multiplets 
+    combinations_Gu_muiualpha_new = get_combinations_Gu_muiualpha( 
+        multiplets_block ,
+        multiplets_shell ,
+        keys_as_dict_o ,
+        keys_as_dict_s
+    )
+
+    # irrep and multiplet combinations 
+    #
+    # Dict(
+    #   G_uv => Dict(
+    #       (G_i,G_j) => [(r_i,r_j),...]
+    #   )
+    # )
+    Gu2GmuGi2rmuiualpha::Dict{IntIrrep,Dict{NTuple{2,IntIrrep},Vector{NTuple{4,Int64}}}} = Dict(
+        G_u => Dict(
+        (G_mu,G_i) => [(m_mu[4],m_i[4],m_u[4],α_u) for (m_mu,m_i,m_u,α_u) in multiplet_combinations_Gu if (m_i[1:3]==G_i && m_mu[1:3]==G_mu)]
+            for (G_mu,G_i) in Set( (m_mu[1:3],m_i[1:3]) for (m_mu,m_i,_,_) in multiplet_combinations_Gu )
+        )
+        for (G_u,multiplet_combinations_Gu) in combinations_Gu_muiualpha_new
+    )
+
+    multiplets_a_combs::Vector{NTuple{2,NTuple{4,Int64}}} = [
+        (m_a_block,m_a_shell) for m_a_block in multiplets_a_block 
+                              for m_a_shell in multiplets_a_shell 
+                              if m_a_block[2]==m_a_shell[2] 
+    ]
+    Ga2amultcombs::Dict{IntIrrep,Vector{NTuple{2,Int64}}} = Dict(
+        G_a => [ (m_a_block[4],m_a_shell[4]) for m_a_block in multiplets_a_block 
+                                             for m_a_shell in multiplets_a_shell 
+                                             if m_a_block[1:3]==G_a ]
+        for G_a in Set( m_a_block[1:3] for (m_a_block,_) in multiplets_a_combs )
+    )
+
+    # full-sized hblock matrix
+    R_uv_max::Int64 = maximum(
+        mapreduce( length , + , values(GmuGi2combinations) )
+        for (G_u,GmuGi2combinations) in Gu2GmuGi2rmuiualpha
+    )
+    # hblock_full::Array{ComplexF64,3} = zeros(ComplexF64,R_uv_max,R_uv_max,2)
+    # hblock1_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
+    # hblock2_full::Matrix{ComplexF64} = zeros(ComplexF64,R_uv_max,R_uv_max)
+
+
+    # construct new irrEU
+    # irrEU_new::Dict{ IntIrrep , Tuple{Vector{Float64},Matrix{ComplexF64}} } = Dict()
+    @floop SequentialEx() for (G_uv,GmuGi2rmuiualpha) in Gu2GmuGi2rmuiualpha
+
+        @init hblock_full = zeros(ComplexF64,R_uv_max,R_uv_max)
+
+        # irrep quantum numbers
+        N_uv,I_uv,S_uv = G_uv
+
+        # hblock
+        R_uv::Int64 = length( combinations_Gu_muiualpha_new[G_uv] )
+        @views hblock = hblock_full[1:R_uv,1:R_uv]
+        hblock .= zero(ComplexF64)
+
+        # iterate through u decompositions only, for diagonal part
+        for ((G_mu,G_i),rmuiualphas) in GmuGi2rmuiualpha
+
+            # diagonal part 
+            @inbounds for (r_mu,r_i,r_u,α_u) in rmuiualphas
+                hblock[r_u,r_u] = irrEU[G_i][1][r_i] + conduction_diagonals[G_mu][r_mu]
+            end
+
+            # hopping part
+            for ((G_nu,G_j),rnujvalphas) in GmuGi2rmuiualpha
+
+                # irrep quantum numbers
+                N_i,I_i,S_i = G_i
+                N_j,I_j,S_j = G_j
+                N_mu,I_mu,S_mu = G_mu
+                N_nu,I_nu,S_nu = G_nu
+
+                # hopping allowed?
+                hopallowed = (N_nu==(N_mu+1) && N_i==(N_j+1)) 
+                if hopallowed
+
+                    # iterate through hopper irreps
+                    for (G_a,amultcombs) in Ga2amultcombs
+
+                        # hopping irrep quantum numbers
+                        N_a,I_a,S_a = G_a
+
+                        # early discard
+                        haskey( lehmann_iaj   , (G_i,G_a,G_j)   ) || continue
+                        haskey( lehmann_nuamu , (G_nu,G_a,G_mu) ) || continue
+
+                        # outer multiplicity arrays
+                        lehmann_array_iaj   = lehmann_iaj[G_i,G_a,G_j]
+                        lehmann_array_nuamu = lehmann_nuamu[G_nu,G_a,G_mu]
+
+                        # clebsch gordan sum D
+                        d_spin_and_sign,d_orbital_array = dsum[(G_uv,G_a,G_i,G_j,G_mu,G_nu)]
+                        (iszero(length(d_orbital_array)) || iszero(d_spin_and_sign)) && continue
+
+                        # multiplet iteration
+                        for (r_mu,r_i,r_u,αu) in rmuiualphas,
+                            (r_nu,r_j,r_v,αv) in rnujvalphas
+
+                            # iterate over α,β lehmann outer multiplicities
+                            for α in axes(lehmann_array_iaj,1),
+                                β in axes(lehmann_array_nuamu,1)
+
+                                d = d_spin_and_sign * d_orbital_array[αu,αv,α,β]
+                                iszero(d) && continue
+
+                                # hopping parameter matrix h(Γa)
+                                hoparam_matrix = hop_symparams[G_a[2]]
+
+                                # hopping contribution as matrix operation
+                                c::ComplexF64 = d * dot(
+                                    lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
+                                    hoparam_matrix,
+                                    lehmann_array_iaj[α,r_i,:,r_j]
+                                )
+                                hblock[r_u,r_v] += c 
+                                hblock[r_v,r_u] += conj(c)
+                                # @views hblock[r_u,r_v,2] += d * dot(
+                                #     lehmann_array_nuamu[β,r_nu,:,r_mu], # automatically complex-conjugated
+                                #     hoparam_matrix,
+                                #     lehmann_array_iaj[α,r_i,:,r_j]
+                                # )
+
+                            end # end of α,β iteration
+                        end # end of u,i,mu,v,j,nu multiplet iteration
+                    end # end of G_a iteration
+                end # end of hopping part
+            end # end of v decomposition
+        end # end of u decomposition
+
+        # diagonalize
+        # @views F = eigen( hblock[:,:,1] )
+        F = eigen!(Hermitian(hblock))
+        e, u = real.(F.values), F.vectors
+
+        # insert in irrEU
+        @reduce( irrEU_new = merge!!( 
+            EmptyDict{IntIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}}() , 
+            SingletonDict{IntIrrep,Tuple{Vector{Float64},Matrix{ComplexF64}}}(G_uv => (e,u)) ) 
+        )
+        # irrEU_new[G_uv] = (e,u)
     end 
 
     minE = minimum([e for (E,U) in values(irrEU_new) for e in E])

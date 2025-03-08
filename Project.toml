@@ -4,14 +4,24 @@ authors = ["Aitor Calvo-Fernández <acalvo049@ehu.eus>"]
 version = "0.1.0"
 
 [deps]
+BangBang = "198e06fe-97b7-11e9-32a5-e1d131e6ad66"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
 Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MicroCollections = "128add7d-3638-4c79-886c-908ea0c25c34"
 PackageCompiler = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
 PartialWaveFunctions = "793d2195-304b-438e-bbb1-bc33c872ac39"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
+
+[compat]
+BangBang = "0.4.4"
+FLoops = "0.2.2"
+MicroCollections = "0.2.0"
+ThreadsX = "0.1.12"
